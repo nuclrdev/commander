@@ -15,6 +15,32 @@
 	<dependencies>
 
 		<dependency>
+			<groupId>com.formdev</groupId>
+			<artifactId>flatlaf</artifactId>
+			<version>3.7</version>
+		</dependency>
+
+		<dependency>
+			<groupId>jakarta.annotation</groupId>
+			<artifactId>jakarta.annotation-api</artifactId>
+			<version>3.0.0</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-core</artifactId>
+			<version>7.0.3</version>
+			<scope>compile</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+			<version>7.0.3</version>
+			<scope>compile</scope>
+		</dependency>
+
+		<dependency>
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
 			<version>2.21.0</version>
@@ -24,12 +50,6 @@
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
 			<version>3.20.0</version>
-		</dependency>
-
-		<dependency>
-			<groupId>com.googlecode.lanterna</groupId>
-			<artifactId>lanterna</artifactId>
-			<version>3.1.3</version>
 		</dependency>
 
 		<dependency>
@@ -71,6 +91,29 @@
 						</manifest>
 					</archive>
 				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<version>3.5.1</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<createDependencyReducedPom>true</createDependencyReducedPom>
+							<transformers>
+								<transformer
+									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>dev.nuclr.commander.Nuclr</mainClass>
+								</transformer>
+							</transformers>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
