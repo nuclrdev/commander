@@ -66,7 +66,12 @@ public class EditorScreen {
 			Map.entry("toml", SyntaxConstants.SYNTAX_STYLE_YAML),
 			Map.entry("ini", SyntaxConstants.SYNTAX_STYLE_INI),
 			Map.entry("cfg", SyntaxConstants.SYNTAX_STYLE_INI),
-			Map.entry("csv", SyntaxConstants.SYNTAX_STYLE_CSV)
+			Map.entry("csv", SyntaxConstants.SYNTAX_STYLE_CSV),
+			
+			
+			Map.entry("svg", SyntaxConstants.SYNTAX_STYLE_XML),
+			Map.entry(".classpath", SyntaxConstants.SYNTAX_STYLE_XML)
+			
 	);
 
 	private JPanel panel;
