@@ -1,8 +1,10 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Font;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -12,6 +14,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import lombok.Data;
@@ -77,6 +80,20 @@ public class EditorScreen {
 		this.panel = new JPanel(new BorderLayout());
 
 		this.textArea = new RSyntaxTextArea();
+		
+		try (InputStream in = getClass().getResourceAsStream(
+		        "/org/fife/ui/rsyntaxtextarea/themes/dark.xml")) {
+
+		    Theme theme = Theme.load(in);
+		    theme.apply(textArea);
+
+		} catch (IOException e) {
+		    e.printStackTrace();
+		}		
+		
+		textArea.setFont(new Font("JetBrains Mono", Font.PLAIN, 16));
+
+		
 		this.textArea.setCodeFoldingEnabled(true);
 		this.textArea.setAntiAliasingEnabled(true);
 		this.textArea.setTabSize(4);
@@ -97,6 +114,8 @@ public class EditorScreen {
 		}
 
 		var scrollPane = new RTextScrollPane(this.textArea);
+		
+		
 		scrollPane.setLineNumbersEnabled(true);
 		this.panel.add(scrollPane, BorderLayout.CENTER);
 	}

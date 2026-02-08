@@ -24,6 +24,7 @@ import com.formdev.flatlaf.FlatDarculaLaf;
 
 import dev.nuclr.commander.common.AppVersion;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
+import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,8 @@ public class MainWindow {
 	private JSplitPane mainSplitPane;
 
 	private Component lastFocusedInSplitPane;
+
+	private EditorScreen editorScreen;
 	
 	@Autowired
 	private ConsolePanel consolePanel;
@@ -143,6 +146,13 @@ public class MainWindow {
 					}
 					return true; // consume the event
 				}
+				// Escape closes the editor and returns to file panels
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_ESCAPE
+						&& editorScreen != null) {
+					applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
+					return true;
+				}
 				// Tab switches focus between left and right panels
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_TAB
@@ -179,7 +189,25 @@ public class MainWindow {
 	}
 
 	@EventListener
+	public void onShowEditorScreen(ShowEditorScreenEvent event) {
+		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		editorScreen = new EditorScreen(event.getFile());
+		mainFrame.remove(mainSplitPane);
+		mainSplitPane.setVisible(false);
+		mainFrame.add(editorScreen.getPanel(), BorderLayout.CENTER);
+		editorScreen.getPanel().setVisible(true);
+		editorScreen.getTextArea().requestFocusInWindow();
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	@EventListener
 	public void onShowFilePanelsView(ShowFilePanelsViewEvent event) {
+		if (editorScreen != null) {
+			mainFrame.remove(editorScreen.getPanel());
+			editorScreen.dispose();
+			editorScreen = null;
+		}
 		mainFrame.remove(consolePanel.getConsolePanel());
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 		consolePanel.getConsolePanel().setVisible(false);

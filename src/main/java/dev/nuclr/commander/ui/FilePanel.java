@@ -24,6 +24,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import org.springframework.context.ApplicationEventPublisher;
 
 import dev.nuclr.commander.event.ListViewFileOpen;
+import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -142,6 +143,28 @@ public class FilePanel extends JPanel {
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openRow");
 
 		table.getActionMap().put("openRow", openRowAction);
+
+		// F4 opens the selected file in the editor
+		var editFileAction = new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				JTable table = (JTable) e.getSource();
+				int row = table.getSelectedRow();
+				if (row >= 0) {
+					int modelRow = table.convertRowIndexToModel(row);
+					var file = model.getFileAt(modelRow);
+					if (file.isFile()) {
+						applicationEventPublisher.publishEvent(new ShowEditorScreenEvent(this, file));
+					}
+				}
+			}
+		};
+
+		table
+				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0), "editFile");
+
+		table.getActionMap().put("editFile", editFileAction);
 
 		// Left/Right arrow keys act as Page Up/Page Down
 		table
