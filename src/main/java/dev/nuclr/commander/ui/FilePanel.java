@@ -18,32 +18,39 @@ import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+
+import dev.nuclr.commander.event.ListViewFileOpen;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class FilePanel extends JPanel {
 
+	private ApplicationEventPublisher applicationEventPublisher;
+
 	private JTable fileTable;
-	
+
 	private JLabel fileLabel;
-	
+
 	private JLabel pathLabel;
 
-	public FilePanel() {
+	public FilePanel(ApplicationEventPublisher applicationEventPublisher) {
+
+		this.applicationEventPublisher = applicationEventPublisher;
 
 		this.setLayout(new BorderLayout());
 
 		fileTable = new JTable();
-		fileTable .setBorder(BorderFactory.createEmptyBorder(0,0,0,0));
+		fileTable.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
 		this.add(new JScrollPane(fileTable), BorderLayout.CENTER);
 
 		var root = new File("c://");
-		
+
 		pathLabel = new JLabel(root.getAbsolutePath());
-		pathLabel .setHorizontalAlignment(JLabel.CENTER);
+		pathLabel.setHorizontalAlignment(JLabel.CENTER);
 		this.add(pathLabel, BorderLayout.NORTH);
-		
 
 		var files = List.of(root.listFiles());
 
@@ -51,14 +58,14 @@ public class FilePanel extends JPanel {
 		var model = new FileTableModel(root, files);
 
 		fileTable.setModel(model);
-		
+
 		fileTable.setShowVerticalLines(true);
-		
+
 		fileLabel = new JLabel(" ");
-		fileLabel .setHorizontalAlignment(JLabel.LEFT);
-		fileLabel.setBorder(BorderFactory.createEmptyBorder(5,5,5,5));
+		fileLabel.setHorizontalAlignment(JLabel.LEFT);
+		fileLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 		this.add(fileLabel, BorderLayout.SOUTH);
-		
+
 		fileTable.getSelectionModel().addListSelectionListener(e -> {
 			int selectedRow = fileTable.getSelectedRow();
 			if (selectedRow >= 0) {
@@ -68,50 +75,57 @@ public class FilePanel extends JPanel {
 				fileLabel.setText("");
 			}
 		});
-		
+
 		fileTable.setRowSelectionInterval(0, 0);
-		
 
 		// Catch "Enter" key to open the selected row
 		var openRowAction = new AbstractAction() {
-		    @Override
-		    public void actionPerformed(ActionEvent e) {
-		        JTable table = (JTable) e.getSource();
-		        int row = table.getSelectedRow();
-		        if (row >= 0) {
-		            int modelRow = table.convertRowIndexToModel(row);
-	                onRowActivated(modelRow);
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				JTable table = (JTable) e.getSource();
+				int row = table.getSelectedRow();
+				if (row >= 0) {
+					int modelRow = table.convertRowIndexToModel(row);
+					onRowActivated(modelRow);
 
-		        }
-		    }
+				}
+			}
 		};
 
-		fileTable.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
-		     .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openRow");
+		fileTable
+				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openRow");
 
 		fileTable.getActionMap().put("openRow", openRowAction);
-		
 
 		// Catch Mouse double click to open the selected row
 		fileTable.addMouseListener(new MouseAdapter() {
-		    @Override
-		    public void mouseClicked(MouseEvent e) {
-		        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
-		            int viewRow = fileTable.rowAtPoint(e.getPoint());
-		            if (viewRow >= 0) {
-		                int modelRow = fileTable.convertRowIndexToModel(viewRow);
-		                onRowActivated(modelRow);
-		            }
-		        }
-		    }
-		});		
-		
-		
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+					int viewRow = fileTable.rowAtPoint(e.getPoint());
+					if (viewRow >= 0) {
+						int modelRow = fileTable.convertRowIndexToModel(viewRow);
+						onRowActivated(modelRow);
+					}
+				}
+			}
+		});
+
 	}
 
 	protected void onRowActivated(int modelRow) {
-        log.info("Open row: {}", modelRow);
-		
+
+		log.info("Open row: {}", modelRow);
+
+		var model = (FileTableModel) fileTable.getModel();
+
+		var file = model.getFileAt(modelRow);
+
+		log.info("Open file: {}", file.getAbsolutePath());
+
+		applicationEventPublisher.publishEvent(new ListViewFileOpen(this, file));
+
 	}
 
 }

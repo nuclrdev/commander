@@ -1,17 +1,17 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Font;
 
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
-import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.UIManager;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import com.formdev.flatlaf.FlatDarkLaf;
@@ -26,6 +26,9 @@ public class MainWindow {
 	private JFrame mainFrame;
 	
 	private JMenuBar menuBar;
+	
+	@Autowired
+	private ApplicationEventPublisher applicationEventPublisher;
 	
 	@PostConstruct
 	public void init() {
@@ -54,8 +57,8 @@ public class MainWindow {
 
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 
-		split.setLeftComponent(new FilePanel());
-		split.setRightComponent(new FilePanel());
+		split.setLeftComponent(new FilePanel(applicationEventPublisher));
+		split.setRightComponent(new FilePanel(applicationEventPublisher));
 
 		mainFrame.add(split, BorderLayout.CENTER);
 
