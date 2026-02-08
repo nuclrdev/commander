@@ -1,6 +1,7 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Font;
 
 import javax.swing.ImageIcon;
@@ -31,6 +32,9 @@ public class MainWindow {
 
 		log.info("Initializing MainWindow");
 		
+		System.setProperty("apple.laf.useScreenMenuBar", "true");
+		System.setProperty("apple.awt.application.name", "Nuclr Commander");
+		
 		UIManager.put("defaultFont",
 			    new Font("JetBrains Mono", Font.PLAIN, 16));
 		
@@ -50,8 +54,8 @@ public class MainWindow {
 
 		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 
-		split.setLeftComponent(new JScrollPane(new FilePanel()));
-		split.setRightComponent(new JScrollPane(new FilePanel()));
+		split.setLeftComponent(new FilePanel());
+		split.setRightComponent(new FilePanel());
 
 		mainFrame.add(split, BorderLayout.CENTER);
 
