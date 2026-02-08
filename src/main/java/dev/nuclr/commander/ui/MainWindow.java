@@ -17,11 +17,14 @@ import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 
 import dev.nuclr.commander.common.AppVersion;
+import dev.nuclr.commander.event.ShowConsoleScreenEvent;
+import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -134,23 +137,10 @@ public class MainWindow {
 						&& e.getKeyCode() == KeyEvent.VK_O
 						&& e.isControlDown()) {
 					if (mainSplitPane.isVisible()) {
-						lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-						mainFrame.remove(mainSplitPane);
-						mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
-						mainSplitPane.setVisible(false);
-						consolePanel.getConsolePanel().setVisible(true);
-						consolePanel.getTermWidget().requestFocusInWindow();
+						applicationEventPublisher.publishEvent(new ShowConsoleScreenEvent(this));
 					} else {
-						mainFrame.remove(consolePanel.getConsolePanel());
-						mainFrame.add(mainSplitPane, BorderLayout.CENTER);
-						consolePanel.getConsolePanel().setVisible(false);
-						mainSplitPane.setVisible(true);
-						if (lastFocusedInSplitPane != null) {
-							lastFocusedInSplitPane.requestFocusInWindow();
-						}
+						applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
 					}
-					mainFrame.revalidate();
-					mainFrame.repaint();
 					return true; // consume the event
 				}
 				// Tab switches focus between left and right panels
@@ -175,5 +165,30 @@ public class MainWindow {
 		mainFrame.setVisible(true);
 
 	}
-	
+
+	@EventListener
+	public void onShowConsoleScreen(ShowConsoleScreenEvent event) {
+		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		mainFrame.remove(mainSplitPane);
+		mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
+		mainSplitPane.setVisible(false);
+		consolePanel.getConsolePanel().setVisible(true);
+		consolePanel.getTermWidget().requestFocusInWindow();
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	@EventListener
+	public void onShowFilePanelsView(ShowFilePanelsViewEvent event) {
+		mainFrame.remove(consolePanel.getConsolePanel());
+		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
+		consolePanel.getConsolePanel().setVisible(false);
+		mainSplitPane.setVisible(true);
+		if (lastFocusedInSplitPane != null) {
+			lastFocusedInSplitPane.requestFocusInWindow();
+		}
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
 }
