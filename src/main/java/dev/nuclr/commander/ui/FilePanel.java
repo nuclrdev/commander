@@ -17,6 +17,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.table.DefaultTableCellRenderer;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -60,6 +61,22 @@ public class FilePanel extends JPanel {
 		fileTable.setModel(model);
 
 		fileTable.setShowVerticalLines(true);
+
+		fileTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+			@Override
+			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
+					boolean isSelected, boolean hasFocus, int row, int column) {
+				var comp = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+				int modelRow = table.convertRowIndexToModel(row);
+				var file = model.getFileAt(modelRow);
+				if (file.isDirectory()) {
+					comp.setFont(comp.getFont().deriveFont(java.awt.Font.BOLD));
+				} else {
+					comp.setFont(comp.getFont().deriveFont(java.awt.Font.PLAIN));
+				}
+				return comp;
+			}
+		});
 
 		fileLabel = new JLabel(" ");
 		fileLabel.setHorizontalAlignment(JLabel.LEFT);

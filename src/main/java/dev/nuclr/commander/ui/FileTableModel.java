@@ -29,6 +29,10 @@ public class FileTableModel extends javax.swing.table.AbstractTableModel {
 		
 		
 	}
+	
+	private void init() {
+		
+	}
 
 	@Override
 	public int getRowCount() {
