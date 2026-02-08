@@ -12,6 +12,7 @@ import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JSplitPane;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -151,6 +152,21 @@ public class MainWindow {
 					mainFrame.revalidate();
 					mainFrame.repaint();
 					return true; // consume the event
+				}
+				// Tab switches focus between left and right panels
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_TAB
+						&& !e.isControlDown()
+						&& mainSplitPane.isVisible()) {
+					var leftPanel = (FilePanel) mainSplitPane.getLeftComponent();
+					var rightPanel = (FilePanel) mainSplitPane.getRightComponent();
+					var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+					if (focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanel)) {
+						leftPanel.focusFileTable();
+					} else {
+						rightPanel.focusFileTable();
+					}
+					return true;
 				}
 				return false;
 			}

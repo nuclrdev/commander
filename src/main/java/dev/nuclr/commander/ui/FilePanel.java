@@ -180,6 +180,10 @@ public class FilePanel extends JPanel {
 
 	}
 
+	public void focusFileTable() {
+		fileTable.requestFocusInWindow();
+	}
+
 	private void selectInTable(File selectedFolder) {
 
 		if (selectedFolder == null) {
