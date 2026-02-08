@@ -1,6 +1,7 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Font;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -15,7 +16,7 @@ import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 
@@ -23,7 +24,7 @@ import dev.nuclr.commander.common.AppVersion;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
-@Component
+@Service
 @Slf4j
 public class MainWindow {
 
@@ -32,6 +33,8 @@ public class MainWindow {
 	private JMenuBar menuBar;
 	
 	private JSplitPane mainSplitPane;
+
+	private Component lastFocusedInSplitPane;
 	
 	@Autowired
 	private ConsolePanel consolePanel;
@@ -130,15 +133,20 @@ public class MainWindow {
 						&& e.getKeyCode() == KeyEvent.VK_O
 						&& e.isControlDown()) {
 					if (mainSplitPane.isVisible()) {
+						lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
 						mainFrame.remove(mainSplitPane);
 						mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
 						mainSplitPane.setVisible(false);
 						consolePanel.getConsolePanel().setVisible(true);
+						consolePanel.getTermWidget().requestFocusInWindow();
 					} else {
 						mainFrame.remove(consolePanel.getConsolePanel());
 						mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 						consolePanel.getConsolePanel().setVisible(false);
 						mainSplitPane.setVisible(true);
+						if (lastFocusedInSplitPane != null) {
+							lastFocusedInSplitPane.requestFocusInWindow();
+						}
 					}
 					mainFrame.revalidate();
 					mainFrame.repaint();

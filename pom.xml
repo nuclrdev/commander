@@ -26,7 +26,6 @@
 			<version>3.61</version>
 		</dependency>
 
-
 		<dependency>
 			<groupId>org.jetbrains.jediterm</groupId>
 			<artifactId>jediterm-core</artifactId>
@@ -43,13 +42,6 @@
 			<groupId>jakarta.annotation</groupId>
 			<artifactId>jakarta.annotation-api</artifactId>
 			<version>3.0.0</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.springframework</groupId>
-			<artifactId>spring-core</artifactId>
-			<version>7.0.3</version>
-			<scope>compile</scope>
 		</dependency>
 
 		<dependency>

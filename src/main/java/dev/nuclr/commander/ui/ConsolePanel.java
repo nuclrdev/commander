@@ -28,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ConsolePanel {
 
 	private JPanel consolePanel;
+	private JediTermWidget termWidget;
 
 	@PostConstruct
 	public void init() {
@@ -46,9 +47,9 @@ public class ConsolePanel {
 		
 		settings.useAntialiasing();
 		
-		JediTermWidget term = new JediTermWidget(settings); // Swing component
-		
-		consolePanel.add(term, BorderLayout.CENTER);
+		termWidget = new JediTermWidget(settings);
+
+		consolePanel.add(termWidget, BorderLayout.CENTER);
 
 		// Pick a shell per OS (very basic)
 		String[] cmd = SystemUtils.IS_OS_WINDOWS
@@ -61,9 +62,9 @@ public class ConsolePanel {
 
 			PtyProcess process = PtyProcess.exec(cmd, env, cwd);
 
-			term.setTtyConnector(new PtyProcessTtyConnector(process, StandardCharsets.UTF_8));
-			term.requestFocusInWindow();
-			term.start(); // starts the terminal session
+			termWidget.setTtyConnector(new PtyProcessTtyConnector(process, StandardCharsets.UTF_8));
+			termWidget.requestFocusInWindow();
+			termWidget.start(); // starts the terminal session
 		} catch (Exception e) {
 			log.error("Failed to start terminal session", e);
 			JOptionPane.showMessageDialog(consolePanel, "Failed to start terminal session: " + e.getMessage(),
