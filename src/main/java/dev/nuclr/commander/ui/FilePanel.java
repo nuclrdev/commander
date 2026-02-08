@@ -19,7 +19,6 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableCellRenderer;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 
 import dev.nuclr.commander.event.ListViewFileOpen;
@@ -64,9 +63,20 @@ public class FilePanel extends JPanel {
 
 		fileTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
 			@Override
-			public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
-					boolean isSelected, boolean hasFocus, int row, int column) {
-				var comp = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+			public java.awt.Component getTableCellRendererComponent(
+					JTable table,
+					Object value,
+					boolean isSelected,
+					boolean hasFocus,
+					int row,
+					int column) {
+				var comp = super.getTableCellRendererComponent(
+						table,
+						value,
+						isSelected,
+						hasFocus,
+						row,
+						column);
 				int modelRow = table.convertRowIndexToModel(row);
 				var file = model.getFileAt(modelRow);
 				if (file.isDirectory()) {
@@ -87,6 +97,7 @@ public class FilePanel extends JPanel {
 			int selectedRow = fileTable.getSelectedRow();
 			if (selectedRow >= 0) {
 				var file = model.getFileAt(selectedRow);
+
 				fileLabel.setText(file.getName() + " | " + file.length() + " bytes");
 			} else {
 				fileLabel.setText("");
@@ -135,14 +146,48 @@ public class FilePanel extends JPanel {
 
 		log.info("Open row: {}", modelRow);
 
-		var model = (FileTableModel) fileTable.getModel();
+		FileTableModel model = (FileTableModel) fileTable.getModel();
 
 		var file = model.getFileAt(modelRow);
+		
+		File selectedFolder = null;
+		
+		if (file.getName().equals(FileTableModel.ParentFolderName)) {
+			selectedFolder = model.getFolder();
+			file = model.getFolder().getParentFile();
+		}
 
-		log.info("Open file: {}", file.getAbsolutePath());
+		if (file.isDirectory()) {
+			log.info("Open directory: {}", file.getAbsolutePath());
+			model.init(file, List.of(file.listFiles()));
+			model.fireTableDataChanged();
+			fileTable.setRowSelectionInterval(0, 0);
+			selectInTable(selectedFolder);
+		} else {
+			log.info("Open file: {}", file.getAbsolutePath());
+			applicationEventPublisher.publishEvent(new ListViewFileOpen(this, file));
+		}
+		
+		
 
-		applicationEventPublisher.publishEvent(new ListViewFileOpen(this, file));
+	}
 
+	private void selectInTable(File selectedFolder) {
+
+		if (selectedFolder == null) {
+			return;
+		}
+
+		FileTableModel model = (FileTableModel) fileTable.getModel();
+
+		for (int i = 0; i < model.getRowCount(); i++) {
+			var file = model.getFileAt(i);
+			if (file.equals(selectedFolder)) {
+				fileTable.setRowSelectionInterval(i, i);
+				fileTable.scrollRectToVisible(fileTable.getCellRect(i, 0, true));
+				break;
+			}
+		}
 	}
 
 }

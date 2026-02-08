@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import com.formdev.flatlaf.FlatDarculaLaf;
 import com.formdev.flatlaf.FlatDarkLaf;
 
 import jakarta.annotation.PostConstruct;
@@ -41,13 +42,14 @@ public class MainWindow {
 		UIManager.put("defaultFont",
 			    new Font("JetBrains Mono", Font.PLAIN, 16));
 		
-		FlatDarkLaf.setup();
+		// FlatDarkLaf.setup();
+		FlatDarculaLaf.setup();
 
 		mainFrame = new JFrame("Nuclr Commander");
 
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-		mainFrame.setSize(800, 600);
+		mainFrame.setSize(1024, 768);
 
 		mainFrame.setLocationRelativeTo(null);
 

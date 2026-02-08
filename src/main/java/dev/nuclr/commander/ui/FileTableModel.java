@@ -9,29 +9,37 @@ import java.util.Locale;
 
 import org.apache.commons.io.FileUtils;
 
+import lombok.Data;
+
+@Data
 public class FileTableModel extends javax.swing.table.AbstractTableModel {
 
+	public static final String ParentFolderName = "..";
+
 	private static final long serialVersionUID = 1L;
-	
+
 	private List<File> files;
-	
+
 	private boolean isRoot;
 
+	private File folder;
+
 	public FileTableModel(File folder, List<File> files) {
-		
-		this.files = new ArrayList<File>(files);
-		
-		isRoot = folder.getParent() == null;
-		
-		if (isRoot == false) {
-			this.files.add(0, new File(".."));
-		}
-		
-		
+		init(folder, files);
 	}
-	
-	private void init() {
-		
+
+	public void init(File folder, List<File> files) {
+
+		this.folder = folder;
+
+		this.files = new ArrayList<File>(files);
+
+		isRoot = folder.getParent() == null;
+
+		if (isRoot == false) {
+			this.files.add(0, new File(ParentFolderName));
+		}
+
 	}
 
 	@Override
@@ -44,31 +52,31 @@ public class FileTableModel extends javax.swing.table.AbstractTableModel {
 		return 4;
 	}
 
-	private static final DateFormat date = DateFormat .getDateInstance(DateFormat.SHORT, Locale.getDefault());
-	private static final DateFormat time = new SimpleDateFormat("HH:mm");
+	private static final DateFormat date = new SimpleDateFormat("dd MMM yyyy", Locale.getDefault());
+	
+	private static final DateFormat time = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
 	@Override
 	public Object getValueAt(int rowIndex, int columnIndex) {
-		
+
 		var file = files.get(rowIndex);
-		
+
 		if (columnIndex == 0) {
 
 			return files.get(rowIndex).getName();
-			
+
 		}
 
-		
 		if (columnIndex == 1) {
-			
-//			if (rowIndex == 0) {
-//				return "Up";
-//			}			
+
+			//			if (rowIndex == 0) {
+			//				return "Up";
+			//			}			
 
 			if (files.get(rowIndex).isDirectory()) {
-				return FileUtils.byteCountToDisplaySize(files.get(rowIndex).length());
-			} else {
 				return "Folder";
+			} else {
+				return FileUtils.byteCountToDisplaySize(files.get(rowIndex).length());
 			}
 
 		} else if (columnIndex == 2) {
@@ -83,6 +91,21 @@ public class FileTableModel extends javax.swing.table.AbstractTableModel {
 
 	public File getFileAt(int selectedRow) {
 		return files.get(selectedRow);
+	}
+
+	@Override
+	public String getColumnName(int column) {
+		if (column == 0) {
+			return "Name";
+		} else if (column == 1) {
+			return "Size";
+		} else if (column == 2) {
+			return "Date";
+		} else if (column == 3) {
+			return "Time";
+		} else {
+			return "-";
+		}
 	}
 
 }
