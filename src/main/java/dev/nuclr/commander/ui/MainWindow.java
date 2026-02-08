@@ -2,17 +2,15 @@ package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Font;
-import java.awt.event.ActionEvent;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
 
-import javax.swing.AbstractAction;
 import javax.swing.ImageIcon;
-import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JSplitPane;
-import javax.swing.KeyStroke;
 import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -124,25 +122,29 @@ public class MainWindow {
 		
 
 		// Ctrl+O toggles between mainSplitPane and consolePanel
-		mainFrame.getRootPane()
-				.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-				.put(KeyStroke.getKeyStroke(KeyEvent.VK_O, KeyEvent.CTRL_DOWN_MASK), "toggleConsole");
-		mainFrame.getRootPane().getActionMap().put("toggleConsole", new AbstractAction() {
+		// Use KeyEventDispatcher to intercept before JediTermWidget consumes the key
+		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
 			@Override
-			public void actionPerformed(ActionEvent e) {
-				if (mainSplitPane.isVisible()) {
-					mainFrame.remove(mainSplitPane);
-					mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
-					mainSplitPane.setVisible(false);
-					consolePanel.getConsolePanel().setVisible(true);
-				} else {
-					mainFrame.remove(consolePanel.getConsolePanel());
-					mainFrame.add(mainSplitPane, BorderLayout.CENTER);
-					consolePanel.getConsolePanel().setVisible(false);
-					mainSplitPane.setVisible(true);
+			public boolean dispatchKeyEvent(KeyEvent e) {
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_O
+						&& e.isControlDown()) {
+					if (mainSplitPane.isVisible()) {
+						mainFrame.remove(mainSplitPane);
+						mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
+						mainSplitPane.setVisible(false);
+						consolePanel.getConsolePanel().setVisible(true);
+					} else {
+						mainFrame.remove(consolePanel.getConsolePanel());
+						mainFrame.add(mainSplitPane, BorderLayout.CENTER);
+						consolePanel.getConsolePanel().setVisible(false);
+						mainSplitPane.setVisible(true);
+					}
+					mainFrame.revalidate();
+					mainFrame.repaint();
+					return true; // consume the event
 				}
-				mainFrame.revalidate();
-				mainFrame.repaint();
+				return false;
 			}
 		});
 
