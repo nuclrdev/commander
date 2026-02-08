@@ -3,6 +3,8 @@ package dev.nuclr.commander.ui;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Font;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
@@ -146,6 +148,13 @@ public class MainWindow {
 					}
 					return true; // consume the event
 				}
+				// Alt+Enter toggles fullscreen
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_ENTER
+						&& e.isAltDown()) {
+					toggleFullscreen();
+					return true;
+				}
 				// Escape closes the editor and returns to file panels
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_ESCAPE
@@ -174,6 +183,17 @@ public class MainWindow {
 
 		mainFrame.setVisible(true);
 
+	}
+
+	private boolean maximized = false;
+	private void toggleFullscreen() {
+		if (maximized) {
+			mainFrame.setExtendedState(JFrame.NORMAL);
+			maximized = false;
+		} else {
+			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+			maximized = true;
+		}
 	}
 
 	@EventListener
