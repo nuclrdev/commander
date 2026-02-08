@@ -2,6 +2,8 @@ package dev.nuclr.commander;
 
 import java.io.IOException;
 
+import javax.swing.SwingUtilities;
+
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import dev.nuclr.commander.common.AppVersion;
@@ -20,8 +22,10 @@ public final class Nuclr {
 		log.info("Version: {}", AppVersion.get());
 		log.info("Licens: {}", "Apache 2.0");
 
-		var ctx = new AnnotationConfigApplicationContext("dev.nuclr.commander");
-		ctx.start();
+		SwingUtilities.invokeLater(() -> {
+			var ctx = new AnnotationConfigApplicationContext("dev.nuclr.commander");
+			ctx.start();
+		});
 
 	}
 

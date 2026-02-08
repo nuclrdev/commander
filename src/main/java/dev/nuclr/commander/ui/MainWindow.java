@@ -2,12 +2,17 @@ package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 
+import javax.swing.AbstractAction;
 import javax.swing.ImageIcon;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JSplitPane;
+import javax.swing.KeyStroke;
 import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +20,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
-import com.formdev.flatlaf.FlatDarkLaf;
 
 import dev.nuclr.commander.common.AppVersion;
 import jakarta.annotation.PostConstruct;
@@ -28,6 +32,11 @@ public class MainWindow {
 	private JFrame mainFrame;
 	
 	private JMenuBar menuBar;
+	
+	private JSplitPane mainSplitPane;
+	
+	@Autowired
+	private ConsolePanel consolePanel;
 	
 	@Autowired
 	private ApplicationEventPublisher applicationEventPublisher;
@@ -58,15 +67,15 @@ public class MainWindow {
 
 		mainFrame.setLayout(new BorderLayout());
 
-		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 
-		split.setLeftComponent(new FilePanel(applicationEventPublisher));
-		split.setRightComponent(new FilePanel(applicationEventPublisher));
+		mainSplitPane.setLeftComponent(new FilePanel(applicationEventPublisher));
+		mainSplitPane.setRightComponent(new FilePanel(applicationEventPublisher));
 
-		mainFrame.add(split, BorderLayout.CENTER);
+		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 
-		split.setDividerLocation(400);
-		split.setDividerSize(10);
+		mainSplitPane.setDividerLocation(400);
+//		split.setDividerSize(5);
 		
 		// Set up the menu bar
 		menuBar = new JMenuBar();
@@ -113,6 +122,29 @@ public class MainWindow {
 		// Right
 		
 		
+
+		// Ctrl+O toggles between mainSplitPane and consolePanel
+		mainFrame.getRootPane()
+				.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_O, KeyEvent.CTRL_DOWN_MASK), "toggleConsole");
+		mainFrame.getRootPane().getActionMap().put("toggleConsole", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if (mainSplitPane.isVisible()) {
+					mainFrame.remove(mainSplitPane);
+					mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
+					mainSplitPane.setVisible(false);
+					consolePanel.getConsolePanel().setVisible(true);
+				} else {
+					mainFrame.remove(consolePanel.getConsolePanel());
+					mainFrame.add(mainSplitPane, BorderLayout.CENTER);
+					consolePanel.getConsolePanel().setVisible(false);
+					mainSplitPane.setVisible(true);
+				}
+				mainFrame.revalidate();
+				mainFrame.repaint();
+			}
+		});
 
 		mainFrame.setVisible(true);
 
