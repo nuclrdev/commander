@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import com.formdev.flatlaf.FlatDarculaLaf;
 import com.formdev.flatlaf.FlatDarkLaf;
 
+import dev.nuclr.commander.common.AppVersion;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -45,7 +46,7 @@ public class MainWindow {
 		// FlatDarkLaf.setup();
 		FlatDarculaLaf.setup();
 
-		mainFrame = new JFrame("Nuclr Commander");
+		mainFrame = new JFrame("Nuclr Commander (" + AppVersion.get() + ")");
 
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
