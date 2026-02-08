@@ -126,6 +126,14 @@ public class FilePanel extends JPanel {
 
 		fileTable.getActionMap().put("openRow", openRowAction);
 
+		// Left/Right arrow keys act as Page Up/Page Down
+		fileTable
+				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "scrollUpChangeSelection");
+		fileTable
+				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "scrollDownChangeSelection");
+
 		// Catch Mouse double click to open the selected row
 		fileTable.addMouseListener(new MouseAdapter() {
 			@Override
