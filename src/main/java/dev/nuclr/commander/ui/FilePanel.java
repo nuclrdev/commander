@@ -48,7 +48,8 @@ public class FilePanel extends JPanel {
 		table.setFillsViewportHeight(true);
 		table.getTableHeader().setReorderingAllowed(false);
 		table.setRowHeight(table.getRowHeight() + 4);
-		
+		table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+
 		table.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 		
 		this.add(new JScrollPane(table), BorderLayout.CENTER);
@@ -65,6 +66,15 @@ public class FilePanel extends JPanel {
 		var model = new FileTableModel(root, files);
 
 		table.setModel(model);
+
+		// Column sizing: Name stretches, Size/Date/Time are fixed-width
+		var columnModel = table.getColumnModel();
+		columnModel.getColumn(1).setPreferredWidth(80);  // Size
+		columnModel.getColumn(1).setMaxWidth(100);
+		columnModel.getColumn(2).setPreferredWidth(80);  // Date
+		columnModel.getColumn(2).setMaxWidth(100);
+		columnModel.getColumn(3).setPreferredWidth(60);  // Time
+		columnModel.getColumn(3).setMaxWidth(80);
 
 		table.setShowVerticalLines(true);
 
