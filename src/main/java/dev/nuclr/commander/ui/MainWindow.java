@@ -28,6 +28,7 @@ import dev.nuclr.commander.common.AppVersion;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
+import dev.nuclr.commander.ui.editor.EditorScreen;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -216,7 +217,7 @@ public class MainWindow {
 		mainSplitPane.setVisible(false);
 		mainFrame.add(editorScreen.getPanel(), BorderLayout.CENTER);
 		editorScreen.getPanel().setVisible(true);
-		editorScreen.getTextArea().requestFocusInWindow();
+		editorScreen.focus();
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
