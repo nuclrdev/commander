@@ -65,6 +65,7 @@ public class EditorScreen {
 			Map.entry("dockerfile", SyntaxConstants.SYNTAX_STYLE_DOCKERFILE),
 			Map.entry("toml", SyntaxConstants.SYNTAX_STYLE_YAML),
 			Map.entry("ini", SyntaxConstants.SYNTAX_STYLE_INI),
+			Map.entry("prefs", SyntaxConstants.SYNTAX_STYLE_INI),
 			Map.entry("cfg", SyntaxConstants.SYNTAX_STYLE_INI),
 			Map.entry("csv", SyntaxConstants.SYNTAX_STYLE_CSV),
 			
