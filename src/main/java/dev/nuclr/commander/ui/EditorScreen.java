@@ -69,9 +69,15 @@ public class EditorScreen {
 			Map.entry("cfg", SyntaxConstants.SYNTAX_STYLE_INI),
 			Map.entry("csv", SyntaxConstants.SYNTAX_STYLE_CSV),
 			
+			Map.entry("vsconfig", SyntaxConstants.SYNTAX_STYLE_JSON),
+			Map.entry("firebaserc", SyntaxConstants.SYNTAX_STYLE_JSON),
+			
 			
 			Map.entry("svg", SyntaxConstants.SYNTAX_STYLE_XML),
-			Map.entry(".classpath", SyntaxConstants.SYNTAX_STYLE_XML)
+			Map.entry("classpath", SyntaxConstants.SYNTAX_STYLE_XML),
+			Map.entry("factorypath", SyntaxConstants.SYNTAX_STYLE_XML),
+			Map.entry("project", SyntaxConstants.SYNTAX_STYLE_XML),
+			Map.entry("csproj", SyntaxConstants.SYNTAX_STYLE_XML)
 			
 	);
 
