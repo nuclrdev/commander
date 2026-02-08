@@ -76,7 +76,7 @@ public class MainWindow {
 
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 
-		mainSplitPane.setDividerLocation(400);
+		mainSplitPane.setDividerLocation(512);
 //		split.setDividerSize(5);
 		
 		// Set up the menu bar

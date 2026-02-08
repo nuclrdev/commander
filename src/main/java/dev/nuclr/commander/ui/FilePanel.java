@@ -2,6 +2,8 @@ package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -29,11 +31,11 @@ public class FilePanel extends JPanel {
 
 	private ApplicationEventPublisher applicationEventPublisher;
 
-	private JTable fileTable;
+	private JTable table;
 
-	private JLabel fileLabel;
+	private JLabel bottomFileInfoTextLabel;
 
-	private JLabel pathLabel;
+	private JLabel topPathTextLabel;
 
 	public FilePanel(ApplicationEventPublisher applicationEventPublisher) {
 
@@ -41,27 +43,32 @@ public class FilePanel extends JPanel {
 
 		this.setLayout(new BorderLayout());
 
-		fileTable = new JTable();
-		fileTable.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+		table = new JTable();
 
-		this.add(new JScrollPane(fileTable), BorderLayout.CENTER);
+		table.setFillsViewportHeight(true);
+		table.getTableHeader().setReorderingAllowed(false);
+		table.setRowHeight(table.getRowHeight() + 4);
+		
+		table.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+		
+		this.add(new JScrollPane(table), BorderLayout.CENTER);
 
 		var root = new File("c://");
 
-		pathLabel = new JLabel(root.getAbsolutePath());
-		pathLabel.setHorizontalAlignment(JLabel.CENTER);
-		this.add(pathLabel, BorderLayout.NORTH);
+		topPathTextLabel = new JLabel(root.getAbsolutePath());
+		topPathTextLabel.setHorizontalAlignment(JLabel.CENTER);
+		this.add(topPathTextLabel, BorderLayout.NORTH);
 
 		var files = List.of(root.listFiles());
 
 		// Populate the table with the files
 		var model = new FileTableModel(root, files);
 
-		fileTable.setModel(model);
+		table.setModel(model);
 
-		fileTable.setShowVerticalLines(true);
+		table.setShowVerticalLines(true);
 
-		fileTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+		table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
 			@Override
 			public java.awt.Component getTableCellRendererComponent(
 					JTable table,
@@ -88,23 +95,23 @@ public class FilePanel extends JPanel {
 			}
 		});
 
-		fileLabel = new JLabel(" ");
-		fileLabel.setHorizontalAlignment(JLabel.LEFT);
-		fileLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-		this.add(fileLabel, BorderLayout.SOUTH);
+		bottomFileInfoTextLabel = new JLabel(" ");
+		bottomFileInfoTextLabel.setHorizontalAlignment(JLabel.LEFT);
+		bottomFileInfoTextLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+		this.add(bottomFileInfoTextLabel, BorderLayout.SOUTH);
 
-		fileTable.getSelectionModel().addListSelectionListener(e -> {
-			int selectedRow = fileTable.getSelectedRow();
+		table.getSelectionModel().addListSelectionListener(e -> {
+			int selectedRow = table.getSelectedRow();
 			if (selectedRow >= 0) {
 				var file = model.getFileAt(selectedRow);
 
-				fileLabel.setText(file.getName() + " | " + file.length() + " bytes");
+				bottomFileInfoTextLabel.setText(file.getName() + " | " + file.length() + " bytes");
 			} else {
-				fileLabel.setText("");
+				bottomFileInfoTextLabel.setText("");
 			}
 		});
 
-		fileTable.setRowSelectionInterval(0, 0);
+		table.setRowSelectionInterval(0, 0);
 
 		// Catch "Enter" key to open the selected row
 		var openRowAction = new AbstractAction() {
@@ -120,28 +127,28 @@ public class FilePanel extends JPanel {
 			}
 		};
 
-		fileTable
+		table
 				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openRow");
 
-		fileTable.getActionMap().put("openRow", openRowAction);
+		table.getActionMap().put("openRow", openRowAction);
 
 		// Left/Right arrow keys act as Page Up/Page Down
-		fileTable
+		table
 				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "scrollUpChangeSelection");
-		fileTable
+		table
 				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "scrollDownChangeSelection");
 
 		// Catch Mouse double click to open the selected row
-		fileTable.addMouseListener(new MouseAdapter() {
+		table.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
-					int viewRow = fileTable.rowAtPoint(e.getPoint());
+					int viewRow = table.rowAtPoint(e.getPoint());
 					if (viewRow >= 0) {
-						int modelRow = fileTable.convertRowIndexToModel(viewRow);
+						int modelRow = table.convertRowIndexToModel(viewRow);
 						onRowActivated(modelRow);
 					}
 				}
@@ -154,12 +161,12 @@ public class FilePanel extends JPanel {
 
 		log.info("Open row: {}", modelRow);
 
-		FileTableModel model = (FileTableModel) fileTable.getModel();
+		FileTableModel model = (FileTableModel) table.getModel();
 
 		var file = model.getFileAt(modelRow);
-		
+
 		File selectedFolder = null;
-		
+
 		if (file.getName().equals(FileTableModel.ParentFolderName)) {
 			selectedFolder = model.getFolder();
 			file = model.getFolder().getParentFile();
@@ -169,19 +176,17 @@ public class FilePanel extends JPanel {
 			log.info("Open directory: {}", file.getAbsolutePath());
 			model.init(file, List.of(file.listFiles()));
 			model.fireTableDataChanged();
-			fileTable.setRowSelectionInterval(0, 0);
+			table.setRowSelectionInterval(0, 0);
 			selectInTable(selectedFolder);
 		} else {
 			log.info("Open file: {}", file.getAbsolutePath());
 			applicationEventPublisher.publishEvent(new ListViewFileOpen(this, file));
 		}
-		
-		
 
 	}
 
 	public void focusFileTable() {
-		fileTable.requestFocusInWindow();
+		table.requestFocusInWindow();
 	}
 
 	private void selectInTable(File selectedFolder) {
@@ -190,13 +195,13 @@ public class FilePanel extends JPanel {
 			return;
 		}
 
-		FileTableModel model = (FileTableModel) fileTable.getModel();
+		FileTableModel model = (FileTableModel) table.getModel();
 
 		for (int i = 0; i < model.getRowCount(); i++) {
 			var file = model.getFileAt(i);
 			if (file.equals(selectedFolder)) {
-				fileTable.setRowSelectionInterval(i, i);
-				fileTable.scrollRectToVisible(fileTable.getCellRect(i, 0, true));
+				table.setRowSelectionInterval(i, i);
+				table.scrollRectToVisible(table.getCellRect(i, 0, true));
 				break;
 			}
 		}

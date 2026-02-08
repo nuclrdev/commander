@@ -52,7 +52,7 @@ public class FileTableModel extends javax.swing.table.AbstractTableModel {
 		return 4;
 	}
 
-	private static final DateFormat date = new SimpleDateFormat("dd MMM yyyy", Locale.getDefault());
+	private static final DateFormat date = DateFormat.getDateInstance(DateFormat.SHORT, Locale.getDefault());
 	
 	private static final DateFormat time = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
