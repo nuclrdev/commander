@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import com.formdev.flatlaf.FlatDarculaLaf;
 
 import dev.nuclr.commander.common.AppVersion;
+import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
@@ -254,6 +255,13 @@ public class MainWindow {
 		editorScreen.focus();
 		mainFrame.revalidate();
 		mainFrame.repaint();
+	}
+	
+	@EventListener
+	public void onFileSelectedEvent(FileSelectedEvent event) {
+		if (quickViewActive) {
+			quickViewPanel.show(event.getFile());
+		}
 	}
 
 	@EventListener

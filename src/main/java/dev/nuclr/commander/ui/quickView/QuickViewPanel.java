@@ -23,15 +23,22 @@ public class QuickViewPanel {
 
 	private JPanel panel;
 
+	private TextViewPanel textViewPanel;
+	
+	private ImageViewPanel imageViewPanel;
+	
 	@PostConstruct
 	public void init() {
 
 		log.info("QuickViewPanel initialized");
 
 		this.panel = new JPanel(new CardLayout());
+		
+		this.textViewPanel = new TextViewPanel();
+		this.imageViewPanel = new ImageViewPanel();
 
-		this.panel.add(new ImageViewPanel(), "ImageViewPanel");
-		this.panel.add(new TextViewPanel(), "TextViewPanel");
+		this.panel.add(imageViewPanel, "ImageViewPanel");
+		this.panel.add(textViewPanel, "TextViewPanel");
 
 	}
 
@@ -40,8 +47,10 @@ public class QuickViewPanel {
 		var cards = (CardLayout) panel.getLayout();
 		
 		if (isImage(file)) {
+			imageViewPanel.setFile(file);
 			cards.show(panel, "ImageViewPanel");
 		} else {
+			textViewPanel.setFile(file);
 			cards.show(panel, "TextViewPanel");
 		}
 		

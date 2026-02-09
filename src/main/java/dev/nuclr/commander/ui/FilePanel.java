@@ -23,6 +23,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 
 import org.springframework.context.ApplicationEventPublisher;
 
+import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.ListViewFileOpen;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -115,8 +116,8 @@ public class FilePanel extends JPanel {
 			int selectedRow = table.getSelectedRow();
 			if (selectedRow >= 0) {
 				var file = model.getFileAt(selectedRow);
-
 				bottomFileInfoTextLabel.setText(file.getName() + " | " + file.length() + " bytes");
+				applicationEventPublisher.publishEvent(new FileSelectedEvent(this, file));
 			} else {
 				bottomFileInfoTextLabel.setText("");
 			}
