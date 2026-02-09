@@ -1,5 +1,19 @@
 package dev.nuclr.commander.event;
 
-public class QuickViewEvent {
+import java.io.File;
+
+import org.springframework.context.ApplicationEvent;
+
+import lombok.Data;
+
+@Data
+public class QuickViewEvent extends ApplicationEvent {
+
+	private File file;
+
+	public QuickViewEvent(Object source, File file) {
+		super(source);
+		this.file = file;
+	}
 
 }

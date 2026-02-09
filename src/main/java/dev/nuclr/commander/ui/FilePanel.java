@@ -218,6 +218,15 @@ public class FilePanel extends JPanel {
 
 	}
 
+	public File getSelectedFile() {
+		int row = table.getSelectedRow();
+		if (row < 0) {
+			return null;
+		}
+		int modelRow = table.convertRowIndexToModel(row);
+		return ((FileTableModel) table.getModel()).getFileAt(modelRow);
+	}
+
 	public void focusFileTable() {
 		table.requestFocusInWindow();
 	}

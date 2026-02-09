@@ -80,7 +80,7 @@ public class Editor {
 
 	private RSyntaxTextArea textArea;
 
-	public Editor(File file) {
+	public Editor() {
 
 		this.textArea = new RSyntaxTextArea();
 
@@ -102,11 +102,6 @@ public class Editor {
 		this.textArea.setTabSize(4);
 		this.textArea.setTabsEmulated(false);
 
-		String ext = FilenameUtils.getExtension(file.getName()).toLowerCase();
-
-		this.textArea
-				.setSyntaxEditingStyle(
-						EXTENSION_TO_SYNTAX.getOrDefault(ext, SyntaxConstants.SYNTAX_STYLE_NONE));
 
 	}
 
@@ -116,7 +111,14 @@ public class Editor {
 		return scroll;
 	}
 
-	public void setText(String text) {
+	public void setText(File file, String text) {
+		
+		String ext = FilenameUtils.getExtension(file.getName()).toLowerCase();
+
+		this.textArea
+				.setSyntaxEditingStyle(
+						EXTENSION_TO_SYNTAX.getOrDefault(ext, SyntaxConstants.SYNTAX_STYLE_NONE));
+		
 		this.textArea.setText(text);
 		this.textArea.setCaretPosition(0);
 	}

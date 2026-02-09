@@ -29,14 +29,14 @@ public class EditorScreen {
 
 		this.panel = new JPanel(new BorderLayout());
 
-		this.textArea = new Editor(file);
+		this.textArea = new Editor();
 
 		try {
 			var content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-			this.textArea.setText(content);
+			this.textArea.setText(file, content);
 		} catch (IOException e) {
 			log.error("Failed to read file: {}", file.getAbsolutePath(), e);
-			this.textArea.setText("Error reading file: " + e.getMessage());
+			this.textArea.setText(file, "Error reading file: " + e.getMessage());
 			this.textArea.setEditable(false);
 		}
 

@@ -25,10 +25,12 @@ import org.springframework.stereotype.Service;
 import com.formdev.flatlaf.FlatDarculaLaf;
 
 import dev.nuclr.commander.common.AppVersion;
+import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.ui.editor.EditorScreen;
+import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -45,9 +47,15 @@ public class MainWindow {
 	private Component lastFocusedInSplitPane;
 
 	private EditorScreen editorScreen;
-	
+
+	private boolean quickViewActive;
+	private Component quickViewReplacedComponent;
+
 	@Autowired
 	private ConsolePanel consolePanel;
+
+	@Autowired
+	private QuickViewPanel quickViewPanel;
 	
 	@Autowired
 	private ApplicationEventPublisher applicationEventPublisher;
@@ -149,6 +157,32 @@ public class MainWindow {
 					}
 					return true; // consume the event
 				}
+				// Ctrl+Q toggles quick view on the opposite panel
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_Q
+						&& e.isControlDown()
+						&& mainSplitPane.isVisible()) {
+					if (quickViewActive) {
+						applicationEventPublisher.publishEvent(new QuickViewEvent(this, null));
+					} else {
+						var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+						var leftPanel = (FilePanel) mainSplitPane.getLeftComponent();
+						var rightPanel = mainSplitPane.getRightComponent();
+						FilePanel activePanel;
+						if (rightPanel instanceof FilePanel fp
+								&& focusOwner != null
+								&& SwingUtilities.isDescendingFrom(focusOwner, fp)) {
+							activePanel = fp;
+						} else {
+							activePanel = leftPanel;
+						}
+						var selectedFile = activePanel.getSelectedFile();
+						if (selectedFile != null && selectedFile.isFile()) {
+							applicationEventPublisher.publishEvent(new QuickViewEvent(this, selectedFile));
+						}
+					}
+					return true;
+				}
 				// Alt+Enter toggles fullscreen
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_ENTER
@@ -218,6 +252,42 @@ public class MainWindow {
 		mainFrame.add(editorScreen.getPanel(), BorderLayout.CENTER);
 		editorScreen.getPanel().setVisible(true);
 		editorScreen.focus();
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	@EventListener
+	public void onQuickView(QuickViewEvent event) {
+		if (quickViewActive) {
+			// Restore the original panel
+			if (quickViewReplacedComponent != null) {
+				var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+				boolean focusInLeft = focusOwner != null
+						&& SwingUtilities.isDescendingFrom(focusOwner, mainSplitPane.getLeftComponent());
+				if (focusInLeft) {
+					mainSplitPane.setRightComponent(quickViewReplacedComponent);
+				} else {
+					mainSplitPane.setLeftComponent(quickViewReplacedComponent);
+				}
+			}
+			quickViewReplacedComponent = null;
+			quickViewActive = false;
+		} else {
+			// Replace the opposite panel with quick view
+			var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+			boolean focusInRight = focusOwner != null
+					&& SwingUtilities.isDescendingFrom(focusOwner, mainSplitPane.getRightComponent());
+			if (focusInRight) {
+				quickViewReplacedComponent = mainSplitPane.getLeftComponent();
+				mainSplitPane.setLeftComponent(quickViewPanel.getPanel());
+			} else {
+				quickViewReplacedComponent = mainSplitPane.getRightComponent();
+				mainSplitPane.setRightComponent(quickViewPanel.getPanel());
+			}
+			quickViewPanel.show(event.getFile());
+			quickViewActive = true;
+		}
+		mainSplitPane.setDividerLocation(0.5);
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
