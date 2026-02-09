@@ -27,6 +27,8 @@ public class QuickViewPanel {
 	
 	private ImageViewPanel imageViewPanel;
 	
+	private MusicViewPanel musicViewPanel;
+	
 	@PostConstruct
 	public void init() {
 
@@ -36,19 +38,26 @@ public class QuickViewPanel {
 		
 		this.textViewPanel = new TextViewPanel();
 		this.imageViewPanel = new ImageViewPanel();
+		this.musicViewPanel = new MusicViewPanel();
 
 		this.panel.add(imageViewPanel, "ImageViewPanel");
 		this.panel.add(textViewPanel, "TextViewPanel");
+		this.panel.add(musicViewPanel, "MusicViewPanel");
 
 	}
 
 	public void show(File file) {
+
+		stop();
 		
 		var cards = (CardLayout) panel.getLayout();
 		
 		if (isImage(file)) {
 			imageViewPanel.setFile(file);
 			cards.show(panel, "ImageViewPanel");
+		} else if (musicViewPanel.isMusicFile(file)) {
+			musicViewPanel.setFile(file);
+			cards.show(panel, "MusicViewPanel");
 		} else {
 			textViewPanel.setFile(file);
 			cards.show(panel, "TextViewPanel");
@@ -71,6 +80,15 @@ public class QuickViewPanel {
 	private boolean isImage(File file) {
 		var extension = FilenameUtils.getExtension(file.getName()).toLowerCase();
 		return IMAGE_EXTENSIONS.contains(extension);
+	}
+
+	public void stop() {
+
+		// Stop music if any
+		musicViewPanel.stopMusic();
+
+		this.imageViewPanel.clear();
+		
 	}
 	
 	

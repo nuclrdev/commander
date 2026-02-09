@@ -77,4 +77,9 @@ public class ImageViewPanel extends JPanel {
             g2.dispose();
         }
     }
+
+	public void clear() {
+		this.image = null;
+		repaint();
+	}
 }

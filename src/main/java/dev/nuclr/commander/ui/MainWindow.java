@@ -268,6 +268,7 @@ public class MainWindow {
 	public void onQuickView(QuickViewEvent event) {
 		if (quickViewActive) {
 			// Restore the original panel
+			quickViewPanel.stop();
 			if (quickViewReplacedComponent != null) {
 				var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
 				boolean focusInLeft = focusOwner != null
