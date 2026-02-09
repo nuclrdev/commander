@@ -83,6 +83,9 @@ public class SDLMixerAudio {
         int Mix_VolumeMusic(int volume);
         int Mix_FadeInMusic(Pointer music, int loops, int ms);
         int Mix_FadeOutMusic(int ms);
+        double Mix_GetMusicPosition(Pointer music);
+        double Mix_MusicDuration(Pointer music);
+        int Mix_GetMusicType(Pointer music);
         String Mix_GetError();
     }
     
@@ -270,9 +273,36 @@ public class SDLMixerAudio {
      */
     public void setPosition(double position) {
         if (SDLMixer.INSTANCE.Mix_SetMusicPosition(position) < 0) {
-            log.error("SDLMixer", "Failed to set position: " + 
+            log.error("SDLMixer", "Failed to set position: " +
                 SDLMixer.INSTANCE.Mix_GetError());
         }
+    }
+
+    /**
+     * Get the current playback position in seconds.
+     * @return position in seconds, or -1.0 if not supported
+     */
+    public double getMusicPosition() {
+        if (currentMusic == null) return -1.0;
+        return SDLMixer.INSTANCE.Mix_GetMusicPosition(currentMusic);
+    }
+
+    /**
+     * Get the total duration of the loaded music in seconds.
+     * @return duration in seconds, or -1.0 if not supported
+     */
+    public double getMusicDuration() {
+        if (currentMusic == null) return -1.0;
+        return SDLMixer.INSTANCE.Mix_MusicDuration(currentMusic);
+    }
+
+    /**
+     * Get the current volume level.
+     * @return volume from 0.0 to 1.0
+     */
+    public float getVolume() {
+        int vol = SDLMixer.INSTANCE.Mix_VolumeMusic(-1);
+        return vol / (float) MIX_MAX_VOLUME;
     }
     
     public void dispose() {
