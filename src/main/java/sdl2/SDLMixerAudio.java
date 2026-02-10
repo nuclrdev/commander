@@ -86,7 +86,12 @@ public class SDLMixerAudio {
         double Mix_GetMusicPosition(Pointer music);
         double Mix_MusicDuration(Pointer music);
         int Mix_GetMusicType(Pointer music);
+        void Mix_SetPostMix(MixCallback mix_func, Pointer arg);
         String Mix_GetError();
+
+        interface MixCallback extends Callback {
+            void invoke(Pointer udata, Pointer stream, int len);
+        }
     }
     
     // Constants
@@ -100,6 +105,12 @@ public class SDLMixerAudio {
     private static boolean sdlInitialized = false;
     private Pointer currentMusic = null;
     private String currentFile = null;
+
+    // Visualizer support: postmix callback feeds PCM into a ring buffer
+    private SDLMixer.MixCallback postMixCallback; // strong ref prevents GC
+    private AudioRingBuffer visualizerBuffer;
+    private byte[] rawPcmBuffer = new byte[16384];
+    private float[] monoConvBuffer = new float[4096];
     
     public SDLMixerAudio() {
         initializeSDL();
@@ -305,6 +316,47 @@ public class SDLMixerAudio {
         return vol / (float) MIX_MAX_VOLUME;
     }
     
+    /**
+     * Register a Mix_SetPostMix callback that converts S16 stereo PCM
+     * to mono float and writes into the given ring buffer.
+     * The callback runs on the SDL audio thread; the ring buffer is
+     * designed for lock-free single-producer / single-consumer access.
+     */
+    public void enableVisualizer(AudioRingBuffer buffer) {
+        this.visualizerBuffer = buffer;
+
+        this.postMixCallback = (udata, stream, len) -> {
+            if (len > rawPcmBuffer.length) {
+                rawPcmBuffer = new byte[len];
+            }
+            int frames = len / 4; // S16 stereo = 4 bytes per frame
+            if (frames > monoConvBuffer.length) {
+                monoConvBuffer = new float[frames];
+            }
+
+            // Bulk-read raw PCM bytes (one JNA call instead of per-sample)
+            stream.read(0, rawPcmBuffer, 0, len);
+
+            // Convert interleaved S16LE stereo to mono float [-1..1]
+            for (int i = 0; i < frames; i++) {
+                int off = i * 4;
+                short left  = (short) ((rawPcmBuffer[off]     & 0xFF) | (rawPcmBuffer[off + 1] << 8));
+                short right = (short) ((rawPcmBuffer[off + 2] & 0xFF) | (rawPcmBuffer[off + 3] << 8));
+                monoConvBuffer[i] = (left + right) / 65536.0f;
+            }
+
+            buffer.write(monoConvBuffer, 0, frames);
+        };
+
+        SDLMixer.INSTANCE.Mix_SetPostMix(postMixCallback, null);
+    }
+
+    public void disableVisualizer() {
+        SDLMixer.INSTANCE.Mix_SetPostMix(null, null);
+        this.postMixCallback = null;
+        this.visualizerBuffer = null;
+    }
+
     public void dispose() {
         if (currentMusic != null) {
             stopMusic();

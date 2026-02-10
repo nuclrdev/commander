@@ -34,7 +34,14 @@ public class TextViewPanel extends JPanel {
 	public void setFile(File file) {
 
 		this.file = file;
-
+		
+		if (file.length() > 10 * 1024 * 1024) { // 10 MB limit
+			log.warn("File is too large to display: {}", file.getAbsolutePath());
+			this.textArea.setText(file, "File is too large to display.");
+			this.textArea.setEditable(false);
+			return;
+		}
+		
 		try {
 
 			var content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);

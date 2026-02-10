@@ -18,65 +18,78 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ImageViewPanel extends JPanel {
 
-    private BufferedImage image;
+	private BufferedImage image;
 
-    public void setFile(File file) {
-        try {
-            this.image = ImageIO.read(file);
-            repaint();
-        } catch (IOException e) {
-            log.error("Failed to read image file: {}", file.getAbsolutePath(), e);
-            this.image = null;
-            repaint();
-        }
-    }
+	public void setFile(File file) {
+		try {
+			this.image = ImageIO.read(file);
+			repaint();
+		} catch (IOException e) {
+			log.error("Failed to read image file: {}", file.getAbsolutePath(), e);
+			this.image = null;
+			repaint();
+		}
+	}
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        
-        g.setColor(Color.black);
-        g.fillRect(0, 0, getWidth(), getHeight());
+	@Override
+	protected void paintComponent(Graphics g) {
+		super.paintComponent(g);
 
-        if (image == null) {
-            return;
-        }
+		g.setColor(Color.black);
+		g.fillRect(0, 0, getWidth(), getHeight());
 
-        final int panelW = getWidth();
-        final int panelH = getHeight();
+		if (image == null) {
+			return;
+		}
 
-        if (panelW <= 0 || panelH <= 0) {
-            return;
-        }
+		final int panelW = getWidth();
+		final int panelH = getHeight();
 
-        final int imgW = image.getWidth();
-        final int imgH = image.getHeight();
+		if (panelW <= 0 || panelH <= 0) {
+			return;
+		}
 
-        if (imgW <= 0 || imgH <= 0) {
-            return;
-        }
+		final int imgW = image.getWidth();
+		final int imgH = image.getHeight();
 
-        // Fit inside panel (contain) while preserving aspect ratio
-        final double scale = Math.min((double) panelW / imgW, (double) panelH / imgH);
+		if (imgW <= 0 || imgH <= 0) {
+			return;
+		}
 
-        final int drawW = (int) Math.round(imgW * scale);
-        final int drawH = (int) Math.round(imgH * scale);
+		// Fit inside panel (contain) while preserving aspect ratio
+		final double fitScale = Math
+				.min(
+						(double) panelW / imgW,
+						(double) panelH / imgH);
 
-        // Center
-        final int x = (panelW - drawW) / 2;
-        final int y = (panelH - drawH) / 2;
+		// Never upscale
+		final double scale = Math.min(1.0, fitScale);
 
-        Graphics2D g2 = (Graphics2D) g.create();
-        try {
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		final int drawW = (int) Math.round(imgW * scale);
+		final int drawH = (int) Math.round(imgH * scale);
 
-            g2.drawImage(image, x, y, drawW, drawH, null);
-        } finally {
-            g2.dispose();
-        }
-    }
+		// Center
+		final int x = (panelW - drawW) / 2;
+		final int y = (panelH - drawH) / 2;
+
+		Graphics2D g2 = (Graphics2D) g.create();
+		try {
+
+			g2
+					.setRenderingHint(
+							RenderingHints.KEY_INTERPOLATION,
+							scale < 1.0
+									? RenderingHints.VALUE_INTERPOLATION_BILINEAR
+									: RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+
+			g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+			g2.drawImage(image, x, y, drawW, drawH, null);
+		} finally {
+			g2.dispose();
+		}
+	}
 
 	public void clear() {
 		this.image = null;

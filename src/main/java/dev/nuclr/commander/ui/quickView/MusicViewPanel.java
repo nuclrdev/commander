@@ -30,6 +30,7 @@ import javax.swing.Timer;
 import org.apache.commons.io.FilenameUtils;
 
 import lombok.extern.slf4j.Slf4j;
+import sdl2.AudioRingBuffer;
 import sdl2.SDLMixerAudio;
 
 @Slf4j
@@ -44,13 +45,15 @@ public class MusicViewPanel extends JPanel {
 	private static final Color BUTTON_HOVER = new Color(0x4C, 0x50, 0x52);
 
 	private final Set<String> allowedExtensions = Set.of(
-			"wav", "flac", "aac", "voc", "aiff",
+			"wav", "flac", "aac", "voc", "aiff", "mid",
 			"ogg", "mp3", "xm", "mod", "s3m", "it", "669");
 
 	public static SDLMixerAudio TrackerMusic;
+	private static AudioRingBuffer audioRingBuffer;
 
 	private File currentFile;
 	private Timer updateTimer;
+	private WaveformPanel waveformPanel;
 
 	// UI components
 	private JLabel trackNameLabel;
@@ -73,16 +76,18 @@ public class MusicViewPanel extends JPanel {
 	}
 
 	private void buildUI() {
-		// ---- Top: Track info ----
-		JPanel topPanel = new JPanel();
-		topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
+		// ---- Top: Waveform visualizer + track info ----
+		JPanel topPanel = new JPanel(new BorderLayout());
 		topPanel.setBackground(BG_COLOR);
-		topPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 10, 20));
+		topPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 4, 8));
 
-		JLabel iconLabel = new JLabel("\u266B", SwingConstants.CENTER);
-		iconLabel.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 64));
-		iconLabel.setForeground(ACCENT_COLOR);
-		iconLabel.setAlignmentX(CENTER_ALIGNMENT);
+		waveformPanel = new WaveformPanel();
+		waveformPanel.setPreferredSize(new Dimension(100, 120));
+
+		JPanel infoPanel = new JPanel();
+		infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+		infoPanel.setBackground(BG_COLOR);
+		infoPanel.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
 
 		trackNameLabel = new JLabel("No track loaded");
 		trackNameLabel.setFont(new Font("JetBrains Mono", Font.BOLD, 14));
@@ -96,13 +101,12 @@ public class MusicViewPanel extends JPanel {
 		trackInfoLabel.setAlignmentX(CENTER_ALIGNMENT);
 		trackInfoLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-		topPanel.add(Box.createVerticalGlue());
-		topPanel.add(iconLabel);
-		topPanel.add(Box.createVerticalStrut(12));
-		topPanel.add(trackNameLabel);
-		topPanel.add(Box.createVerticalStrut(4));
-		topPanel.add(trackInfoLabel);
-		topPanel.add(Box.createVerticalGlue());
+		infoPanel.add(trackNameLabel);
+		infoPanel.add(Box.createVerticalStrut(2));
+		infoPanel.add(trackInfoLabel);
+
+		topPanel.add(waveformPanel, BorderLayout.CENTER);
+		topPanel.add(infoPanel, BorderLayout.SOUTH);
 
 		// ---- Bottom: Controls ----
 		JPanel controlsPanel = new JPanel();
@@ -337,8 +341,12 @@ public class MusicViewPanel extends JPanel {
 				TrackerMusic.stopMusic();
 			} else {
 				TrackerMusic = new SDLMixerAudio();
+				audioRingBuffer = new AudioRingBuffer(44100); // ~1 second at 44.1kHz
+				TrackerMusic.enableVisualizer(audioRingBuffer);
+				waveformPanel.setRingBuffer(audioRingBuffer);
 			}
 
+			audioRingBuffer.clear();
 			TrackerMusic.loadMusic(file);
 			TrackerMusic.playMusic(-1);
 
@@ -365,6 +373,9 @@ public class MusicViewPanel extends JPanel {
 	public void stopMusic() {
 		if (TrackerMusic != null) {
 			TrackerMusic.stopMusic();
+		}
+		if (audioRingBuffer != null) {
+			audioRingBuffer.clear();
 		}
 		updatePlayPauseIcon();
 	}
