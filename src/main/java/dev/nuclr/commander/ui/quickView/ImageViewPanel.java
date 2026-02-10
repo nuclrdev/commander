@@ -7,9 +7,12 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.Set;
 
 import javax.imageio.ImageIO;
 import javax.swing.JPanel;
+
+import org.apache.commons.io.FilenameUtils;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +32,23 @@ public class ImageViewPanel extends JPanel {
 			this.image = null;
 			repaint();
 		}
+	}
+
+	static final Set<String> IMAGE_EXTENSIONS = Set
+			.of(
+					new String[] {
+							"jpg",
+							"jpeg",
+							"png",
+							"gif",
+							"bmp",
+							"webp",
+							"svg"
+					});
+
+	public boolean isImage(File file) {
+		var extension = FilenameUtils.getExtension(file.getName()).toLowerCase();
+		return IMAGE_EXTENSIONS.contains(extension);
 	}
 
 	@Override

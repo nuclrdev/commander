@@ -4,10 +4,12 @@ import java.awt.BorderLayout;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 
 import javax.swing.JPanel;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -58,6 +60,39 @@ public class TextViewPanel extends JPanel {
 
 	public void focus() {
 		this.textArea.focus();
+	}
+	
+	private Set<String> supportedExtensions = Set
+			.of(
+					"txt",
+					"md",
+					"log",
+					"csv",
+					"json",
+					"xml",
+					"html",
+					"css",
+					"js",
+					"java",
+					"py",
+					"c",
+					"cpp",
+					"h",
+					"hpp",
+					"sh",
+					"bat",
+					"pref",
+					"ps1",
+					"yaml",
+					"yml",
+					"ini",
+					"conf",
+					"cfg",
+					"properties");
+
+	public boolean isTextFile(File file) {
+		var ext = FilenameUtils.getExtension(file.getName()).toLowerCase();
+		return supportedExtensions.contains(ext);
 	}
 
 }
