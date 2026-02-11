@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -108,6 +109,13 @@ public class Editor {
 	public RTextScrollPane getPanel() {
 		var scroll = new RTextScrollPane(this.textArea);
 		scroll.setLineNumbersEnabled(true);
+
+		// RTextScrollPane's component tree is created before being added to the
+		// Swing hierarchy, so its children (scrollbars, viewport, corners) may
+		// have the wrong L&F UI delegates. Force the entire tree to re-adopt
+		// the current L&F (FlatLaf) so scrollbars render correctly.
+		SwingUtilities.updateComponentTreeUI(scroll);
+
 		return scroll;
 	}
 
