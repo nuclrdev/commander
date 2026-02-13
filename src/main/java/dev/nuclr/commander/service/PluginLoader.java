@@ -1,12 +1,10 @@
 package dev.nuclr.commander.service;
 
-import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.util.ServiceLoader;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,7 +13,9 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.nuclr.plugin.Plugin;
+import dev.nuclr.plugin.PluginFeature;
+import dev.nuclr.plugin.PluginInfo;
+import dev.nuclr.plugin.PluginType;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,6 +31,9 @@ public class PluginLoader {
 
 	@Value("${plugins.folder}")
 	private String pluginsDirectory;
+	
+	@Autowired
+	private PluginRegistry pluginRegistry;
 
 	@PostConstruct
 	public void init() {
@@ -68,11 +71,23 @@ public class PluginLoader {
 									cl.getResourceAsStream("plugin.json"),
 									StandardCharsets.UTF_8);
 
-					var pluginInfo = objectMapper.readValue(json, Plugin.class);
+					var pluginInfo = objectMapper.readValue(json, PluginInfo.class);
 
 					log.info("Plugin info: [{}]", pluginInfo);
+					
+					if (pluginInfo.getFeature() == PluginFeature.QuickView) {
+						log.info("Registering QuickViewPlugin: [{}]", pluginInfo.getName());
+						pluginRegistry
+								.registerQuickViewPlugin(
+										pluginInfo,
+										cl
+												.loadClass(pluginInfo.getPluginClass())
+												.asSubclass(dev.nuclr.plugin.QuickViewPlugin.class)
+												.getDeclaredConstructor()
+												.newInstance());
+					}
 
-					var loader = ServiceLoader.load(Plugin.class, cl);
+					var loader = ServiceLoader.load(PluginInfo.class, cl);
 
 					for (var plugin : loader) {
 						log.info("Initializing plugin: [{}]", plugin.getName());
