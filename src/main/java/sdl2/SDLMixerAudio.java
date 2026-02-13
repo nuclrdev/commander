@@ -87,7 +87,6 @@ public class SDLMixerAudio {
         double Mix_MusicDuration(Pointer music);
         int Mix_GetMusicType(Pointer music);
         void Mix_SetPostMix(MixCallback mix_func, Pointer arg);
-        String Mix_GetError();
 
         interface MixCallback extends Callback {
             void invoke(Pointer udata, Pointer stream, int len);
@@ -143,7 +142,7 @@ public class SDLMixerAudio {
                     MIX_DEFAULT_CHANNELS,
                     2048) < 0) {
                 throw new RuntimeException("Failed to open audio: " + 
-                    SDLMixer.INSTANCE.Mix_GetError());
+                    SDL2.INSTANCE.SDL_GetError());
             }
             
             sdlInitialized = true;
@@ -169,7 +168,7 @@ public class SDLMixerAudio {
         
         if (currentMusic == null) {
             throw new RuntimeException("Failed to load music: " + 
-                SDLMixer.INSTANCE.Mix_GetError());
+                SDL2.INSTANCE.SDL_GetError());
         }
     }
     
@@ -192,7 +191,7 @@ public class SDLMixerAudio {
         
         if (SDLMixer.INSTANCE.Mix_PlayMusic(currentMusic, loops) < 0) {
             throw new RuntimeException("Failed to play music: " + 
-                SDLMixer.INSTANCE.Mix_GetError());
+                SDL2.INSTANCE.SDL_GetError());
         }
     }
     
@@ -266,7 +265,7 @@ public class SDLMixerAudio {
         
         if (SDLMixer.INSTANCE.Mix_FadeInMusic(currentMusic, loops, fadeMs) < 0) {
             throw new RuntimeException("Failed to fade in music: " + 
-                SDLMixer.INSTANCE.Mix_GetError());
+                SDL2.INSTANCE.SDL_GetError());
         }
     }
     
@@ -285,7 +284,7 @@ public class SDLMixerAudio {
     public void setPosition(double position) {
         if (SDLMixer.INSTANCE.Mix_SetMusicPosition(position) < 0) {
             log.error("SDLMixer", "Failed to set position: " +
-                SDLMixer.INSTANCE.Mix_GetError());
+                SDL2.INSTANCE.SDL_GetError());
         }
     }
 

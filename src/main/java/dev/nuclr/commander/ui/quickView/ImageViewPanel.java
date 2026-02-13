@@ -27,7 +27,7 @@ public class ImageViewPanel extends JPanel {
 		try {
 			this.image = ImageIO.read(file);
 			repaint();
-		} catch (IOException e) {
+		} catch (Exception e) {
 			log.error("Failed to read image file: {}", file.getAbsolutePath(), e);
 			this.image = null;
 			repaint();
@@ -43,7 +43,7 @@ public class ImageViewPanel extends JPanel {
 							"gif",
 							"bmp",
 							"webp",
-							"svg"
+							"svg",
 					});
 
 	public boolean isImage(File file) {

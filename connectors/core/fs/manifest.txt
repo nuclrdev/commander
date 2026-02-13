@@ -1,5 +1,0 @@
-id: core-fs
-name: File System
-description: Local filesystem manager
-type: core
-version: 1.0.0

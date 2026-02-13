@@ -3,8 +3,6 @@ package dev.nuclr.commander.ui;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Font;
-import java.awt.GraphicsDevice;
-import java.awt.GraphicsEnvironment;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
@@ -18,13 +16,13 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 
-import dev.nuclr.commander.common.AppVersion;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
@@ -58,6 +56,9 @@ public class MainWindow {
 	@Autowired
 	private QuickViewPanel quickViewPanel;
 	
+	@Value("${version}")
+	private String version;
+
 	@Autowired
 	private ApplicationEventPublisher applicationEventPublisher;
 	
@@ -75,7 +76,7 @@ public class MainWindow {
 		// FlatDarkLaf.setup();
 		FlatDarculaLaf.setup();
 
-		mainFrame = new JFrame("Nuclr Commander (" + AppVersion.get() + ")");
+		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
