@@ -220,6 +220,11 @@ public class MainWindow {
 
 		mainFrame.setVisible(true);
 
+		// Ensure the left panel's table gets keyboard focus on startup
+		SwingUtilities.invokeLater(() -> {
+			((FilePanel) mainSplitPane.getLeftComponent()).focusFileTable();
+		});
+
 	}
 
 	private boolean maximized = false;
