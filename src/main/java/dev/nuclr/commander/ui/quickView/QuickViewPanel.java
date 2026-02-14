@@ -2,6 +2,8 @@ package dev.nuclr.commander.ui.quickView;
 
 import java.awt.CardLayout;
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.swing.JPanel;
 
@@ -9,7 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import dev.nuclr.commander.ui.editor.TextViewPanel;
+import dev.nuclr.commander.service.PluginRegistry;
+import dev.nuclr.plugin.QuickViewPlugin;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -22,14 +25,11 @@ public class QuickViewPanel {
 
 	private JPanel panel;
 
-	private TextViewPanel textViewPanel;
-
-	private ImageViewPanel imageViewPanel;
-
-	private MusicViewPanel musicViewPanel;
-
 	@Autowired
 	private NoQuickViewAvailablePanel noQuickViewAvailablePanel;
+	
+	@Autowired
+	private PluginRegistry pluginRegistry;
 
 	@PostConstruct
 	public void init() {
@@ -38,16 +38,11 @@ public class QuickViewPanel {
 
 		this.panel = new JPanel(new CardLayout());
 
-		this.textViewPanel = new TextViewPanel();
-		this.imageViewPanel = new ImageViewPanel();
-		this.musicViewPanel = new MusicViewPanel();
-
-		this.panel.add(imageViewPanel, "ImageViewPanel");
-		this.panel.add(textViewPanel, "TextViewPanel");
-		this.panel.add(musicViewPanel, "MusicViewPanel");
 		this.panel.add(noQuickViewAvailablePanel, "NoQuickViewAvailablePanel");
 
 	}
+	
+	private Map<String, QuickViewPlugin> loadedPlugins = new HashMap<>();
 
 	public void show(File file) {
 
@@ -55,15 +50,12 @@ public class QuickViewPanel {
 
 		var cards = (CardLayout) panel.getLayout();
 
-		if (imageViewPanel.isImage(file)) {
-			imageViewPanel.setFile(file);
-			cards.show(panel, "ImageViewPanel");
-		} else if (musicViewPanel.isMusicFile(file)) {
-			musicViewPanel.setFile(file);
-			cards.show(panel, "MusicViewPanel");
-		} else if (textViewPanel.isTextFile(file)) {
-			textViewPanel.setFile(file);
-			cards.show(panel, "TextViewPanel");
+		QuickViewPlugin plugin = pluginRegistry.getQuickViewPluginByFile(file);
+		
+		if (plugin!=null) {
+			
+			
+			
 		} else {
 			log.warn("No quick view available for file: {}", file.getAbsolutePath());
 			noQuickViewAvailablePanel.setFile(file);
@@ -74,10 +66,6 @@ public class QuickViewPanel {
 
 	public void stop() {
 
-		// Stop music if any
-		musicViewPanel.stopMusic();
-
-		this.imageViewPanel.clear();
 
 	}
 
