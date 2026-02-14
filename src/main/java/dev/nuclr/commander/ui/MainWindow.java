@@ -185,6 +185,26 @@ public class MainWindow {
 					}
 					return true;
 				}
+				// Alt+F1 changes drive on left panel
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_F1
+						&& e.isAltDown()
+						&& mainSplitPane.isVisible()) {
+					var leftPanel = (FilePanel) mainSplitPane.getLeftComponent();
+					ChangeDrivePopup.show(leftPanel);
+					return true;
+				}
+				// Alt+F2 changes drive on right panel
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_F2
+						&& e.isAltDown()
+						&& mainSplitPane.isVisible()) {
+					var rightPanel = mainSplitPane.getRightComponent();
+					if (rightPanel instanceof FilePanel fp) {
+						ChangeDrivePopup.show(fp);
+					}
+					return true;
+				}
 				// Alt+Enter toggles fullscreen
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_ENTER

@@ -1,17 +1,9 @@
 package dev.nuclr.commander.service;
 
 import java.io.File;
-import java.time.Duration;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
 import org.springframework.stereotype.Service;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 
 import dev.nuclr.plugin.PluginInfo;
 import dev.nuclr.plugin.QuickViewPlugin;

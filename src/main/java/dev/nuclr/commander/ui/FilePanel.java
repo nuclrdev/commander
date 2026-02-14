@@ -8,7 +8,9 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -38,6 +40,8 @@ public class FilePanel extends JPanel {
 	private JLabel bottomFileInfoTextLabel;
 
 	private JLabel topPathTextLabel;
+
+	private final Map<File, File> lastFolderPerDrive = new HashMap<>();
 
 	public FilePanel(ApplicationEventPublisher applicationEventPublisher) {
 
@@ -226,6 +230,34 @@ public class FilePanel extends JPanel {
 		}
 		int modelRow = table.convertRowIndexToModel(row);
 		return ((FileTableModel) table.getModel()).getFileAt(modelRow);
+	}
+
+	public File getCurrentRoot() {
+		FileTableModel model = (FileTableModel) table.getModel();
+		return model.getFolder().toPath().getRoot().toFile();
+	}
+
+	public void navigateTo(File directory) {
+		FileTableModel model = (FileTableModel) table.getModel();
+
+		// Save current folder under its drive root
+		File currentFolder = model.getFolder();
+		if (currentFolder != null) {
+			File currentRoot = currentFolder.toPath().getRoot().toFile();
+			lastFolderPerDrive.put(currentRoot, currentFolder);
+		}
+
+		// Restore saved folder for the target drive, if available
+		File targetRoot = directory.toPath().getRoot().toFile();
+		File savedFolder = lastFolderPerDrive.get(targetRoot);
+		if (savedFolder != null && savedFolder.isDirectory()) {
+			directory = savedFolder;
+		}
+
+		model.init(directory, List.of(directory.listFiles()));
+		model.fireTableDataChanged();
+		topPathTextLabel.setText(directory.getAbsolutePath());
+		table.setRowSelectionInterval(0, 0);
 	}
 
 	public void focusFileTable() {
