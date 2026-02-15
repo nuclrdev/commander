@@ -15,15 +15,6 @@
 	<dependencies>
 
 		<!-- Source:
-		https://mvnrepository.com/artifact/com.twelvemonkeys.imageio/imageio-webp -->
-		<dependency>
-			<groupId>com.twelvemonkeys.imageio</groupId>
-			<artifactId>imageio-webp</artifactId>
-			<version>3.13.0</version>
-			<scope>compile</scope>
-		</dependency>
-
-		<!-- Source:
 		https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
 		<dependency>
 			<groupId>com.github.ben-manes.caffeine</groupId>
@@ -32,23 +23,10 @@
 			<scope>compile</scope>
 		</dependency>
 
-		<!-- Source: https://mvnrepository.com/artifact/net.java.dev.jna/jna -->
-		<dependency>
-			<groupId>net.java.dev.jna</groupId>
-			<artifactId>jna</artifactId>
-			<version>5.18.1</version>
-		</dependency>
-
 		<dependency>
 			<groupId>dev.nuclr</groupId>
 			<artifactId>plugins-sdk</artifactId>
 			<version>1.0.0</version>
-		</dependency>
-
-		<dependency>
-			<groupId>com.github.oshi</groupId>
-			<artifactId>oshi-core</artifactId>
-			<version>6.9.3</version>
 		</dependency>
 
 		<!-- Source:
@@ -57,14 +35,6 @@
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
 			<version>2.21.0</version>
-		</dependency>
-
-		<!-- Source:
-		https://mvnrepository.com/artifact/net.java.dev.jna/jna-platform -->
-		<dependency>
-			<groupId>net.java.dev.jna</groupId>
-			<artifactId>jna-platform</artifactId>
-			<version>5.18.1</version>
 		</dependency>
 
 		<dependency>
@@ -108,18 +78,6 @@
 			<artifactId>spring-context</artifactId>
 			<version>7.0.3</version>
 			<scope>compile</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>commons-io</groupId>
-			<artifactId>commons-io</artifactId>
-			<version>2.21.0</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.apache.commons</groupId>
-			<artifactId>commons-lang3</artifactId>
-			<version>3.20.0</version>
 		</dependency>
 
 		<dependency>

@@ -6,7 +6,6 @@ import java.util.Arrays;
 
 import javax.swing.JOptionPane;
 
-import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
@@ -14,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import dev.nuclr.commander.common.IOUtils;
 import dev.nuclr.commander.plugin.ZipVerifier;
 import dev.nuclr.commander.ui.common.Alerts;
 import jakarta.annotation.PostConstruct;

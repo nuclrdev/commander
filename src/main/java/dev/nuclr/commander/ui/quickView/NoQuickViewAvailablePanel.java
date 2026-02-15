@@ -21,10 +21,10 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
-import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import dev.nuclr.commander.common.FilenameUtils;
 import dev.nuclr.commander.service.PluginMarketplaceService;
 import dev.nuclr.commander.service.SystemSettings;
 import lombok.extern.slf4j.Slf4j;

@@ -7,9 +7,9 @@ import java.nio.charset.StandardCharsets;
 
 import javax.swing.JPanel;
 
-import org.apache.commons.io.FileUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
+import dev.nuclr.commander.common.FileUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,7 +34,7 @@ public class EditorScreen {
 		try {
 			var content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
 			this.textArea.setText(file, content);
-		} catch (IOException e) {
+		} catch (Exception e) {
 			log.error("Failed to read file: {}", file.getAbsolutePath(), e);
 			this.textArea.setText(file, "Error reading file: " + e.getMessage());
 			this.textArea.setEditable(false);

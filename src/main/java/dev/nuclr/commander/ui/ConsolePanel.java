@@ -9,7 +9,6 @@ import java.util.Map;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
-import org.apache.commons.lang3.SystemUtils;
 import org.springframework.stereotype.Component;
 
 import com.jediterm.terminal.TerminalColor;
@@ -18,6 +17,7 @@ import com.jediterm.terminal.ui.JediTermWidget;
 import com.jediterm.terminal.ui.settings.DefaultSettingsProvider;
 import com.pty4j.PtyProcess;
 
+import dev.nuclr.commander.common.SystemUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -52,7 +52,7 @@ public class ConsolePanel {
 		consolePanel.add(termWidget, BorderLayout.CENTER);
 
 		// Pick a shell per OS (very basic)
-		String[] cmd = SystemUtils.IS_OS_WINDOWS
+		String[] cmd = SystemUtils.isOsWindows()
 				? new String[] { "cmd.exe" }
 				: new String[] { "/bin/bash", "-l" };
 

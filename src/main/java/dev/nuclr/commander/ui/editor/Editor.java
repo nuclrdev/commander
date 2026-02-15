@@ -4,19 +4,16 @@ import java.awt.Font;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
+import dev.nuclr.commander.common.FilenameUtils;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j

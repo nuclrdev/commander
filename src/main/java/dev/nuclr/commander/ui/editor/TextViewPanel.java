@@ -8,9 +8,8 @@ import java.util.Set;
 
 import javax.swing.JPanel;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
-
+import dev.nuclr.commander.common.FileUtils;
+import dev.nuclr.commander.common.FilenameUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
