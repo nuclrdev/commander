@@ -1,9 +1,11 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -20,6 +22,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
+import javax.swing.Popup;
+import javax.swing.PopupFactory;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableCellRenderer;
 
@@ -42,6 +46,10 @@ public class FilePanel extends JPanel {
 	private JLabel topPathTextLabel;
 
 	private final Map<File, File> lastFolderPerDrive = new HashMap<>();
+
+	private StringBuilder searchQuery;
+	private Popup searchPopup;
+	private JLabel searchLabel;
 
 	public FilePanel(ApplicationEventPublisher applicationEventPublisher) {
 
@@ -193,6 +201,49 @@ public class FilePanel extends JPanel {
 			}
 		});
 
+		// Alt+typing quick search
+		table.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (e.getKeyCode() == KeyEvent.VK_ALT) {
+					return;
+				}
+				if (!e.isAltDown()) {
+					return;
+				}
+				if (e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
+					if (searchQuery != null && searchQuery.length() > 0) {
+						searchQuery.deleteCharAt(searchQuery.length() - 1);
+						if (searchQuery.length() == 0) {
+							hideSearchPopup();
+						} else {
+							updateSearchPopup();
+							selectFirstMatch(searchQuery.toString());
+						}
+					}
+					e.consume();
+					return;
+				}
+				char c = (char) e.getKeyCode();
+				if (Character.isLetterOrDigit(c) || c == '.' || c == '-' || c == '_' || c == ' ') {
+					if (searchQuery == null) {
+						searchQuery = new StringBuilder();
+					}
+					searchQuery.append(Character.toLowerCase(c));
+					showSearchPopup();
+					selectFirstMatch(searchQuery.toString());
+					e.consume();
+				}
+			}
+
+			@Override
+			public void keyReleased(KeyEvent e) {
+				if (e.getKeyCode() == KeyEvent.VK_ALT) {
+					hideSearchPopup();
+				}
+			}
+		});
+
 	}
 
 	protected void onRowActivated(int modelRow) {
@@ -278,6 +329,54 @@ public class FilePanel extends JPanel {
 				table.setRowSelectionInterval(i, i);
 				table.scrollRectToVisible(table.getCellRect(i, 0, true));
 				break;
+			}
+		}
+	}
+
+	private void showSearchPopup() {
+		if (searchPopup != null) {
+			searchPopup.hide();
+		}
+		if (searchLabel == null) {
+			searchLabel = new JLabel();
+			searchLabel.setBorder(BorderFactory.createCompoundBorder(
+					BorderFactory.createLineBorder(searchLabel.getForeground()),
+					BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+			searchLabel.setOpaque(true);
+		}
+		searchLabel.setText("Search: " + searchQuery);
+		Point loc = table.getLocationOnScreen();
+		int x = loc.x + 4;
+		int y = loc.y + table.getHeight() - searchLabel.getPreferredSize().height - 4;
+		searchPopup = PopupFactory.getSharedInstance().getPopup(table, searchLabel, x, y);
+		searchPopup.show();
+	}
+
+	private void updateSearchPopup() {
+		if (searchLabel != null && searchPopup != null) {
+			searchLabel.setText("Search: " + searchQuery);
+			// Recreate to update size/position
+			showSearchPopup();
+		}
+	}
+
+	private void hideSearchPopup() {
+		if (searchPopup != null) {
+			searchPopup.hide();
+			searchPopup = null;
+		}
+		searchQuery = null;
+	}
+
+	private void selectFirstMatch(String query) {
+		FileTableModel model = (FileTableModel) table.getModel();
+		String lowerQuery = query.toLowerCase();
+		for (int i = 0; i < model.getRowCount(); i++) {
+			var file = model.getFileAt(i);
+			if (file.getName().toLowerCase().startsWith(lowerQuery)) {
+				table.setRowSelectionInterval(i, i);
+				table.scrollRectToVisible(table.getCellRect(i, 0, true));
+				return;
 			}
 		}
 	}
