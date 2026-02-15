@@ -12,7 +12,7 @@
 
     <!-- Your app package -->
     <logger name="dev.nuclr" level="ALL" />
-    <logger name="org.springframework" level="ALL" />
+    <logger name="org.springframework" level="WARN" />
 
     <!-- Root logger (everything else) -->
     <root level="WARN">

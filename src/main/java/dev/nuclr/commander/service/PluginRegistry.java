@@ -41,4 +41,8 @@ public final class PluginRegistry {
 //		this.quickViewPlugins.remove(plugin);
 	}
 
+	public void loadPlugin(File file) {
+		log.info("Loading plugin: [{}]", file.getName());		
+	}
+
 }

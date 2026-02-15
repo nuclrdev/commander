@@ -1,9 +1,10 @@
 package dev.nuclr.commander.service;
 
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
-import java.util.ServiceLoader;
+import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
+
+import javax.swing.JOptionPane;
 
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,9 +14,8 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.nuclr.plugin.PluginFeature;
-import dev.nuclr.plugin.PluginInfo;
-import dev.nuclr.plugin.PluginType;
+import dev.nuclr.commander.plugin.ZipVerifier;
+import dev.nuclr.commander.ui.common.Alerts;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,9 +29,9 @@ public class PluginLoader {
 	@Autowired
 	private ObjectMapper objectMapper;
 
-	@Value("${plugins.folder}")
-	private String pluginsDirectory;
-	
+	@Value("${core.plugins.folder}")
+	private String corePluginsDirectory;
+
 	@Autowired
 	private PluginRegistry pluginRegistry;
 
@@ -40,66 +40,78 @@ public class PluginLoader {
 		taskExecutor.execute(new Runnable() {
 			@Override
 			public void run() {
-				loadPlugins();
+				try {
+					loadPlugins();
+				} catch (IOException e) {
+					log.error("Failed to load plugins: {}", e.getMessage(), e);
+				}
 			}
 		});
 	}
 
-	protected void loadPlugins() {
-		log.info("Loading plugins from directory: [{}]", pluginsDirectory);
-		loadCorePlugins("plugins/core");
-	}
+	protected void loadPlugins() throws IOException {
 
-	private void loadCorePlugins(String pluginsFolder) {
+		var pluginsFolder = new File(".", corePluginsDirectory);
 
-		var folders = new java.io.File(pluginsFolder).listFiles(java.io.File::isDirectory);
+		log.info("Loading plugins from directory: [{}]", pluginsFolder);
 
-		if (folders != null) {
+		var publicKey = IOUtils.toByteArray(this.getClass().getResourceAsStream("/dev/nuclr/key/nuclr-cert.pem"));
 
-			for (var folder : folders) {
+		Arrays
+				.stream(pluginsFolder.listFiles(File::isFile))
+				.filter(file -> file.getName().endsWith("zip"))
+				.forEach(file -> {
 
-				log.info("Loading core plugin: [{}]", folder.getAbsolutePath());
-				
-				var jar = folder.listFiles()[0];
+					log.info("Loading core plugin: [{}]", file.getName());
 
-				try (var cl = new URLClassLoader(
-						new URL[] { jar.toURI().toURL() },
-						this.getClass().getClassLoader())) {
+					var sigFile = new File(file.getAbsolutePath() + ".sig");
 
-					var json = IOUtils
-							.toString(
-									cl.getResourceAsStream("plugin.json"),
-									StandardCharsets.UTF_8);
-
-					var pluginInfo = objectMapper.readValue(json, PluginInfo.class);
-
-					log.info("Plugin info: [{}]", pluginInfo);
-					
-					if (pluginInfo.getFeature() == PluginFeature.QuickView) {
-						log.info("Registering QuickViewPlugin: [{}]", pluginInfo.getName());
-						pluginRegistry
-								.registerQuickViewPlugin(
-										pluginInfo,
-										cl
-												.loadClass(pluginInfo.getPluginClass())
-												.asSubclass(dev.nuclr.plugin.QuickViewPlugin.class)
-												.getDeclaredConstructor()
-												.newInstance());
+					if (false == sigFile.exists()) {
+						log
+								.warn(
+										"Plugin signature file not found for plugin: [{}]",
+										file.getName());
+						Alerts
+								.showMessageDialog(
+										null,
+										"Plugin signature file not found for plugin: "
+												+ file.getName(),
+										"Plugin Load Error",
+										JOptionPane.ERROR_MESSAGE);
+						return;
 					}
 
-					var loader = ServiceLoader.load(PluginInfo.class, cl);
-
-					for (var plugin : loader) {
-						log.info("Initializing plugin: [{}]", plugin.getName());
-						// plugin.initialize();
+					try {
+						var valid = ZipVerifier.verify(file, sigFile, publicKey);
+						if (valid) {
+							log.info("Plugin [{}] verified successfully", file.getName());
+							pluginRegistry.loadPlugin(file);
+						} else {
+							log.warn("Invalid plugin signature for plugin: [{}]", file.getName());
+							Alerts
+									.showMessageDialog(
+											null,
+											"Invalid plugin signature for plugin: "
+													+ file.getName(),
+											"Plugin Load Error",
+											JOptionPane.ERROR_MESSAGE);
+						}
+					} catch (Exception e) {
+						log
+								.error(
+										"Failed to verify plugin [{}]: {}",
+										file.getName(),
+										e.getMessage(),
+										e);
+						Alerts
+								.showMessageDialog(
+										null,
+										"Failed to verify plugin: " + file.getName(),
+										"Plugin Load Error",
+										JOptionPane.ERROR_MESSAGE);
 					}
 
-				} catch (Exception e) {
-					log.error("Failed to load plugin from folder: [{}]", folder.getName(), e);
-				}
-
-			}
-		}
+				});
 
 	}
 
