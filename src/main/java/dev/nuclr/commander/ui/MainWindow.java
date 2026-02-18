@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 
+import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.QuickViewEvent;
@@ -215,6 +216,13 @@ public class MainWindow {
 					if (rightPanel instanceof FilePanel fp) {
 						ChangeDrivePopup.show(fp);
 					}
+					return true;
+				}
+				// Alt+F4 closes the application
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.getKeyCode() == KeyEvent.VK_F4
+						&& e.isAltDown()) {
+					Nuclr.exit();
 					return true;
 				}
 				// Alt+Enter toggles fullscreen
