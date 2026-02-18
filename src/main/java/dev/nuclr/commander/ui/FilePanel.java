@@ -3,13 +3,13 @@ package dev.nuclr.commander.ui;
 import java.awt.BorderLayout;
 import java.awt.Point;
 import java.awt.event.ActionEvent;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +29,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 
 import org.springframework.context.ApplicationEventPublisher;
 
+import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.ListViewFileOpen;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
@@ -68,13 +69,16 @@ public class FilePanel extends JPanel {
 		
 		this.add(new JScrollPane(table), BorderLayout.CENTER);
 
-		var root = new File("c://");
+		var root = SystemUtils.isOsWindows() ? new File("c://") : new File("/");
 
 		topPathTextLabel = new JLabel(root.getAbsolutePath());
 		topPathTextLabel.setHorizontalAlignment(JLabel.CENTER);
 		this.add(topPathTextLabel, BorderLayout.NORTH);
 
-		var files = List.of(root.listFiles());
+		var files = new ArrayList<File>(List.<File>of(root.listFiles()));
+		
+		// Sort alphabetically
+		Collections.sort(files, (f1, f2) -> f1.getName().compareToIgnoreCase(f2.getName()));
 
 		// Populate the table with the files
 		var model = new FileTableModel(root, files);
@@ -205,10 +209,10 @@ public class FilePanel extends JPanel {
 		table.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent e) {
-				if (e.getKeyCode() == KeyEvent.VK_ALT) {
+				if (e.getKeyCode() == KeyEvent.VK_ALT || e.getKeyCode() == KeyEvent.VK_META) {
 					return;
 				}
-				if (!e.isAltDown()) {
+				if (!e.isAltDown() && !e.isMetaDown()) {
 					return;
 				}
 				if (e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
@@ -238,7 +242,7 @@ public class FilePanel extends JPanel {
 
 			@Override
 			public void keyReleased(KeyEvent e) {
-				if (e.getKeyCode() == KeyEvent.VK_ALT) {
+				if (e.getKeyCode() == KeyEvent.VK_ALT || e.getKeyCode() == KeyEvent.VK_META) {
 					hideSearchPopup();
 				}
 			}

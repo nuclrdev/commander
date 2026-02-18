@@ -2,47 +2,41 @@ package dev.nuclr.commander.service;
 
 import java.io.File;
 import java.util.Collection;
+import java.util.Collections;
 
 import org.springframework.stereotype.Service;
 
-import dev.nuclr.plugin.PluginInfo;
-import dev.nuclr.plugin.QuickViewPlugin;
+import dev.nuclr.plugin.QuickViewItem;
+import dev.nuclr.plugin.QuickViewProvider;
+import dev.nuclr.plugin.ViewProvider;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
 public final class PluginRegistry {
 
-	private static final String quickViewPlugins = null;
-	
-	public void registerQuickViewPlugin(PluginInfo info, QuickViewPlugin plugin) {
-		log.info("Registering QuickViewPlugin: [{}]", plugin.getClass().getName());
-//		this.quickViewPlugins.put(info, plugin);
+	public void registerViewProvider(ViewProvider provider) {
+		log.info("Registering ViewProvider: [{}]", provider.getClass().getName());
 	}
-	
-	public QuickViewPlugin getQuickViewPluginByFile(File file) {
-		
-		var plugin = this.getQuickViewPlugins()
+
+	public QuickViewProvider getQuickViewProviderByItem(QuickViewItem item) {
+		return this.getQuickViewProviders()
 				.stream()
-				.filter(p -> p.canQuickView(file))
+				.filter(p -> p.matches(item))
 				.findFirst()
 				.orElse(null);
-
-		return plugin;
-		
 	}
 
-	public Collection<QuickViewPlugin> getQuickViewPlugins() {
-		return null;//quickViewPlugins.values();
+	public Collection<QuickViewProvider> getQuickViewProviders() {
+		return Collections.emptyList();
 	}
 
-	public void removeQuickViewPlugin(QuickViewPlugin plugin) {
-		log.info("Removing QuickViewPlugin: [{}]", plugin.getClass().getName());
-//		this.quickViewPlugins.remove(plugin);
+	public void removeViewProvider(ViewProvider provider) {
+		log.info("Removing ViewProvider: [{}]", provider.getClass().getName());
 	}
 
 	public void loadPlugin(File file) {
-		log.info("Loading plugin: [{}]", file.getName());		
+		log.info("Loading plugin: [{}]", file.getName());
 	}
 
 }

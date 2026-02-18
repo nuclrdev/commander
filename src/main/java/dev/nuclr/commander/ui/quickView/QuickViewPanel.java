@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.service.PluginRegistry;
-import dev.nuclr.plugin.QuickViewPlugin;
+import dev.nuclr.plugin.QuickViewProvider;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +42,7 @@ public class QuickViewPanel {
 
 	}
 	
-	private Map<String, QuickViewPlugin> loadedPlugins = new HashMap<>();
+	private Map<String, QuickViewProvider> loadedPlugins = new HashMap<>();
 
 	public void show(File file) {
 
@@ -50,7 +50,8 @@ public class QuickViewPanel {
 
 		var cards = (CardLayout) panel.getLayout();
 
-		QuickViewPlugin plugin = pluginRegistry.getQuickViewPluginByFile(file);
+		// TODO: construct QuickViewItem from File and call pluginRegistry.getQuickViewProviderByItem(item)
+		QuickViewProvider plugin = null;
 		
 		if (plugin!=null) {
 			

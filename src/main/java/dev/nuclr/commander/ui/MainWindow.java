@@ -3,8 +3,10 @@ package dev.nuclr.commander.ui;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Font;
+import java.awt.Image;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import java.awt.Taskbar;
 import java.awt.event.KeyEvent;
 
 import javax.swing.ImageIcon;
@@ -23,6 +25,7 @@ import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 
+import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
@@ -84,7 +87,16 @@ public class MainWindow {
 
 		mainFrame.setLocationRelativeTo(null);
 
-		mainFrame.setIconImage(new ImageIcon("data/images/icon-512.png").getImage());
+		var appIcon = new ImageIcon("data/images/icon-512.png").getImage();
+		mainFrame.setIconImage(appIcon);
+		
+		// MacOS specific: set the application menu name and icon
+		if (SystemUtils.isOsMac()) {
+			if (Taskbar.isTaskbarSupported()) {
+				Taskbar.getTaskbar().setIconImage(appIcon);
+			}
+		}
+		
 
 		mainFrame.setLayout(new BorderLayout());
 
