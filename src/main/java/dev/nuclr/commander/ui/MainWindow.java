@@ -239,6 +239,20 @@ public class MainWindow {
 					applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
 					return true;
 				}
+				// Ctrl+Left/Right resizes the split pane
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.isControlDown()
+						&& mainSplitPane.isVisible()
+						&& (e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_RIGHT)) {
+					int step = 10;
+					int loc = mainSplitPane.getDividerLocation();
+					if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+						mainSplitPane.setDividerLocation(Math.max(loc - step, mainSplitPane.getMinimumDividerLocation()));
+					} else {
+						mainSplitPane.setDividerLocation(Math.min(loc + step, mainSplitPane.getMaximumDividerLocation()));
+					}
+					return true;
+				}
 				// Tab switches focus between left and right panels
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_TAB
