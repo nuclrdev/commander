@@ -7,7 +7,11 @@ import java.awt.Image;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.Taskbar;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
@@ -26,6 +30,7 @@ import org.springframework.stereotype.Service;
 import com.formdev.flatlaf.FlatDarculaLaf;
 
 import dev.nuclr.commander.Nuclr;
+import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.QuickViewEvent;
@@ -65,6 +70,9 @@ public class MainWindow {
 
 	@Autowired
 	private ApplicationEventPublisher applicationEventPublisher;
+
+	@Autowired
+	private LocalSettingsStore settingsStore;
 	
 	@PostConstruct
 	public void init() {
@@ -84,9 +92,16 @@ public class MainWindow {
 
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-		mainFrame.setSize(1024, 768);
-
-		mainFrame.setLocationRelativeTo(null);
+		var savedSettings = settingsStore.loadOrDefault();
+		mainFrame.setSize(savedSettings.windowWidth(), savedSettings.windowHeight());
+		if (savedSettings.windowX() >= 0 && savedSettings.windowY() >= 0) {
+			mainFrame.setLocation(savedSettings.windowX(), savedSettings.windowY());
+		} else {
+			mainFrame.setLocationRelativeTo(null);
+		}
+		if (savedSettings.maximized()) {
+			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+		}
 
 		var appIcon = new ImageIcon("data/images/icon-512.png").getImage();
 		mainFrame.setIconImage(appIcon);
@@ -108,8 +123,12 @@ public class MainWindow {
 
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 
-		mainSplitPane.setDividerLocation(512);
+		mainSplitPane.setDividerLocation(savedSettings.dividerLocation() > 0 ? savedSettings.dividerLocation() : 512);
 //		split.setDividerSize(5);
+
+		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+			saveDividerLocation((int) evt.getNewValue());
+		});
 		
 		// Set up the menu bar
 		menuBar = new JMenuBar();
@@ -272,6 +291,28 @@ public class MainWindow {
 			}
 		});
 
+		// Save window bounds when resized or moved (only in non-maximized state)
+		mainFrame.addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentResized(ComponentEvent e) {
+				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) {
+					saveWindowState();
+				}
+			}
+
+			@Override
+			public void componentMoved(ComponentEvent e) {
+				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) {
+					saveWindowState();
+				}
+			}
+		});
+
+		// Save maximized state changes
+		mainFrame.addWindowStateListener(e -> {
+			saveWindowState();
+		});
+
 		mainFrame.setVisible(true);
 
 		// Ensure the left panel's table gets keyboard focus on startup
@@ -281,14 +322,45 @@ public class MainWindow {
 
 	}
 
-	private boolean maximized = false;
+	private void saveWindowState() {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		int width = isMaximized ? settings.windowWidth() : mainFrame.getWidth();
+		int height = isMaximized ? settings.windowHeight() : mainFrame.getHeight();
+		int x = isMaximized ? settings.windowX() : mainFrame.getX();
+		int y = isMaximized ? settings.windowY() : mainFrame.getY();
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(),
+				width,
+				height,
+				x,
+				y,
+				isMaximized,
+				settings.lastOpenedPath(),
+				settings.autosaveInterval(),
+				settings.dividerLocation()));
+	}
+
+	private void saveDividerLocation(int location) {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(),
+				settings.windowWidth(),
+				settings.windowHeight(),
+				settings.windowX(),
+				settings.windowY(),
+				isMaximized,
+				settings.lastOpenedPath(),
+				settings.autosaveInterval(),
+				location));
+	}
+
 	private void toggleFullscreen() {
-		if (maximized) {
+		if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0) {
 			mainFrame.setExtendedState(JFrame.NORMAL);
-			maximized = false;
 		} else {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-			maximized = true;
 		}
 	}
 

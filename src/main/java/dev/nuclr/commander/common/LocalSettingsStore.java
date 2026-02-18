@@ -1,26 +1,30 @@
 package dev.nuclr.commander.common;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.READ;
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static java.nio.file.StandardOpenOption.WRITE;
+
+import java.io.IOException;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.file.*;
-import java.time.Duration;
-import java.util.Optional;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import static java.nio.file.StandardOpenOption.*;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -64,10 +68,10 @@ public class LocalSettingsStore {
 
 		// Shared lock for reading (best-effort; some FS may ignore it)
 		try (FileChannel ch = FileChannel.open(settingsFile, READ);
-				FileLock lock = ch.lock(0L, Long.MAX_VALUE, true);
-				InputStream in = Channels.newInputStream(ch)) {
+				FileLock lock = ch.lock(0L, Long.MAX_VALUE, true)) {
 
-			return Optional.of(mapper.readValue(in, AppSettings.class));
+			byte[] bytes = Channels.newInputStream(ch).readAllBytes();
+			return Optional.of(mapper.readValue(bytes, AppSettings.class));
 		} catch (IOException e) {
 			log.warn("Failed to load settings from {}: {}", settingsFile, e.toString());
 			return Optional.empty();
@@ -76,19 +80,21 @@ public class LocalSettingsStore {
 
 	/** Save settings atomically (write temp file then move). */
 	public synchronized void save(AppSettings settings) {
+		
 		Path dir = settingsFile.getParent();
 		String tmpName = FILE_NAME + ".tmp";
 		Path tmp = dir.resolve(tmpName);
 
 		try {
+			
 			Files.createDirectories(dir);
 
 			// Exclusive lock on temp during write
 			try (FileChannel ch = FileChannel.open(tmp, WRITE, CREATE, TRUNCATE_EXISTING);
-					FileLock ignored = ch.lock();
-					OutputStream out = Channels.newOutputStream(ch)) {
+					FileLock ignored = ch.lock()) {
 
-				mapper.writeValue(out, settings);
+				var out = Channels.newOutputStream(ch);
+				out.write(mapper.writeValueAsBytes(settings));
 				out.flush();
 			}
 
@@ -155,29 +161,29 @@ public class LocalSettingsStore {
 		return base.resolve(appName).resolve(fileName);
 	}
 
-	static ObjectMapper defaultMapper() {
-		ObjectMapper m = new ObjectMapper();
-		m.registerModule(new JavaTimeModule());
-		m.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-		m.enable(SerializationFeature.INDENT_OUTPUT);
-		return m;
-	}
-
 	// ---------- Example settings DTO ----------
 
 	public record AppSettings(
 			String theme,              // e.g. "dark" / "light"
 			int windowWidth,
 			int windowHeight,
+			int windowX,
+			int windowY,
+			boolean maximized,
 			String lastOpenedPath,
-			Duration autosaveInterval) {
+			Duration autosaveInterval,
+			int dividerLocation) {
 		public static AppSettings defaults() {
 			return new AppSettings(
 					"dark",
-					1200,
-					800,
+					1024,
+					768,
+					-1,
+					-1,
+					false,
 					null,
-					Duration.ofMinutes(2));
+					Duration.ofMinutes(2),
+					-1);
 		}
 	}
 }

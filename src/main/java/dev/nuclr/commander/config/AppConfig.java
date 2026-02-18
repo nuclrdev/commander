@@ -6,6 +6,8 @@ import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 @Configuration
 public class AppConfig {
@@ -20,7 +22,11 @@ public class AppConfig {
 	
 	@Bean
 	public ObjectMapper objectMapper() {
-		return new ObjectMapper();
+		var mapper = new ObjectMapper();
+		mapper.registerModule(new JavaTimeModule());
+		mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+		mapper.enable(SerializationFeature.INDENT_OUTPUT);
+		return mapper;
 	}
 
 }
