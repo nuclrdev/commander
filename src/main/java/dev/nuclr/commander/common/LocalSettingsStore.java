@@ -127,11 +127,8 @@ public class LocalSettingsStore {
 	// ---------- Path resolution (least-privilege) ----------
 
 	static Path resolveSettingsFile(String appName, String fileName) {
-		String os = System.getProperty("os.name", "").toLowerCase();
-		boolean isMac = os.contains("mac");
-		boolean isWin = os.contains("win");
 
-		if (isWin) {
+		if (SystemUtils.isOsWindows()) {
 			// Prefer per-user roaming AppData (no admin needed)
 			String appData = System.getenv("APPDATA");
 			if (appData != null && !appData.isBlank()) {
@@ -142,7 +139,7 @@ public class LocalSettingsStore {
 					.get(System.getProperty("user.home"), "AppData", "Roaming", appName, fileName);
 		}
 
-		if (isMac) {
+		if (SystemUtils.isOsMac()) {
 			return Paths
 					.get(
 							System.getProperty("user.home"),
