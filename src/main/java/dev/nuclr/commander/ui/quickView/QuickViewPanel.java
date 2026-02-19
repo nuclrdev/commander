@@ -30,6 +30,8 @@ public class QuickViewPanel {
 	
 	@Autowired
 	private PluginRegistry pluginRegistry;
+	
+	private Map<String, QuickViewProvider> loadedPlugins = new HashMap<>();
 
 	@PostConstruct
 	public void init() {
@@ -42,7 +44,6 @@ public class QuickViewPanel {
 
 	}
 	
-	private Map<String, QuickViewProvider> loadedPlugins = new HashMap<>();
 
 	public void show(File file) {
 
@@ -51,10 +52,26 @@ public class QuickViewPanel {
 		var cards = (CardLayout) panel.getLayout();
 
 		// TODO: construct QuickViewItem from File and call pluginRegistry.getQuickViewProviderByItem(item)
-		QuickViewProvider plugin = null;
+		
+		FileQuickViewItem item = new FileQuickViewItem(file);
+		
+		QuickViewProvider plugin = pluginRegistry.getQuickViewProviderByItem(item);
 		
 		if (plugin!=null) {
 			
+			log.info("Found quick view provider [{}] for file: {}", plugin.getClass().getName(), file.getAbsolutePath());
+			
+			if (false == loadedPlugins.containsKey(plugin.getPluginClass())) {
+				log.info("Loading plugin [{}] for quick view", plugin.getPluginClass());
+				plugin.getPanel(); // ensure panel is created
+				loadedPlugins.put(plugin.getPluginClass(), plugin);
+				panel.add(plugin.getPanel(), plugin.getPluginClass());
+				log.info("Plugin [{}] loaded and panel added to QuickViewPanel", plugin.getPluginClass());				
+			}
+			
+			cards.show(panel, plugin.getPluginClass());
+			
+			plugin.open(item);
 			
 			
 		} else {
