@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipFile;
@@ -58,7 +59,7 @@ public final class PluginRegistry {
 				.getQuickViewProviders()
 				.stream()
 				.filter(p -> p.matches(item))
-				.sorted((p1, p2) -> Integer.compare(p1.priority(), p2.priority()))
+				.sorted(Comparator.comparingInt(QuickViewProvider::priority)) // lower first
 				.toList();
 	}
 
