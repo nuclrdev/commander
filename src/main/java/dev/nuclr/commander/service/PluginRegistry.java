@@ -45,11 +45,21 @@ public final class PluginRegistry {
 	}
 
 	public QuickViewProvider getQuickViewProviderByItem(QuickViewItem item) {
-		return this.getQuickViewProviders()
+		return this
+				.getQuickViewProviders()
 				.stream()
 				.filter(p -> p.matches(item))
 				.findFirst()
 				.orElse(null);
+	}
+
+	public List<QuickViewProvider> getQuickViewProvidersByItem(QuickViewItem item) {
+		return this
+				.getQuickViewProviders()
+				.stream()
+				.filter(p -> p.matches(item))
+				.sorted((p1, p2) -> Integer.compare(p1.priority(), p2.priority()))
+				.toList();
 	}
 
 	public Collection<QuickViewProvider> getQuickViewProviders() {
