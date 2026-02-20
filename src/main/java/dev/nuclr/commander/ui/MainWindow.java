@@ -12,6 +12,7 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.nio.file.Files;
 
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
@@ -39,6 +40,8 @@ import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.ui.editor.EditorScreen;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
+import dev.nuclr.commander.vfs.MountRegistry;
+import dev.nuclr.commander.vfs.ZipMountProvider;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -47,9 +50,9 @@ import lombok.extern.slf4j.Slf4j;
 public class MainWindow {
 
 	private JFrame mainFrame;
-	
+
 	private JMenuBar menuBar;
-	
+
 	private JSplitPane mainSplitPane;
 
 	private Component lastFocusedInSplitPane;
@@ -64,7 +67,7 @@ public class MainWindow {
 
 	@Autowired
 	private QuickViewPanel quickViewPanel;
-	
+
 	@Value("${version}")
 	private String version;
 
@@ -73,23 +76,26 @@ public class MainWindow {
 
 	@Autowired
 	private LocalSettingsStore settingsStore;
-	
+
+	@Autowired
+	private MountRegistry mountRegistry;
+
+	@Autowired
+	private ZipMountProvider zipMountProvider;
+
 	@PostConstruct
 	public void init() {
 
 		log.info("Initializing MainWindow");
-		
+
 		System.setProperty("apple.laf.useScreenMenuBar", "true");
 		System.setProperty("apple.awt.application.name", "Nuclr Commander");
-		
-		UIManager.put("defaultFont",
-			    new Font("JetBrains Mono", Font.PLAIN, 16));
-		
-		// FlatDarkLaf.setup();
+
+		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, 16));
+
 		FlatDarculaLaf.setup();
 
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
-
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
 		var savedSettings = settingsStore.loadOrDefault();
@@ -105,82 +111,56 @@ public class MainWindow {
 
 		var appIcon = new ImageIcon("data/images/icon-512.png").getImage();
 		mainFrame.setIconImage(appIcon);
-		
-		// MacOS specific: set the application menu name and icon
+
 		if (SystemUtils.isOsMac()) {
 			if (Taskbar.isTaskbarSupported()) {
 				Taskbar.getTaskbar().setIconImage(appIcon);
 			}
 		}
-		
 
 		mainFrame.setLayout(new BorderLayout());
 
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-
-		mainSplitPane.setLeftComponent(new FilePanel(applicationEventPublisher));
-		mainSplitPane.setRightComponent(new FilePanel(applicationEventPublisher));
+		mainSplitPane.setLeftComponent(
+				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider));
+		mainSplitPane.setRightComponent(
+				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider));
 
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
-
 		mainSplitPane.setDividerLocation(savedSettings.dividerLocation() > 0 ? savedSettings.dividerLocation() : 512);
-//		split.setDividerSize(5);
 
-		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
-			saveDividerLocation((int) evt.getNewValue());
-		});
-		
-		// Set up the menu bar
+		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt ->
+				saveDividerLocation((int) evt.getNewValue()));
+
+		// ── Menu bar ─────────────────────────────────────────────────────────
 		menuBar = new JMenuBar();
 		mainFrame.setJMenuBar(menuBar);
-		
-		// Left
+
 		{
 			JMenu menu = new JMenu("Left");
 			menuBar.add(menu);
-			
 			menu.add("Brief");
 			menu.add("Medium");
 			menu.add("Full");
 			menu.add("Wide");
 			menu.add("Detailed");
-			
 			menu.addSeparator();
-			
 			menu.add("Info panel");
 			menu.add("Quick view");
-			
 			menu.addSeparator();
-			
 			menu.add("Sort modes");
 			menu.add("Show long names");
 			menu.add("Panel on/off");
 			menu.add("Re-read");
 			menu.add("Change drive");
-			
-			
-			
-			
-			
-				
-			
 		}
-		
-		// Files
-		
-		// Commands
-		
-		// Options
-		
-		// Right
-		
-		
 
-		// Ctrl+O toggles between mainSplitPane and consolePanel
-		// Use KeyEventDispatcher to intercept before JediTermWidget consumes the key
+		// ── Global keyboard shortcuts ─────────────────────────────────────────
 		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
 			@Override
 			public boolean dispatchKeyEvent(KeyEvent e) {
+
+				// Ctrl+O — toggle console
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_O
 						&& e.isControlDown()) {
@@ -189,9 +169,10 @@ public class MainWindow {
 					} else {
 						applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
 					}
-					return true; // consume the event
+					return true;
 				}
-				// Ctrl+Q toggles quick view on the opposite panel
+
+				// Ctrl+Q — toggle quick view on the opposite panel
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_Q
 						&& e.isControlDown()
@@ -200,65 +181,73 @@ public class MainWindow {
 						applicationEventPublisher.publishEvent(new QuickViewEvent(this, null));
 					} else {
 						var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-						var leftPanel = (FilePanel) mainSplitPane.getLeftComponent();
-						var rightPanel = mainSplitPane.getRightComponent();
+						var leftComponent = mainSplitPane.getLeftComponent();
+						var rightComponent = mainSplitPane.getRightComponent();
 						FilePanel activePanel;
-						if (rightPanel instanceof FilePanel fp
+						if (rightComponent instanceof FilePanel fp
 								&& focusOwner != null
 								&& SwingUtilities.isDescendingFrom(focusOwner, fp)) {
 							activePanel = fp;
+						} else if (leftComponent instanceof FilePanel fp) {
+							activePanel = fp;
 						} else {
-							activePanel = leftPanel;
+							return true;
 						}
-						var selectedFile = activePanel.getSelectedFile();
-						if (selectedFile != null && selectedFile.isFile()) {
-							applicationEventPublisher.publishEvent(new QuickViewEvent(this, selectedFile));
+						var selectedPath = activePanel.getSelectedPath();
+						if (selectedPath != null && Files.isRegularFile(selectedPath)) {
+							applicationEventPublisher.publishEvent(new QuickViewEvent(this, selectedPath));
 						}
 					}
 					return true;
 				}
-				// Alt+F1 changes drive on left panel
+
+				// Alt+F1 — change drive on left panel
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_F1
 						&& e.isAltDown()
 						&& mainSplitPane.isVisible()) {
-					var leftPanel = (FilePanel) mainSplitPane.getLeftComponent();
-					ChangeDrivePopup.show(leftPanel);
+					if (mainSplitPane.getLeftComponent() instanceof FilePanel fp) {
+						ChangeDrivePopup.show(fp, mountRegistry);
+					}
 					return true;
 				}
-				// Alt+F2 changes drive on right panel
+
+				// Alt+F2 — change drive on right panel
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_F2
 						&& e.isAltDown()
 						&& mainSplitPane.isVisible()) {
-					var rightPanel = mainSplitPane.getRightComponent();
-					if (rightPanel instanceof FilePanel fp) {
-						ChangeDrivePopup.show(fp);
+					if (mainSplitPane.getRightComponent() instanceof FilePanel fp) {
+						ChangeDrivePopup.show(fp, mountRegistry);
 					}
 					return true;
 				}
-				// Alt+F4 closes the application
+
+				// Alt+F4 — exit
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_F4
 						&& e.isAltDown()) {
 					Nuclr.exit();
 					return true;
 				}
-				// Alt+Enter toggles fullscreen
+
+				// Alt+Enter — fullscreen
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_ENTER
 						&& e.isAltDown()) {
 					toggleFullscreen();
 					return true;
 				}
-				// Escape closes the editor and returns to file panels
+
+				// Escape — close editor / console
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_ESCAPE
 						&& editorScreen != null) {
 					applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
 					return true;
 				}
-				// Ctrl+Left/Right resizes the split pane
+
+				// Ctrl+Left / Ctrl+Right — resize split pane
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.isControlDown()
 						&& mainSplitPane.isVisible()
@@ -272,13 +261,19 @@ public class MainWindow {
 					}
 					return true;
 				}
-				// Tab switches focus between left and right panels
+
+				// Tab — switch focus between left and right panels
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_TAB
 						&& !e.isControlDown()
 						&& mainSplitPane.isVisible()) {
-					var leftPanel = (FilePanel) mainSplitPane.getLeftComponent();
-					var rightPanel = (FilePanel) mainSplitPane.getRightComponent();
+					Component left  = mainSplitPane.getLeftComponent();
+					Component right = mainSplitPane.getRightComponent();
+					if (!(left instanceof FilePanel) || !(right instanceof FilePanel)) {
+						return false; // one side is quickview — let default Tab handling proceed
+					}
+					var leftPanel  = (FilePanel) left;
+					var rightPanel = (FilePanel) right;
 					var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
 					if (focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanel)) {
 						leftPanel.focusFileTable();
@@ -287,82 +282,34 @@ public class MainWindow {
 					}
 					return true;
 				}
+
 				return false;
 			}
 		});
 
-		// Save window bounds when resized or moved (only in non-maximized state)
+		// ── Window state listeners ────────────────────────────────────────────
 		mainFrame.addComponentListener(new ComponentAdapter() {
 			@Override
 			public void componentResized(ComponentEvent e) {
-				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) {
-					saveWindowState();
-				}
+				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) saveWindowState();
 			}
-
 			@Override
 			public void componentMoved(ComponentEvent e) {
-				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) {
-					saveWindowState();
-				}
+				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) saveWindowState();
 			}
 		});
-
-		// Save maximized state changes
-		mainFrame.addWindowStateListener(e -> {
-			saveWindowState();
-		});
+		mainFrame.addWindowStateListener(e -> saveWindowState());
 
 		mainFrame.setVisible(true);
 
-		// Ensure the left panel's table gets keyboard focus on startup
 		SwingUtilities.invokeLater(() -> {
-			((FilePanel) mainSplitPane.getLeftComponent()).focusFileTable();
+			if (mainSplitPane.getLeftComponent() instanceof FilePanel fp) {
+				fp.focusFileTable();
+			}
 		});
-
 	}
 
-	private void saveWindowState() {
-		var settings = settingsStore.loadOrDefault();
-		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
-		int width = isMaximized ? settings.windowWidth() : mainFrame.getWidth();
-		int height = isMaximized ? settings.windowHeight() : mainFrame.getHeight();
-		int x = isMaximized ? settings.windowX() : mainFrame.getX();
-		int y = isMaximized ? settings.windowY() : mainFrame.getY();
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(),
-				width,
-				height,
-				x,
-				y,
-				isMaximized,
-				settings.lastOpenedPath(),
-				settings.autosaveInterval(),
-				settings.dividerLocation()));
-	}
-
-	private void saveDividerLocation(int location) {
-		var settings = settingsStore.loadOrDefault();
-		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(),
-				settings.windowWidth(),
-				settings.windowHeight(),
-				settings.windowX(),
-				settings.windowY(),
-				isMaximized,
-				settings.lastOpenedPath(),
-				settings.autosaveInterval(),
-				location));
-	}
-
-	private void toggleFullscreen() {
-		if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0) {
-			mainFrame.setExtendedState(JFrame.NORMAL);
-		} else {
-			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-		}
-	}
+	// ── Event listeners ───────────────────────────────────────────────────────
 
 	@EventListener
 	public void onShowConsoleScreen(ShowConsoleScreenEvent event) {
@@ -379,7 +326,7 @@ public class MainWindow {
 	@EventListener
 	public void onShowEditorScreen(ShowEditorScreenEvent event) {
 		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-		editorScreen = new EditorScreen(event.getFile());
+		editorScreen = new EditorScreen(event.getPath());
 		mainFrame.remove(mainSplitPane);
 		mainSplitPane.setVisible(false);
 		mainFrame.add(editorScreen.getPanel(), BorderLayout.CENTER);
@@ -388,18 +335,17 @@ public class MainWindow {
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
-	
+
 	@EventListener
 	public void onFileSelectedEvent(FileSelectedEvent event) {
 		if (quickViewActive) {
-			quickViewPanel.show(event.getFile());
+			quickViewPanel.show(event.getPath());
 		}
 	}
 
 	@EventListener
 	public void onQuickView(QuickViewEvent event) {
 		if (quickViewActive) {
-			// Restore the original panel
 			quickViewPanel.stop();
 			if (quickViewReplacedComponent != null) {
 				var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
@@ -414,7 +360,6 @@ public class MainWindow {
 			quickViewReplacedComponent = null;
 			quickViewActive = false;
 		} else {
-			// Replace the opposite panel with quick view
 			var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
 			boolean focusInRight = focusOwner != null
 					&& SwingUtilities.isDescendingFrom(focusOwner, mainSplitPane.getRightComponent());
@@ -425,7 +370,7 @@ public class MainWindow {
 				quickViewReplacedComponent = mainSplitPane.getRightComponent();
 				mainSplitPane.setRightComponent(quickViewPanel.getPanel());
 			}
-			quickViewPanel.show(event.getFile());
+			quickViewPanel.show(event.getPath());
 			quickViewActive = true;
 		}
 		mainSplitPane.setDividerLocation(0.5);
@@ -451,4 +396,35 @@ public class MainWindow {
 		mainFrame.repaint();
 	}
 
+	// ── Helpers ───────────────────────────────────────────────────────────────
+
+	private void saveWindowState() {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		int width  = isMaximized ? settings.windowWidth()  : mainFrame.getWidth();
+		int height = isMaximized ? settings.windowHeight() : mainFrame.getHeight();
+		int x      = isMaximized ? settings.windowX()      : mainFrame.getX();
+		int y      = isMaximized ? settings.windowY()      : mainFrame.getY();
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(), width, height, x, y, isMaximized,
+				settings.lastOpenedPath(), settings.autosaveInterval(),
+				settings.dividerLocation()));
+	}
+
+	private void saveDividerLocation(int location) {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(), settings.windowWidth(), settings.windowHeight(),
+				settings.windowX(), settings.windowY(), isMaximized,
+				settings.lastOpenedPath(), settings.autosaveInterval(), location));
+	}
+
+	private void toggleFullscreen() {
+		if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0) {
+			mainFrame.setExtendedState(JFrame.NORMAL);
+		} else {
+			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+		}
+	}
 }

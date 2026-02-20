@@ -1,6 +1,6 @@
 package dev.nuclr.commander.event;
 
-import java.io.File;
+import java.nio.file.Path;
 
 import org.springframework.context.ApplicationEvent;
 
@@ -11,13 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 @Data
 public class FileSelectedEvent extends ApplicationEvent {
 
-	private File file;
-	
-	public FileSelectedEvent(Object source, File file) {
-		super(source);
-		this.file = file;
-		log.info("FileSelectedEvent created for file: {}", file.getAbsolutePath());
-	}
+	private Path path;
 
+	public FileSelectedEvent(Object source, Path path) {
+		super(source);
+		this.path = path;
+		log.info("FileSelectedEvent: {}", path);
+	}
 
 }

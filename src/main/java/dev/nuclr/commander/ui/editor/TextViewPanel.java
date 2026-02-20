@@ -35,32 +35,29 @@ public class TextViewPanel extends JPanel {
 	public void setFile(File file) {
 
 		this.file = file;
-		
+
 		if (file.length() > 10 * 1024 * 1024) { // 10 MB limit
 			log.warn("File is too large to display: {}", file.getAbsolutePath());
-			this.textArea.setText(file, "File is too large to display.");
+			this.textArea.setText(file.getName(), "File is too large to display.");
 			this.textArea.setEditable(false);
 			return;
 		}
-		
+
 		try {
-
 			var content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-			this.textArea.setText(file, content);
+			this.textArea.setText(file.getName(), content);
 			this.textArea.setEditable(false);
-
 		} catch (IOException e) {
 			log.error("Failed to read file: {}", file.getAbsolutePath(), e);
-			this.textArea.setText(file, "Error reading file: " + e.getMessage());
+			this.textArea.setText(file.getName(), "Error reading file: " + e.getMessage());
 			this.textArea.setEditable(false);
 		}
-
 	}
 
 	public void focus() {
 		this.textArea.focus();
 	}
-	
+
 	private Set<String> supportedExtensions = Set
 			.of(
 					"txt",

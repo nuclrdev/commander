@@ -1,6 +1,6 @@
 package dev.nuclr.commander.event;
 
-import java.io.File;
+import java.nio.file.Path;
 
 import org.springframework.context.ApplicationEvent;
 
@@ -9,12 +9,11 @@ import lombok.Data;
 @Data
 public final class ListViewFileOpen extends ApplicationEvent {
 
-	private File file;
+	private Path path;
 
-	public ListViewFileOpen(Object source, File file) {
+	public ListViewFileOpen(Object source, Path path) {
 		super(source);
-		this.file = file;
+		this.path = path;
 	}
-	
 
 }

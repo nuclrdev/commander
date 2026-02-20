@@ -1,6 +1,6 @@
 package dev.nuclr.commander.event;
 
-import java.io.File;
+import java.nio.file.Path;
 
 import org.springframework.context.ApplicationEvent;
 
@@ -9,11 +9,11 @@ import lombok.Data;
 @Data
 public class ShowEditorScreenEvent extends ApplicationEvent {
 
-	private File file;
+	private Path path;
 
-	public ShowEditorScreenEvent(Object source, File file) {
+	public ShowEditorScreenEvent(Object source, Path path) {
 		super(source);
-		this.file = file;
+		this.path = path;
 	}
 
 }

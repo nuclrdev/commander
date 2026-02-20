@@ -10,6 +10,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.net.URI;
+import java.nio.file.Path;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -51,7 +52,6 @@ public class NoQuickViewAvailablePanel extends JPanel {
 	@Autowired
 	private PluginMarketplaceService pluginMarketplaceService;
 
-	// Dynamic labels rebuilt on each setFile call
 	private JLabel iconLabel;
 	private JLabel titleLabel;
 	private JLabel extensionLabel;
@@ -69,34 +69,29 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		centerPanel.setBackground(BG_COLOR);
 		centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
 
-		// Icon
 		iconLabel = new JLabel("?", SwingConstants.CENTER);
 		iconLabel.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 64));
 		iconLabel.setForeground(TEXT_MUTED);
 		iconLabel.setAlignmentX(CENTER_ALIGNMENT);
 
-		// Title
 		titleLabel = new JLabel("No Quick View Available");
 		titleLabel.setFont(new Font("JetBrains Mono", Font.BOLD, 18));
 		titleLabel.setForeground(TEXT_PRIMARY);
 		titleLabel.setAlignmentX(CENTER_ALIGNMENT);
 		titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-		// Extension info
 		extensionLabel = new JLabel(" ");
 		extensionLabel.setFont(new Font("JetBrains Mono", Font.PLAIN, 15));
 		extensionLabel.setForeground(TEXT_SECONDARY);
 		extensionLabel.setAlignmentX(CENTER_ALIGNMENT);
 		extensionLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-		// File name
 		fileNameLabel = new JLabel(" ");
 		fileNameLabel.setFont(new Font("JetBrains Mono", Font.PLAIN, 14));
 		fileNameLabel.setForeground(TEXT_MUTED);
 		fileNameLabel.setAlignmentX(CENTER_ALIGNMENT);
 		fileNameLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-		// Actions container (rebuilt dynamically based on developer mode)
 		actionsPanel = new JPanel();
 		actionsPanel.setLayout(new BoxLayout(actionsPanel, BoxLayout.Y_AXIS));
 		actionsPanel.setBackground(BG_COLOR);
@@ -118,20 +113,18 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		uiBuilt = true;
 	}
 
-	public void setFile(File file) {
-		if (!uiBuilt) {
-			buildUI();
-		}
+	public void setPath(Path path) {
+		if (!uiBuilt) buildUI();
 
-		var isDeveloperModeOn = systemSettings.isDeveloperModeOn();
-		String ext = FilenameUtils.getExtension(file.getName()).toLowerCase();
+		var fn = path.getFileName();
+		String filename = fn != null ? fn.toString() : path.toString();
+		String ext = FilenameUtils.getExtension(filename).toLowerCase();
 		String displayExt = ext.isEmpty() ? "unknown" : "." + ext;
 
 		extensionLabel.setText("No viewer plugin for " + displayExt + " files");
-		fileNameLabel.setText(file.getName());
+		fileNameLabel.setText(filename);
 
-		rebuildActions(ext, isDeveloperModeOn);
-
+		rebuildActions(ext, systemSettings.isDeveloperModeOn());
 		revalidate();
 		repaint();
 	}
@@ -139,17 +132,13 @@ public class NoQuickViewAvailablePanel extends JPanel {
 	private void rebuildActions(String extension, boolean developerMode) {
 		actionsPanel.removeAll();
 
-		// 1. Search marketplace button
 		JButton searchButton = createActionButton(
 				"\u2315  Search Marketplace",
 				"Find a plugin for this file type");
-		searchButton.addActionListener(e -> {
-			pluginMarketplaceService.searchQuickViewPlugins(extension);
-		});
+		searchButton.addActionListener(e -> pluginMarketplaceService.searchQuickViewPlugins(extension));
 		actionsPanel.add(searchButton);
 		actionsPanel.add(Box.createVerticalStrut(8));
 
-		// 2. Developer mode actions
 		if (developerMode) {
 			JButton installLocalButton = createActionButton(
 					"\u2397  Install from Local File",
@@ -166,7 +155,6 @@ public class NoQuickViewAvailablePanel extends JPanel {
 			actionsPanel.add(installLocalButton);
 			actionsPanel.add(Box.createVerticalStrut(8));
 		} else {
-			// Developer mode hint
 			JLabel devHint = new JLabel(
 					"<html><center>Enable Developer Mode in settings<br>to install local plugins</center></html>");
 			devHint.setFont(new Font("JetBrains Mono", Font.ITALIC, 13));
@@ -177,7 +165,6 @@ public class NoQuickViewAvailablePanel extends JPanel {
 			actionsPanel.add(Box.createVerticalStrut(8));
 		}
 
-		// 3. Separator line
 		JPanel separator = new JPanel();
 		separator.setBackground(new Color(0x3C, 0x3F, 0x41));
 		separator.setMaximumSize(new Dimension(200, 1));
@@ -186,7 +173,6 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		actionsPanel.add(separator);
 		actionsPanel.add(Box.createVerticalStrut(10));
 
-		// 4. GitHub issue link
 		JLabel requestLabel = createLinkLabel(
 				"Request support for this file type",
 				GITHUB_ISSUES_URL + "/new?title=Quick+View+support+for+." + extension);
@@ -207,15 +193,8 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		btn.setPreferredSize(new Dimension(300, 38));
 		btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		btn.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				btn.setBackground(BUTTON_HOVER);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				btn.setBackground(BUTTON_BG);
-			}
+			@Override public void mouseEntered(MouseEvent e) { btn.setBackground(BUTTON_HOVER); }
+			@Override public void mouseExited(MouseEvent e)  { btn.setBackground(BUTTON_BG); }
 		});
 		return btn;
 	}
@@ -230,22 +209,11 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		label.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				try {
-					Desktop.getDesktop().browse(new URI(url));
-				} catch (Exception ex) {
-					log.error("Failed to open URL: {}", url, ex);
-				}
+				try { Desktop.getDesktop().browse(new URI(url)); }
+				catch (Exception ex) { log.error("Failed to open URL: {}", url, ex); }
 			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				label.setText("<html><u>" + text + "</u></html>");
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				label.setText(text);
-			}
+			@Override public void mouseEntered(MouseEvent e) { label.setText("<html><u>" + text + "</u></html>"); }
+			@Override public void mouseExited(MouseEvent e)  { label.setText(text); }
 		});
 		return label;
 	}

@@ -1,15 +1,21 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Font;
 import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.File;
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,192 +35,204 @@ import javax.swing.table.DefaultTableCellRenderer;
 
 import org.springframework.context.ApplicationEventPublisher;
 
-import dev.nuclr.commander.common.SystemUtils;
+import dev.nuclr.commander.common.FileUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.ListViewFileOpen;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
+import dev.nuclr.commander.vfs.EntryInfo;
+import dev.nuclr.commander.vfs.MountRegistry;
+import dev.nuclr.commander.vfs.ZipMountProvider;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Single file-browser pane for the dual-panel layout.
+ *
+ * <p>All filesystem access goes through NIO.2 {@link Path} and
+ * {@link Files}. There is no {@code java.io.File} usage. The panel
+ * is backend-agnostic: it works identically against local disks,
+ * ZIP archives, and any future {@link dev.nuclr.commander.vfs.MountProvider}
+ * contributed by a plugin.
+ *
+ * <h3>Navigation model</h3>
+ * <ul>
+ *   <li>{@link #navigateTo(Path)} — public, called by external triggers
+ *       (drive switcher, bookmarks). Saves and restores per-root history.
+ *   <li>{@code enterPath(Path, Path)} — private, used internally for
+ *       Enter/double-click navigation. No history manipulation.
+ * </ul>
+ *
+ * <h3>Threading</h3>
+ * Directory listing runs on a virtual thread so the EDT is never blocked.
+ * Model updates are marshalled back to the EDT via {@link SwingUtilities#invokeLater}.
+ */
 @Slf4j
 public class FilePanel extends JPanel {
 
-	private ApplicationEventPublisher applicationEventPublisher;
+	private final ApplicationEventPublisher eventPublisher;
+	private final MountRegistry mountRegistry;
+	private final ZipMountProvider zipMountProvider;
 
-	private JTable table;
+	private final JTable table;
+	private final FileTableModel model;
+	private final JLabel topPathTextLabel;
+	private final JLabel bottomFileInfoTextLabel;
 
-	private JLabel bottomFileInfoTextLabel;
+	/**
+	 * Per filesystem-root: the last directory visited on that root.
+	 * Keyed by the root {@link Path} (e.g. {@code C:\} on Windows, {@code /} on Linux).
+	 * Used to restore position when switching drives.
+	 */
+	private final Map<Path, Path> lastPathPerRoot = new HashMap<>();
 
-	private JLabel topPathTextLabel;
+	/** Currently displayed directory. Set on the EDT after a listing completes. */
+	private Path currentPath;
 
-	private final Map<File, File> lastFolderPerDrive = new HashMap<>();
+	/**
+	 * When navigating up to a parent, this is the child directory that should
+	 * be highlighted after the parent listing loads.
+	 */
+	private volatile Path selectAfterLoad;
+
+	// ── Search popup ─────────────────────────────────────────────────────────
 
 	private StringBuilder searchQuery;
 	private Popup searchPopup;
 	private JLabel searchLabel;
 
-	public FilePanel(ApplicationEventPublisher applicationEventPublisher) {
+	// ── Construction ─────────────────────────────────────────────────────────
 
-		this.applicationEventPublisher = applicationEventPublisher;
+	public FilePanel(
+			ApplicationEventPublisher eventPublisher,
+			MountRegistry mountRegistry,
+			ZipMountProvider zipMountProvider) {
 
-		this.setLayout(new BorderLayout());
+		this.eventPublisher = eventPublisher;
+		this.mountRegistry = mountRegistry;
+		this.zipMountProvider = zipMountProvider;
 
-		table = new JTable();
+		setLayout(new BorderLayout());
 
+		// ── Table ───────────────────────────────────────────────────────────
+		model = new FileTableModel();
+		table = new JTable(model);
 		table.setFillsViewportHeight(true);
 		table.getTableHeader().setReorderingAllowed(false);
 		table.setRowHeight(table.getRowHeight() + 4);
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
-
 		table.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-		
-		this.add(new JScrollPane(table), BorderLayout.CENTER);
-
-		var root = SystemUtils.isOsWindows() ? new File("c://") : new File("/");
-
-		topPathTextLabel = new JLabel(root.getAbsolutePath());
-		topPathTextLabel.setHorizontalAlignment(JLabel.CENTER);
-		this.add(topPathTextLabel, BorderLayout.NORTH);
-
-		var files = new ArrayList<File>(List.<File>of(root.listFiles()));
-		
-		// Sort alphabetically
-		Collections.sort(files, (f1, f2) -> f1.getName().compareToIgnoreCase(f2.getName()));
-
-		// Populate the table with the files
-		var model = new FileTableModel(root, files);
-
-		table.setModel(model);
-
-		// Column sizing: Name stretches, Size/Date/Time are fixed-width
-		var columnModel = table.getColumnModel();
-		columnModel.getColumn(1).setPreferredWidth(80);  // Size
-		columnModel.getColumn(1).setMaxWidth(100);
-		columnModel.getColumn(2).setPreferredWidth(80);  // Date
-		columnModel.getColumn(2).setMaxWidth(100);
-		columnModel.getColumn(3).setPreferredWidth(60);  // Time
-		columnModel.getColumn(3).setMaxWidth(80);
-
 		table.setShowVerticalLines(true);
 
+		// Fixed-width columns for Size / Date / Time
+		var cm = table.getColumnModel();
+		cm.getColumn(1).setPreferredWidth(80);
+		cm.getColumn(1).setMaxWidth(100);
+		cm.getColumn(2).setPreferredWidth(80);
+		cm.getColumn(2).setMaxWidth(100);
+		cm.getColumn(3).setPreferredWidth(60);
+		cm.getColumn(3).setMaxWidth(80);
+
+		// Bold renderer for directories
 		table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
 			@Override
 			public java.awt.Component getTableCellRendererComponent(
-					JTable table,
-					Object value,
-					boolean isSelected,
-					boolean hasFocus,
-					int row,
-					int column) {
+					JTable tbl, Object value, boolean isSelected,
+					boolean hasFocus, int row, int column) {
 				var comp = super.getTableCellRendererComponent(
-						table,
-						value,
-						isSelected,
-						hasFocus,
-						row,
-						column);
-				int modelRow = table.convertRowIndexToModel(row);
-				var file = model.getFileAt(modelRow);
-				if (file.isDirectory()) {
-					comp.setFont(comp.getFont().deriveFont(java.awt.Font.BOLD));
-				} else {
-					comp.setFont(comp.getFont().deriveFont(java.awt.Font.PLAIN));
-				}
+						tbl, value, isSelected, hasFocus, row, column);
+				int modelRow = tbl.convertRowIndexToModel(row);
+				var entry = model.getEntryAt(modelRow);
+				comp.setFont(entry.directory()
+						? comp.getFont().deriveFont(Font.BOLD)
+						: comp.getFont().deriveFont(Font.PLAIN));
 				return comp;
 			}
 		});
 
+		add(new JScrollPane(table), BorderLayout.CENTER);
+
+		// ── Path label (top) ────────────────────────────────────────────────
+		topPathTextLabel = new JLabel(" ");
+		topPathTextLabel.setHorizontalAlignment(JLabel.CENTER);
+		add(topPathTextLabel, BorderLayout.NORTH);
+
+		// ── Status bar (bottom) ─────────────────────────────────────────────
 		bottomFileInfoTextLabel = new JLabel(" ");
 		bottomFileInfoTextLabel.setHorizontalAlignment(JLabel.LEFT);
 		bottomFileInfoTextLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-		this.add(bottomFileInfoTextLabel, BorderLayout.SOUTH);
+		add(bottomFileInfoTextLabel, BorderLayout.SOUTH);
 
+		// ── Selection listener ───────────────────────────────────────────────
 		table.getSelectionModel().addListSelectionListener(e -> {
+			if (e.getValueIsAdjusting()) return;
 			int selectedRow = table.getSelectedRow();
 			if (selectedRow >= 0) {
-				var file = model.getFileAt(selectedRow);
-				bottomFileInfoTextLabel.setText(file.getName() + " | " + file.length() + " bytes");
-				applicationEventPublisher.publishEvent(new FileSelectedEvent(this, file));
+				int modelRow = table.convertRowIndexToModel(selectedRow);
+				var entry = model.getEntryAt(modelRow);
+				if (!entry.isParentEntry()) {
+					bottomFileInfoTextLabel.setText(
+							entry.displayName() + " | " + FileUtils.byteCountToDisplaySize(entry.size()));
+					eventPublisher.publishEvent(new FileSelectedEvent(this, entry.path()));
+				} else {
+					bottomFileInfoTextLabel.setText(" ");
+				}
 			} else {
-				bottomFileInfoTextLabel.setText("");
+				bottomFileInfoTextLabel.setText(" ");
 			}
 		});
 
-		table.setRowSelectionInterval(0, 0);
+		// ── Key bindings ─────────────────────────────────────────────────────
 
-		// Catch "Enter" key to open the selected row
-		var openRowAction = new AbstractAction() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				JTable table = (JTable) e.getSource();
-				int row = table.getSelectedRow();
-				if (row >= 0) {
-					int modelRow = table.convertRowIndexToModel(row);
-					onRowActivated(modelRow);
-
-				}
-			}
-		};
-
-		table
-				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+		// Enter — open selected entry
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openRow");
-
-		table.getActionMap().put("openRow", openRowAction);
-
-		// F4 opens the selected file in the editor
-		var editFileAction = new AbstractAction() {
+		table.getActionMap().put("openRow", new AbstractAction() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				JTable table = (JTable) e.getSource();
+				int row = table.getSelectedRow();
+				if (row >= 0) onRowActivated(table.convertRowIndexToModel(row));
+			}
+		});
+
+		// F4 — open in editor
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0), "editFile");
+		table.getActionMap().put("editFile", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
 				int row = table.getSelectedRow();
 				if (row >= 0) {
-					int modelRow = table.convertRowIndexToModel(row);
-					var file = model.getFileAt(modelRow);
-					if (file.isFile()) {
-						applicationEventPublisher.publishEvent(new ShowEditorScreenEvent(this, file));
+					var entry = model.getEntryAt(table.convertRowIndexToModel(row));
+					if (!entry.directory() && !entry.isParentEntry()) {
+						eventPublisher.publishEvent(new ShowEditorScreenEvent(this, entry.path()));
 					}
 				}
 			}
-		};
+		});
 
-		table
-				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
-				.put(KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0), "editFile");
-
-		table.getActionMap().put("editFile", editFileAction);
-
-		// Left/Right arrow keys act as Page Up/Page Down
-		table
-				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+		// Left / Right — page up / page down
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "scrollUpChangeSelection");
-		table
-				.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "scrollDownChangeSelection");
 
-		// Catch Mouse double click to open the selected row
+		// Mouse double-click
 		table.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
 					int viewRow = table.rowAtPoint(e.getPoint());
-					if (viewRow >= 0) {
-						int modelRow = table.convertRowIndexToModel(viewRow);
-						onRowActivated(modelRow);
-					}
+					if (viewRow >= 0) onRowActivated(table.convertRowIndexToModel(viewRow));
 				}
 			}
 		});
 
-		// Alt+typing quick search
+		// Alt+<char> — incremental search
 		table.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent e) {
-				if (e.getKeyCode() == KeyEvent.VK_ALT || e.getKeyCode() == KeyEvent.VK_META) {
-					return;
-				}
-				if (!e.isAltDown() && !e.isMetaDown()) {
-					return;
-				}
+				if (e.getKeyCode() == KeyEvent.VK_ALT || e.getKeyCode() == KeyEvent.VK_META) return;
+				if (!e.isAltDown() && !e.isMetaDown()) return;
+
 				if (e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
 					if (searchQuery != null && searchQuery.length() > 0) {
 						searchQuery.deleteCharAt(searchQuery.length() - 1);
@@ -228,11 +246,10 @@ public class FilePanel extends JPanel {
 					e.consume();
 					return;
 				}
+
 				char c = (char) e.getKeyCode();
 				if (Character.isLetterOrDigit(c) || c == '.' || c == '-' || c == '_' || c == ' ') {
-					if (searchQuery == null) {
-						searchQuery = new StringBuilder();
-					}
+					if (searchQuery == null) searchQuery = new StringBuilder();
 					searchQuery.append(Character.toLowerCase(c));
 					showSearchPopup();
 					selectFirstMatch(searchQuery.toString());
@@ -248,99 +265,236 @@ public class FilePanel extends JPanel {
 			}
 		});
 
+		// ── Initial navigation ───────────────────────────────────────────────
+		List<Path> roots = mountRegistry.listLocalRoots();
+		if (!roots.isEmpty()) {
+			navigateTo(roots.get(0));
+		}
 	}
 
-	protected void onRowActivated(int modelRow) {
+	// ── Public API ───────────────────────────────────────────────────────────
 
-		log.info("Open row: {}", modelRow);
-
-		FileTableModel model = (FileTableModel) table.getModel();
-
-		var file = model.getFileAt(modelRow);
-
-		File selectedFolder = null;
-
-		if (file.getName().equals(FileTableModel.ParentFolderName)) {
-			selectedFolder = model.getFolder();
-			file = model.getFolder().getParentFile();
+	/**
+	 * Navigates to the given directory, saving the current location in the
+	 * per-root history and restoring any previously saved location for the
+	 * target root (used when switching drives).
+	 *
+	 * <p>Safe to call from any thread; listing is done off the EDT.
+	 */
+	public void navigateTo(Path directory) {
+		// Save current position under its root
+		if (currentPath != null) {
+			Path currentRoot = currentPath.getRoot();
+			if (currentRoot != null) {
+				lastPathPerRoot.put(currentRoot, currentPath);
+			}
 		}
 
-		if (file.isDirectory()) {
-			log.info("Open directory: {}", file.getAbsolutePath());
-			model.init(file, List.of(file.listFiles()));
-			model.fireTableDataChanged();
-			table.setRowSelectionInterval(0, 0);
-			selectInTable(selectedFolder);
-		} else {
-			log.info("Open file: {}", file.getAbsolutePath());
-			applicationEventPublisher.publishEvent(new ListViewFileOpen(this, file));
+		// Restore saved position if we're switching to a different root
+		Path targetRoot = directory.getRoot();
+		if (targetRoot != null && currentPath != null
+				&& !targetRoot.equals(currentPath.getRoot())) {
+			Path saved = lastPathPerRoot.get(targetRoot);
+			if (saved != null && Files.isDirectory(saved)) {
+				directory = saved;
+			}
 		}
 
+		enterPath(directory, null);
 	}
 
-	public File getSelectedFile() {
+	/** Returns the directory currently displayed by this panel. */
+	public Path getCurrentPath() {
+		return currentPath;
+	}
+
+	/**
+	 * Returns the root {@link Path} of the current directory's filesystem
+	 * (e.g. {@code C:\} on Windows, {@code /} on Linux).
+	 */
+	public Path getCurrentRoot() {
+		return currentPath != null ? currentPath.getRoot() : null;
+	}
+
+	/**
+	 * Returns the {@link Path} of the currently selected entry,
+	 * or {@code null} if nothing is selected or the ".." row is selected.
+	 */
+	public Path getSelectedPath() {
 		int row = table.getSelectedRow();
-		if (row < 0) {
-			return null;
-		}
-		int modelRow = table.convertRowIndexToModel(row);
-		return ((FileTableModel) table.getModel()).getFileAt(modelRow);
+		if (row < 0) return null;
+		var entry = model.getEntryAt(table.convertRowIndexToModel(row));
+		return entry.isParentEntry() ? null : entry.path();
 	}
 
-	public File getCurrentRoot() {
-		FileTableModel model = (FileTableModel) table.getModel();
-		return model.getFolder().toPath().getRoot().toFile();
-	}
-
-	public void navigateTo(File directory) {
-		FileTableModel model = (FileTableModel) table.getModel();
-
-		// Save current folder under its drive root
-		File currentFolder = model.getFolder();
-		if (currentFolder != null) {
-			File currentRoot = currentFolder.toPath().getRoot().toFile();
-			lastFolderPerDrive.put(currentRoot, currentFolder);
-		}
-
-		// Restore saved folder for the target drive, if available
-		File targetRoot = directory.toPath().getRoot().toFile();
-		File savedFolder = lastFolderPerDrive.get(targetRoot);
-		if (savedFolder != null && savedFolder.isDirectory()) {
-			directory = savedFolder;
-		}
-
-		model.init(directory, List.of(directory.listFiles()));
-		model.fireTableDataChanged();
-		topPathTextLabel.setText(directory.getAbsolutePath());
-		table.setRowSelectionInterval(0, 0);
-	}
-
+	/** Requests keyboard focus on the file table. */
 	public void focusFileTable() {
 		table.requestFocusInWindow();
 	}
 
-	private void selectInTable(File selectedFolder) {
+	// ── Internal navigation ───────────────────────────────────────────────────
 
-		if (selectedFolder == null) {
+	/**
+	 * Activates the entry at {@code modelRow} (Enter / double-click).
+	 * <ul>
+	 *   <li>".." → navigate to parent, select the child we came from
+	 *   <li>directory → enter it
+	 *   <li>file → publish {@link ListViewFileOpen} (open with default program)
+	 *   <li>.zip file → mount as ZIP and enter
+	 * </ul>
+	 */
+	protected void onRowActivated(int modelRow) {
+		var entry = model.getEntryAt(modelRow);
+
+		if (entry.isParentEntry()) {
+			Path parent = currentPath.getParent();
+			if (parent != null) {
+				enterPath(parent, currentPath);
+			}
 			return;
 		}
 
-		FileTableModel model = (FileTableModel) table.getModel();
+		if (entry.directory()) {
+			log.info("Enter directory: {}", entry.path());
+			enterPath(entry.path(), null);
+		} else {
+			// Check if it's a ZIP/JAR archive — offer to browse inside
+			String name = entry.displayName().toLowerCase();
+			if (name.endsWith(".zip") || name.endsWith(".jar") || name.endsWith(".war") || name.endsWith(".ear")) {
+				try {
+					Path archiveRoot = zipMountProvider.mountAndGetRoot(entry.path());
+					log.info("Entering ZIP archive: {}", entry.path());
+					enterPath(archiveRoot, null);
+					return;
+				} catch (IOException ex) {
+					log.warn("Cannot mount archive {}: {}", entry.path(), ex.getMessage());
+					// fall through to default open
+				}
+			}
 
+			log.info("Open file: {}", entry.path());
+			eventPublisher.publishEvent(new ListViewFileOpen(this, entry.path()));
+		}
+	}
+
+	/**
+	 * Internal directory navigation — no root-history side effects.
+	 * Updates the path label immediately (EDT), then loads the directory
+	 * listing on a virtual thread and applies the result on the EDT.
+	 *
+	 * @param dir         directory to navigate into
+	 * @param selectAfter if non-null, this path will be highlighted after loading
+	 *                    (used when navigating up to select the child we came from)
+	 */
+	private void enterPath(Path dir, Path selectAfter) {
+		this.selectAfterLoad = selectAfter;
+
+		// Update path label immediately for snappy feedback
+		SwingUtilities.invokeLater(() -> topPathTextLabel.setText(dir.toAbsolutePath().toString()));
+
+		Thread.ofVirtual().start(() -> {
+			try {
+				var entries = listDirectory(dir);
+				final Path target = this.selectAfterLoad;
+				this.selectAfterLoad = null;
+
+				SwingUtilities.invokeLater(() -> {
+					model.setEntries(entries);
+					currentPath = dir;
+
+					if (target != null) {
+						selectInTable(target);
+					} else if (model.getRowCount() > 0) {
+						table.setRowSelectionInterval(0, 0);
+					}
+				});
+			} catch (IOException ex) {
+				log.error("Cannot list directory: {}", dir, ex);
+				SwingUtilities.invokeLater(() ->
+						bottomFileInfoTextLabel.setText("Error: " + ex.getMessage()));
+			}
+		});
+	}
+
+	/**
+	 * Reads the contents of {@code dir} using a {@link DirectoryStream},
+	 * maps each child to an {@link EntryInfo}, and returns a sorted list:
+	 * ".." first, then directories alphabetically, then files alphabetically.
+	 *
+	 * <p>When the mounted filesystem advertises {@link dev.nuclr.commander.vfs.Capabilities#posixPermissions()},
+	 * POSIX owner and permission strings are populated; otherwise they remain {@code null}.
+	 */
+	private List<EntryInfo> listDirectory(Path dir) throws IOException {
+		var entries = new ArrayList<EntryInfo>();
+
+		// ".." entry — only when there is a parent to navigate to
+		if (dir.getParent() != null) {
+			entries.add(EntryInfo.parentEntry(dir));
+		}
+
+		// Query capabilities once for the whole listing (O(1) after Fix 1)
+		boolean hasPosix = mountRegistry.capabilitiesFor(dir).posixPermissions();
+
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+			for (Path child : stream) {
+				try {
+					EntryInfo info;
+					if (hasPosix) {
+						var attrs = Files.readAttributes(child, PosixFileAttributes.class);
+						info = new EntryInfo(
+								child,
+								child.getFileName().toString(),
+								attrs.isDirectory(),
+								attrs.isDirectory() ? 0L : attrs.size(),
+								attrs.lastModifiedTime(),
+								attrs.owner().getName(),
+								PosixFilePermissions.toString(attrs.permissions()),
+								Map.of());
+					} else {
+						var attrs = Files.readAttributes(child, BasicFileAttributes.class);
+						info = new EntryInfo(
+								child,
+								child.getFileName().toString(),
+								attrs.isDirectory(),
+								attrs.isDirectory() ? 0L : attrs.size(),
+								attrs.lastModifiedTime(),
+								null, null,
+								Map.of());
+					}
+					entries.add(info);
+				} catch (IOException ex) {
+					log.warn("Cannot read attributes for {}: {}", child, ex.getMessage());
+				}
+			}
+		}
+
+		// Sort: ".." first, then dirs alphabetically, then files alphabetically
+		entries.sort((a, b) -> {
+			if (a.isParentEntry()) return -1;
+			if (b.isParentEntry()) return 1;
+			if (a.directory() != b.directory()) return a.directory() ? -1 : 1;
+			return a.displayName().compareToIgnoreCase(b.displayName());
+		});
+
+		return entries;
+	}
+
+	/** Finds {@code target} in the current model and selects its row. */
+	private void selectInTable(Path target) {
 		for (int i = 0; i < model.getRowCount(); i++) {
-			var file = model.getFileAt(i);
-			if (file.equals(selectedFolder)) {
+			var entry = model.getEntryAt(i);
+			if (!entry.isParentEntry() && entry.path().equals(target)) {
 				table.setRowSelectionInterval(i, i);
 				table.scrollRectToVisible(table.getCellRect(i, 0, true));
-				break;
+				return;
 			}
 		}
 	}
 
+	// ── Search popup ─────────────────────────────────────────────────────────
+
 	private void showSearchPopup() {
-		if (searchPopup != null) {
-			searchPopup.hide();
-		}
+		if (searchPopup != null) searchPopup.hide();
 		if (searchLabel == null) {
 			searchLabel = new JLabel();
 			searchLabel.setBorder(BorderFactory.createCompoundBorder(
@@ -357,11 +511,7 @@ public class FilePanel extends JPanel {
 	}
 
 	private void updateSearchPopup() {
-		if (searchLabel != null && searchPopup != null) {
-			searchLabel.setText("Search: " + searchQuery);
-			// Recreate to update size/position
-			showSearchPopup();
-		}
+		if (searchLabel != null && searchPopup != null) showSearchPopup();
 	}
 
 	private void hideSearchPopup() {
@@ -373,16 +523,13 @@ public class FilePanel extends JPanel {
 	}
 
 	private void selectFirstMatch(String query) {
-		FileTableModel model = (FileTableModel) table.getModel();
-		String lowerQuery = query.toLowerCase();
+		String lower = query.toLowerCase();
 		for (int i = 0; i < model.getRowCount(); i++) {
-			var file = model.getFileAt(i);
-			if (file.getName().toLowerCase().startsWith(lowerQuery)) {
+			if (model.getEntryAt(i).displayName().toLowerCase().startsWith(lower)) {
 				table.setRowSelectionInterval(i, i);
 				table.scrollRectToVisible(table.getCellRect(i, 0, true));
 				return;
 			}
 		}
 	}
-
 }

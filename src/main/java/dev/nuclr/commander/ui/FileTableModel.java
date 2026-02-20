@@ -1,6 +1,5 @@
 package dev.nuclr.commander.ui;
 
-import java.io.File;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -8,42 +7,35 @@ import java.util.List;
 import java.util.Locale;
 
 import dev.nuclr.commander.common.FileUtils;
-import lombok.Data;
+import dev.nuclr.commander.vfs.EntryInfo;
 
-@Data
+/**
+ * Swing table model for the file panel.
+ *
+ * <p>Works exclusively with {@link EntryInfo} records — no {@code java.io.File}
+ * dependency. Columns: Name | Size | Date | Time.
+ */
 public class FileTableModel extends javax.swing.table.AbstractTableModel {
 
-	public static final String ParentFolderName = "..";
+	public static final String ParentFolderName = EntryInfo.PARENT_ENTRY_NAME;
 
 	private static final long serialVersionUID = 1L;
 
-	private List<File> files;
+	private List<EntryInfo> entries = new ArrayList<>();
 
-	private boolean isRoot;
+	// ── Mutators ────────────────────────────────────────────────────────────
 
-	private File folder;
-
-	public FileTableModel(File folder, List<File> files) {
-		init(folder, files);
+	/** Replaces the current listing and fires a table data changed event. */
+	public void setEntries(List<EntryInfo> entries) {
+		this.entries = new ArrayList<>(entries);
+		fireTableDataChanged();
 	}
 
-	public void init(File folder, List<File> files) {
-
-		this.folder = folder;
-
-		this.files = new ArrayList<File>(files);
-
-		isRoot = folder.getParent() == null;
-
-		if (isRoot == false) {
-			this.files.add(0, new File(ParentFolderName));
-		}
-
-	}
+	// ── AbstractTableModel ───────────────────────────────────────────────────
 
 	@Override
 	public int getRowCount() {
-		return files.size();
+		return entries.size();
 	}
 
 	@Override
@@ -51,60 +43,49 @@ public class FileTableModel extends javax.swing.table.AbstractTableModel {
 		return 4;
 	}
 
-	private static final DateFormat date = DateFormat.getDateInstance(DateFormat.SHORT, Locale.getDefault());
-	
-	private static final DateFormat time = new SimpleDateFormat("HH:mm", Locale.getDefault());
+	private static final DateFormat DATE_FMT =
+			DateFormat.getDateInstance(DateFormat.SHORT, Locale.getDefault());
+
+	private static final DateFormat TIME_FMT =
+			new SimpleDateFormat("HH:mm", Locale.getDefault());
 
 	@Override
 	public Object getValueAt(int rowIndex, int columnIndex) {
+		var entry = entries.get(rowIndex);
 
-		var file = files.get(rowIndex);
-
-		if (columnIndex == 0) {
-
-			return files.get(rowIndex).getName();
-
-		}
-
-		if (columnIndex == 1) {
-
-			//			if (rowIndex == 0) {
-			//				return "Up";
-			//			}			
-
-			if (files.get(rowIndex).isDirectory()) {
-				return "Folder";
-			} else {
-				return FileUtils.byteCountToDisplaySize(files.get(rowIndex).length());
+		return switch (columnIndex) {
+			case 0 -> entry.displayName();
+			case 1 -> {
+				if (entry.isParentEntry()) yield "";
+				yield entry.directory()
+						? "Folder"
+						: FileUtils.byteCountToDisplaySize(entry.size());
 			}
-
-		} else if (columnIndex == 2) {
-			return date.format(files.get(rowIndex).lastModified());
-		} else if (columnIndex == 3) {
-			return time.format(files.get(rowIndex).lastModified());
-		} else {
-			return "-";
-		}
-
-	}
-
-	public File getFileAt(int selectedRow) {
-		return files.get(selectedRow);
+			case 2 -> entry.isParentEntry() || entry.modified() == null
+					? ""
+					: DATE_FMT.format(entry.modified().toMillis());
+			case 3 -> entry.isParentEntry() || entry.modified() == null
+					? ""
+					: TIME_FMT.format(entry.modified().toMillis());
+			default -> "-";
+		};
 	}
 
 	@Override
 	public String getColumnName(int column) {
-		if (column == 0) {
-			return "Name";
-		} else if (column == 1) {
-			return "Size";
-		} else if (column == 2) {
-			return "Date";
-		} else if (column == 3) {
-			return "Time";
-		} else {
-			return "-";
-		}
+		return switch (column) {
+			case 0 -> "Name";
+			case 1 -> "Size";
+			case 2 -> "Date";
+			case 3 -> "Time";
+			default -> "-";
+		};
 	}
 
+	// ── Accessors ────────────────────────────────────────────────────────────
+
+	/** Returns the {@link EntryInfo} at the given model row index. */
+	public EntryInfo getEntryAt(int row) {
+		return entries.get(row);
+	}
 }

@@ -1,7 +1,6 @@
 package dev.nuclr.commander.ui.editor;
 
 import java.awt.Font;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
@@ -64,66 +63,53 @@ public class Editor {
 					Map.entry("prefs", SyntaxConstants.SYNTAX_STYLE_INI),
 					Map.entry("cfg", SyntaxConstants.SYNTAX_STYLE_INI),
 					Map.entry("csv", SyntaxConstants.SYNTAX_STYLE_CSV),
-
 					Map.entry("vsconfig", SyntaxConstants.SYNTAX_STYLE_JSON),
 					Map.entry("firebaserc", SyntaxConstants.SYNTAX_STYLE_JSON),
-
 					Map.entry("svg", SyntaxConstants.SYNTAX_STYLE_XML),
 					Map.entry("classpath", SyntaxConstants.SYNTAX_STYLE_XML),
 					Map.entry("factorypath", SyntaxConstants.SYNTAX_STYLE_XML),
 					Map.entry("project", SyntaxConstants.SYNTAX_STYLE_XML),
 					Map.entry("csproj", SyntaxConstants.SYNTAX_STYLE_XML)
-
 			);
 
 	private RSyntaxTextArea textArea;
 
 	public Editor() {
-
 		this.textArea = new RSyntaxTextArea();
 
 		try (InputStream in = getClass()
-				.getResourceAsStream(
-						"/org/fife/ui/rsyntaxtextarea/themes/dark.xml")) {
-
+				.getResourceAsStream("/org/fife/ui/rsyntaxtextarea/themes/dark.xml")) {
 			Theme theme = Theme.load(in);
 			theme.apply(textArea);
-
 		} catch (IOException e) {
 			log.error("Failed to load theme", e);
 		}
 
 		this.textArea.setFont(new Font("JetBrains Mono", Font.PLAIN, 16));
-
 		this.textArea.setCodeFoldingEnabled(true);
 		this.textArea.setAntiAliasingEnabled(true);
 		this.textArea.setTabSize(4);
 		this.textArea.setTabsEmulated(false);
-
-
 	}
 
 	public RTextScrollPane getPanel() {
 		var scroll = new RTextScrollPane(this.textArea);
 		scroll.setLineNumbersEnabled(true);
-
-		// RTextScrollPane's component tree is created before being added to the
-		// Swing hierarchy, so its children (scrollbars, viewport, corners) may
-		// have the wrong L&F UI delegates. Force the entire tree to re-adopt
-		// the current L&F (FlatLaf) so scrollbars render correctly.
 		SwingUtilities.updateComponentTreeUI(scroll);
-
 		return scroll;
 	}
 
-	public void setText(File file, String text) {
-		
-		String ext = FilenameUtils.getExtension(file.getName()).toLowerCase();
-
-		this.textArea
-				.setSyntaxEditingStyle(
-						EXTENSION_TO_SYNTAX.getOrDefault(ext, SyntaxConstants.SYNTAX_STYLE_NONE));
-		
+	/**
+	 * Applies syntax highlighting based on {@code filename}'s extension
+	 * and sets the editor content.
+	 *
+	 * @param filename file name (used only for extension detection, not for I/O)
+	 * @param text     file content to display
+	 */
+	public void setText(String filename, String text) {
+		String ext = FilenameUtils.getExtension(filename).toLowerCase();
+		this.textArea.setSyntaxEditingStyle(
+				EXTENSION_TO_SYNTAX.getOrDefault(ext, SyntaxConstants.SYNTAX_STYLE_NONE));
 		this.textArea.setText(text);
 		this.textArea.setCaretPosition(0);
 	}
@@ -135,5 +121,4 @@ public class Editor {
 	public void focus() {
 		this.textArea.requestFocusInWindow();
 	}
-
 }

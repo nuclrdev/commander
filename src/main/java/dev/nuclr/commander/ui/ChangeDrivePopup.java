@@ -1,6 +1,6 @@
 package dev.nuclr.commander.ui;
 
-import java.io.File;
+import java.nio.file.Path;
 
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -8,20 +8,29 @@ import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
 
+import dev.nuclr.commander.vfs.MountRegistry;
+
+/**
+ * Shows a popup menu listing all local filesystem roots so the user can
+ * switch the active panel to a different drive (Windows) or mount point.
+ *
+ * <p>Roots are obtained from {@link MountRegistry#listLocalRoots()} —
+ * no direct {@code java.io.File} usage.
+ */
 public class ChangeDrivePopup {
 
-	public static void show(FilePanel targetPanel) {
+	public static void show(FilePanel targetPanel, MountRegistry mountRegistry) {
 		JPopupMenu popup = new JPopupMenu("Change Drive");
 
-		File currentRoot = targetPanel.getCurrentRoot();
+		Path currentRoot = targetPanel.getCurrentRoot();
 		JMenuItem currentItem = null;
 
-		for (File root : File.listRoots()) {
-			String path = root.getAbsolutePath();
-			JMenuItem item = new JMenuItem(path);
+		for (Path root : mountRegistry.listLocalRoots()) {
+			String label = root.toString();
+			JMenuItem item = new JMenuItem(label);
 			item.addActionListener(e -> targetPanel.navigateTo(root));
-			if (!path.isEmpty()) {
-				item.setMnemonic(Character.toUpperCase(path.charAt(0)));
+			if (!label.isEmpty()) {
+				item.setMnemonic(Character.toUpperCase(label.charAt(0)));
 			}
 			popup.add(item);
 			if (root.equals(currentRoot)) {
@@ -33,11 +42,9 @@ public class ChangeDrivePopup {
 
 		if (currentItem != null) {
 			final JMenuItem itemToSelect = currentItem;
-			SwingUtilities.invokeLater(() -> {
-				MenuSelectionManager.defaultManager().setSelectedPath(
-						new MenuElement[]{popup, itemToSelect});
-			});
+			SwingUtilities.invokeLater(() ->
+					MenuSelectionManager.defaultManager().setSelectedPath(
+							new MenuElement[]{popup, itemToSelect}));
 		}
 	}
-
 }
