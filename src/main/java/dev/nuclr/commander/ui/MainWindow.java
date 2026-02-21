@@ -95,10 +95,9 @@ public class MainWindow {
 
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, 16));
 
-		// FlatDarculaLaf.setup();
+		 FlatDarculaLaf.setup();
 		// FlatLightLaf.setup();
-		
-		FlatIntelliJLaf.setup();
+//		FlatIntelliJLaf.setup();
 
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

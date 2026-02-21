@@ -40,6 +40,9 @@ public class QuickViewPanel {
 
 	private volatile Thread currentLoadThread;
 
+	/** The provider whose content is currently displayed (null if none). */
+	private volatile QuickViewProvider activeProvider;
+
 	private static final String CARD_LOADING     = "Loading";
 	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
 
@@ -88,7 +91,10 @@ public class QuickViewPanel {
 					boolean success = plugin.open(item);
 					log.info("Plugin [{}] open took {} ms", plugin.getPluginClass(),
 							System.currentTimeMillis() - start);
+					// Drop the result if stop() was called while we were opening
+					if (Thread.currentThread().isInterrupted()) return;
 					if (success) {
+						activeProvider = plugin;
 						String card = plugin.getPluginClass();
 						SwingUtilities.invokeLater(() -> cards.show(panel, card));
 						return;
@@ -97,10 +103,12 @@ public class QuickViewPanel {
 					log.error("Error in plugin [{}]: {}", plugin.getPluginClass(), e.getMessage(), e);
 				}
 			}
-			SwingUtilities.invokeLater(() -> {
-				noQuickViewAvailablePanel.setPath(path);
-				cards.show(panel, CARD_NO_PROVIDER);
-			});
+			if (!Thread.currentThread().isInterrupted()) {
+				SwingUtilities.invokeLater(() -> {
+					noQuickViewAvailablePanel.setPath(path);
+					cards.show(panel, CARD_NO_PROVIDER);
+				});
+			}
 		});
 	}
 
@@ -109,6 +117,15 @@ public class QuickViewPanel {
 		if (t != null) {
 			t.interrupt();
 			currentLoadThread = null;
+		}
+		QuickViewProvider prev = activeProvider;
+		if (prev != null) {
+			activeProvider = null;
+			try {
+				prev.close();
+			} catch (Exception e) {
+				log.warn("Error closing provider [{}]: {}", prev.getPluginClass(), e.getMessage());
+			}
 		}
 	}
 
