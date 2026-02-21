@@ -215,7 +215,7 @@ public record FilePanelColors(
 
         public static final List<String> AUDIO_EXTENSIONS = List.of(
                 ".mp3", ".flac", ".wav", ".aac", ".m4a",
-                ".ogg", ".opus", ".wma",
+                ".ogg", ".opus", ".wma", "s3m", ".mod", ".xm", ".it",
                 ".aiff", ".aif", ".aifc",
                 ".alac"
         );
