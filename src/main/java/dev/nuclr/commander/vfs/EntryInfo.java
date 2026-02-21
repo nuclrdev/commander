@@ -16,6 +16,7 @@ import java.util.Map;
  * @param directory   {@code true} if this entry is a directory (or ZIP root etc.)
  * @param executable  {@code true} if the file is executable (POSIX: owner-execute bit;
  *                    Windows: recognised executable extension such as .exe/.bat/.cmd)
+ * @param archive     {@code true} if the file is a recognised archive or compressed format
  * @param size        file size in bytes; 0 for directories or when unavailable
  * @param modified    last-modified timestamp; may be {@code null} for synthetic entries
  * @param owner       POSIX owner name; {@code null} when unsupported or unreadable
@@ -27,6 +28,7 @@ public record EntryInfo(
         String displayName,
         boolean directory,
         boolean executable,
+        boolean archive,
         long size,
         FileTime modified,
         String owner,
@@ -51,6 +53,7 @@ public record EntryInfo(
                 currentDir,
                 PARENT_ENTRY_NAME,
                 true,
+                false,
                 false,
                 0L,
                 null,

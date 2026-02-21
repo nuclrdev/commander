@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -38,6 +37,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import org.springframework.context.ApplicationEventPublisher;
 
 import dev.nuclr.commander.common.FilePanelColors;
+import dev.nuclr.commander.common.FilePanelColors.Defaults;
 import dev.nuclr.commander.common.FileUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.ListViewFileOpen;
@@ -76,12 +76,6 @@ public class FilePanel extends JPanel {
 	private final ZipMountProvider zipMountProvider;
 	private final FilePanelColors colors;
 
-	/**
-	 * Extensions recognised as executable on Windows (case-insensitive, dot included).
-	 * On POSIX the owner-execute permission bit is used instead.
-	 */
-	private static final Set<String> WINDOWS_EXECUTABLE_EXTENSIONS = Set.of(
-			".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".vbs", ".wsf", ".scr");
 
 	private final JTable table;
 	private final FileTableModel model;
@@ -144,7 +138,11 @@ public class FilePanel extends JPanel {
 		cm.getColumn(3).setPreferredWidth(60);
 		cm.getColumn(3).setMaxWidth(80);
 
-		// Renderer: bold for directories, green foreground for executables
+		// Renderer: bold directories; green executables; pink archives.
+		// Priority: executable > archive > default.
+		// We always set an explicit foreground when not selected — otherwise
+		// DefaultTableCellRenderer caches it in `unselectedForeground` and
+		// bleeds the last custom color into every subsequent unselected row.
 		table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
 			@Override
 			public java.awt.Component getTableCellRendererComponent(
@@ -157,16 +155,16 @@ public class FilePanel extends JPanel {
 				comp.setFont(entry.directory()
 						? comp.getFont().deriveFont(Font.BOLD)
 						: comp.getFont().deriveFont(Font.PLAIN));
-				// Apply executable color only when the row is not selected
-				// (selection highlight takes precedence for readability).
-				// Always set an explicit foreground — DefaultTableCellRenderer
-				// stores the last setForeground() call in `unselectedForeground`
-				// and reuses it on every subsequent non-selected row, so we must
-				// reset it here rather than leave it from a previous green row.
 				if (!isSelected) {
-					comp.setForeground(entry.executable() && !entry.directory()
-							? colors.executableAwtColor()
-							: tbl.getForeground());
+					java.awt.Color fg;
+					if (entry.executable() && !entry.directory()) {
+						fg = colors.executableAwtColor();
+					} else if (entry.archive()) {
+						fg = colors.archiveAwtColor();
+					} else {
+						fg = tbl.getForeground();
+					}
+					comp.setForeground(fg);
 				}
 				return comp;
 			}
@@ -465,27 +463,32 @@ public class FilePanel extends JPanel {
 					EntryInfo info;
 					if (hasPosix) {
 						var attrs = Files.readAttributes(child, PosixFileAttributes.class);
-						boolean exec = !attrs.isDirectory()
-								&& attrs.permissions().contains(PosixFilePermission.OWNER_EXECUTE);
+						boolean isDir = attrs.isDirectory();
+						boolean exec  = !isDir && attrs.permissions().contains(PosixFilePermission.OWNER_EXECUTE);
+						boolean arch  = !isDir && colors.isArchive(child);
 						info = new EntryInfo(
 								child,
 								child.getFileName().toString(),
-								attrs.isDirectory(),
+								isDir,
 								exec,
-								attrs.isDirectory() ? 0L : attrs.size(),
+								arch,
+								isDir ? 0L : attrs.size(),
 								attrs.lastModifiedTime(),
 								attrs.owner().getName(),
 								PosixFilePermissions.toString(attrs.permissions()),
 								Map.of());
 					} else {
 						var attrs = Files.readAttributes(child, BasicFileAttributes.class);
-						boolean exec = !attrs.isDirectory() && hasWindowsExecutableExtension(child);
+						boolean isDir = attrs.isDirectory();
+						boolean exec  = !isDir && colors.isWindowsExecutable(child);
+						boolean arch  = !isDir && colors.isArchive(child);
 						info = new EntryInfo(
 								child,
 								child.getFileName().toString(),
-								attrs.isDirectory(),
+								isDir,
 								exec,
-								attrs.isDirectory() ? 0L : attrs.size(),
+								arch,
+								isDir ? 0L : attrs.size(),
 								attrs.lastModifiedTime(),
 								null, null,
 								Map.of());
@@ -572,6 +575,6 @@ public class FilePanel extends JPanel {
 	private static boolean hasWindowsExecutableExtension(Path path) {
 		String name = path.getFileName().toString();
 		int dot = name.lastIndexOf('.');
-		return dot >= 0 && WINDOWS_EXECUTABLE_EXTENSIONS.contains(name.substring(dot).toLowerCase());
+		return dot >= 0 && Defaults.EXECUTABLE_EXTENSIONS.contains(name.substring(dot).toLowerCase());
 	}
 }
