@@ -7,6 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+
+import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.common.FileUtils;
 import dev.nuclr.commander.common.FilenameUtils;
@@ -15,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Data
 @Slf4j
+@Component
 public class TextViewPanel extends JPanel {
 
 	private Editor textArea;
@@ -32,25 +36,35 @@ public class TextViewPanel extends JPanel {
 		this.add(scrollPane, BorderLayout.CENTER);
 	}
 
+	/**
+	 * Loads the file content. Safe to call from any thread — all Swing
+	 * updates are dispatched to the EDT via {@link SwingUtilities#invokeLater}.
+	 */
 	public void setFile(File file) {
-
 		this.file = file;
 
 		if (file.length() > 10 * 1024 * 1024) { // 10 MB limit
 			log.warn("File is too large to display: {}", file.getAbsolutePath());
-			this.textArea.setText(file.getName(), "File is too large to display.");
-			this.textArea.setEditable(false);
+			SwingUtilities.invokeLater(() -> {
+				this.textArea.setText(file.getName(), "File is too large to display.");
+				this.textArea.setEditable(false);
+			});
 			return;
 		}
 
 		try {
 			var content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-			this.textArea.setText(file.getName(), content);
-			this.textArea.setEditable(false);
+			SwingUtilities.invokeLater(() -> {
+				this.textArea.setText(file.getName(), content);
+				this.textArea.setEditable(false);
+			});
 		} catch (IOException e) {
 			log.error("Failed to read file: {}", file.getAbsolutePath(), e);
-			this.textArea.setText(file.getName(), "Error reading file: " + e.getMessage());
-			this.textArea.setEditable(false);
+			final String msg = "Error reading file: " + e.getMessage();
+			SwingUtilities.invokeLater(() -> {
+				this.textArea.setText(file.getName(), msg);
+				this.textArea.setEditable(false);
+			});
 		}
 	}
 
@@ -71,6 +85,7 @@ public class TextViewPanel extends JPanel {
 					"classpath",
 					"project",
 					"gitignore",
+					".gitignore",
 					"jsp",
 					"js",
 					"java",
@@ -79,6 +94,10 @@ public class TextViewPanel extends JPanel {
 					"cpp",
 					"h",
 					"hpp",
+					"prefs",
+					"meta",
+					"gitattributes",
+					"factorypath",
 					"sh",
 					"bat",
 					"pref",
@@ -88,10 +107,17 @@ public class TextViewPanel extends JPanel {
 					"ini",
 					"conf",
 					"cfg",
+					"cmd",
 					"properties");
 
 	public boolean isTextFile(File file) {
-		var ext = FilenameUtils.getExtension(file.getName()).toLowerCase();
+		String name = file.getName();
+		String ext = FilenameUtils.getExtension(name).toLowerCase();
+		// Dotfiles like ".gitignore" have no extension per FilenameUtils (dot at index 0),
+		// so treat the part after the leading dot as the extension.
+		if (ext.isEmpty() && name.startsWith(".") && name.length() > 1) {
+			ext = name.substring(1).toLowerCase();
+		}
 		return supportedExtensions.contains(ext);
 	}
 

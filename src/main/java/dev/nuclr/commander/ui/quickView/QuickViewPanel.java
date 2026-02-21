@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.service.PluginRegistry;
+import dev.nuclr.commander.ui.editor.TextViewPanel;
 import dev.nuclr.plugin.QuickViewProvider;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
@@ -38,6 +39,9 @@ public class QuickViewPanel {
 	private FolderQuickViewPanel folderQuickViewPanel;
 
 	@Autowired
+	private TextViewPanel textViewPanel;
+
+	@Autowired
 	private PluginRegistry pluginRegistry;
 
 	private Map<String, QuickViewProvider> loadedPlugins = new HashMap<>();
@@ -50,6 +54,7 @@ public class QuickViewPanel {
 	private static final String CARD_LOADING     = "Loading";
 	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
 	private static final String CARD_FOLDER      = "FolderQuickViewPanel";
+	private static final String CARD_TEXT        = "TextViewPanel";
 
 	@PostConstruct
 	public void init() {
@@ -57,6 +62,7 @@ public class QuickViewPanel {
 		this.panel = new JPanel(new CardLayout());
 		this.panel.add(noQuickViewAvailablePanel, CARD_NO_PROVIDER);
 		this.panel.add(folderQuickViewPanel, CARD_FOLDER);
+		this.panel.add(textViewPanel, CARD_TEXT);
 		this.panel.add(buildLoadingPanel(), CARD_LOADING);
 	}
 
@@ -65,13 +71,26 @@ public class QuickViewPanel {
 
 		if (path == null) return;
 
+		var cards = (CardLayout) panel.getLayout();
+
 		if (Files.isDirectory(path)) {
 			folderQuickViewPanel.show(path);
-			((CardLayout) panel.getLayout()).show(panel, CARD_FOLDER);
+			cards.show(panel, CARD_FOLDER);
 			return;
 		}
 
-		var cards = (CardLayout) panel.getLayout();
+		if (textViewPanel.isTextFile(path.toFile())) {
+			cards.show(panel, CARD_LOADING);
+			panel.repaint();
+			currentLoadThread = Thread.ofVirtual().start(() -> {
+				textViewPanel.setFile(path.toFile());
+				if (!Thread.currentThread().isInterrupted()) {
+					SwingUtilities.invokeLater(() -> cards.show(panel, CARD_TEXT));
+				}
+			});
+			return;
+		}
+
 		var item = new PathQuickViewItem(path);
 		var plugins = pluginRegistry.getQuickViewProvidersByItem(item);
 
