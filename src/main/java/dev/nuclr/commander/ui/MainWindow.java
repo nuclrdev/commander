@@ -12,7 +12,6 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.nio.file.Files;
 
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
@@ -200,7 +199,7 @@ public class MainWindow {
 							return true;
 						}
 						var selectedPath = activePanel.getSelectedPath();
-						if (selectedPath != null && Files.isRegularFile(selectedPath)) {
+						if (selectedPath != null) {
 							applicationEventPublisher.publishEvent(new QuickViewEvent(this, selectedPath));
 						}
 					}

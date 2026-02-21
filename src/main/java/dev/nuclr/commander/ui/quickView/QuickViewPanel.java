@@ -3,6 +3,7 @@ package dev.nuclr.commander.ui.quickView;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Font;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,6 +35,9 @@ public class QuickViewPanel {
 	private NoQuickViewAvailablePanel noQuickViewAvailablePanel;
 
 	@Autowired
+	private FolderQuickViewPanel folderQuickViewPanel;
+
+	@Autowired
 	private PluginRegistry pluginRegistry;
 
 	private Map<String, QuickViewProvider> loadedPlugins = new HashMap<>();
@@ -45,12 +49,14 @@ public class QuickViewPanel {
 
 	private static final String CARD_LOADING     = "Loading";
 	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
+	private static final String CARD_FOLDER      = "FolderQuickViewPanel";
 
 	@PostConstruct
 	public void init() {
 		log.info("QuickViewPanel initialized");
 		this.panel = new JPanel(new CardLayout());
 		this.panel.add(noQuickViewAvailablePanel, CARD_NO_PROVIDER);
+		this.panel.add(folderQuickViewPanel, CARD_FOLDER);
 		this.panel.add(buildLoadingPanel(), CARD_LOADING);
 	}
 
@@ -58,6 +64,12 @@ public class QuickViewPanel {
 		stop();
 
 		if (path == null) return;
+
+		if (Files.isDirectory(path)) {
+			folderQuickViewPanel.show(path);
+			((CardLayout) panel.getLayout()).show(panel, CARD_FOLDER);
+			return;
+		}
 
 		var cards = (CardLayout) panel.getLayout();
 		var item = new PathQuickViewItem(path);
@@ -113,6 +125,7 @@ public class QuickViewPanel {
 	}
 
 	public void stop() {
+		folderQuickViewPanel.stopScan();
 		Thread t = currentLoadThread;
 		if (t != null) {
 			t.interrupt();
