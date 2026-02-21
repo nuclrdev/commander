@@ -138,8 +138,8 @@ public class FilePanel extends JPanel {
 		cm.getColumn(3).setPreferredWidth(60);
 		cm.getColumn(3).setMaxWidth(80);
 
-		// Renderer: bold directories; green executables; pink archives.
-		// Priority: executable > archive > default.
+		// Renderer: bold directories; colored files by type.
+		// Priority: executable > archive > image > audio > video > pdf > document > default.
 		// We always set an explicit foreground when not selected — otherwise
 		// DefaultTableCellRenderer caches it in `unselectedForeground` and
 		// bleeds the last custom color into every subsequent unselected row.
@@ -161,6 +161,16 @@ public class FilePanel extends JPanel {
 						fg = colors.executableAwtColor();
 					} else if (entry.archive()) {
 						fg = colors.archiveAwtColor();
+					} else if (!entry.directory() && colors.isImage(entry.path())) {
+						fg = colors.imageAwtColor();
+					} else if (!entry.directory() && colors.isAudio(entry.path())) {
+						fg = colors.audioAwtColor();
+					} else if (!entry.directory() && colors.isVideo(entry.path())) {
+						fg = colors.videoAwtColor();
+					} else if (!entry.directory() && colors.isPdf(entry.path())) {
+						fg = colors.pdfAwtColor();
+					} else if (!entry.directory() && colors.isDocument(entry.path())) {
+						fg = colors.documentAwtColor();
 					} else {
 						fg = tbl.getForeground();
 					}
