@@ -29,6 +29,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
+import com.formdev.flatlaf.FlatIntelliJLaf;
+import com.formdev.flatlaf.FlatLightLaf;
 
 import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
@@ -93,7 +95,10 @@ public class MainWindow {
 
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, 16));
 
-		FlatDarculaLaf.setup();
+		// FlatDarculaLaf.setup();
+		// FlatLightLaf.setup();
+		
+		FlatIntelliJLaf.setup();
 
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -120,11 +125,13 @@ public class MainWindow {
 
 		mainFrame.setLayout(new BorderLayout());
 
+		var colors = savedSettings.colors();
+
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 		mainSplitPane.setLeftComponent(
-				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider));
+				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider, colors));
 		mainSplitPane.setRightComponent(
-				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider));
+				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider, colors));
 
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 		mainSplitPane.setDividerLocation(savedSettings.dividerLocation() > 0 ? savedSettings.dividerLocation() : 512);
@@ -408,7 +415,7 @@ public class MainWindow {
 		settingsStore.save(new LocalSettingsStore.AppSettings(
 				settings.theme(), width, height, x, y, isMaximized,
 				settings.lastOpenedPath(), settings.autosaveInterval(),
-				settings.dividerLocation()));
+				settings.dividerLocation(), settings.colors()));
 	}
 
 	private void saveDividerLocation(int location) {
@@ -417,7 +424,7 @@ public class MainWindow {
 		settingsStore.save(new LocalSettingsStore.AppSettings(
 				settings.theme(), settings.windowWidth(), settings.windowHeight(),
 				settings.windowX(), settings.windowY(), isMaximized,
-				settings.lastOpenedPath(), settings.autosaveInterval(), location));
+				settings.lastOpenedPath(), settings.autosaveInterval(), location, settings.colors()));
 	}
 
 	private void toggleFullscreen() {

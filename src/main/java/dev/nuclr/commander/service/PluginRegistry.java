@@ -15,12 +15,15 @@ import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipFile;
 
+import javax.swing.JOptionPane;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.nuclr.commander.plugin.PluginManifest;
+import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.plugin.NuclrPlugin;
 import dev.nuclr.plugin.PluginInfo;
 import dev.nuclr.plugin.QuickViewItem;
@@ -127,6 +130,7 @@ public final class PluginRegistry {
 					log.info("Loaded QuickViewProvider: [{}]", className);
 				} catch (Exception e) {
 					log.error("Failed to load QuickViewProvider [{}]: {}", className, e.getMessage(), e);
+					Alerts.showMessageDialog(null, "Failed to load QuickViewProvider [" + className + "]: " + e.getMessage(), "Plugin Load Error", JOptionPane.ERROR_MESSAGE);
 				}
 			}
 

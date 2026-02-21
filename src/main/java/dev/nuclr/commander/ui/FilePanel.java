@@ -14,11 +14,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -35,6 +37,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 
 import org.springframework.context.ApplicationEventPublisher;
 
+import dev.nuclr.commander.common.FilePanelColors;
 import dev.nuclr.commander.common.FileUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.ListViewFileOpen;
@@ -71,6 +74,14 @@ public class FilePanel extends JPanel {
 	private final ApplicationEventPublisher eventPublisher;
 	private final MountRegistry mountRegistry;
 	private final ZipMountProvider zipMountProvider;
+	private final FilePanelColors colors;
+
+	/**
+	 * Extensions recognised as executable on Windows (case-insensitive, dot included).
+	 * On POSIX the owner-execute permission bit is used instead.
+	 */
+	private static final Set<String> WINDOWS_EXECUTABLE_EXTENSIONS = Set.of(
+			".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".vbs", ".wsf", ".scr");
 
 	private final JTable table;
 	private final FileTableModel model;
@@ -104,11 +115,13 @@ public class FilePanel extends JPanel {
 	public FilePanel(
 			ApplicationEventPublisher eventPublisher,
 			MountRegistry mountRegistry,
-			ZipMountProvider zipMountProvider) {
+			ZipMountProvider zipMountProvider,
+			FilePanelColors colors) {
 
 		this.eventPublisher = eventPublisher;
 		this.mountRegistry = mountRegistry;
 		this.zipMountProvider = zipMountProvider;
+		this.colors = colors;
 
 		setLayout(new BorderLayout());
 
@@ -131,7 +144,7 @@ public class FilePanel extends JPanel {
 		cm.getColumn(3).setPreferredWidth(60);
 		cm.getColumn(3).setMaxWidth(80);
 
-		// Bold renderer for directories
+		// Renderer: bold for directories, green foreground for executables
 		table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
 			@Override
 			public java.awt.Component getTableCellRendererComponent(
@@ -144,6 +157,17 @@ public class FilePanel extends JPanel {
 				comp.setFont(entry.directory()
 						? comp.getFont().deriveFont(Font.BOLD)
 						: comp.getFont().deriveFont(Font.PLAIN));
+				// Apply executable color only when the row is not selected
+				// (selection highlight takes precedence for readability).
+				// Always set an explicit foreground — DefaultTableCellRenderer
+				// stores the last setForeground() call in `unselectedForeground`
+				// and reuses it on every subsequent non-selected row, so we must
+				// reset it here rather than leave it from a previous green row.
+				if (!isSelected) {
+					comp.setForeground(entry.executable() && !entry.directory()
+							? colors.executableAwtColor()
+							: tbl.getForeground());
+				}
 				return comp;
 			}
 		});
@@ -441,10 +465,13 @@ public class FilePanel extends JPanel {
 					EntryInfo info;
 					if (hasPosix) {
 						var attrs = Files.readAttributes(child, PosixFileAttributes.class);
+						boolean exec = !attrs.isDirectory()
+								&& attrs.permissions().contains(PosixFilePermission.OWNER_EXECUTE);
 						info = new EntryInfo(
 								child,
 								child.getFileName().toString(),
 								attrs.isDirectory(),
+								exec,
 								attrs.isDirectory() ? 0L : attrs.size(),
 								attrs.lastModifiedTime(),
 								attrs.owner().getName(),
@@ -452,10 +479,12 @@ public class FilePanel extends JPanel {
 								Map.of());
 					} else {
 						var attrs = Files.readAttributes(child, BasicFileAttributes.class);
+						boolean exec = !attrs.isDirectory() && hasWindowsExecutableExtension(child);
 						info = new EntryInfo(
 								child,
 								child.getFileName().toString(),
 								attrs.isDirectory(),
+								exec,
 								attrs.isDirectory() ? 0L : attrs.size(),
 								attrs.lastModifiedTime(),
 								null, null,
@@ -531,5 +560,18 @@ public class FilePanel extends JPanel {
 				return;
 			}
 		}
+	}
+
+	// ── Helpers ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Returns {@code true} if {@code path}'s extension is in the
+	 * {@link #WINDOWS_EXECUTABLE_EXTENSIONS} set (case-insensitive).
+	 * Used when the filesystem does not expose POSIX permissions.
+	 */
+	private static boolean hasWindowsExecutableExtension(Path path) {
+		String name = path.getFileName().toString();
+		int dot = name.lastIndexOf('.');
+		return dot >= 0 && WINDOWS_EXECUTABLE_EXTENSIONS.contains(name.substring(dot).toLowerCase());
 	}
 }

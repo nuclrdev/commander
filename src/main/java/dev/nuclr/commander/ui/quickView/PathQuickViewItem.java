@@ -56,4 +56,9 @@ public class PathQuickViewItem implements QuickViewItem {
 	public InputStream openStream() throws Exception {
 		return new BufferedInputStream(Files.newInputStream(path));
 	}
+
+	@Override
+	public Path path() {
+		return path;
+	}
 }

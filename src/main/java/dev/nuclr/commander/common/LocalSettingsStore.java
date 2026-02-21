@@ -169,7 +169,14 @@ public class LocalSettingsStore {
 			boolean maximized,
 			String lastOpenedPath,
 			Duration autosaveInterval,
-			int dividerLocation) {
+			int dividerLocation,
+			FilePanelColors colors) {
+
+		/** Normalises null-able fields so callers never need null-checks. */
+		public AppSettings {
+			if (colors == null) colors = FilePanelColors.defaults();
+		}
+
 		public static AppSettings defaults() {
 			return new AppSettings(
 					"dark",
@@ -180,7 +187,8 @@ public class LocalSettingsStore {
 					false,
 					null,
 					Duration.ofMinutes(2),
-					-1);
+					-1,
+					FilePanelColors.defaults());
 		}
 	}
 }

@@ -14,6 +14,8 @@ import java.util.Map;
  * @param path        canonical Path of this entry within its mounted filesystem
  * @param displayName name shown in the UI; use {@link #PARENT_ENTRY_NAME} for the ".." row
  * @param directory   {@code true} if this entry is a directory (or ZIP root etc.)
+ * @param executable  {@code true} if the file is executable (POSIX: owner-execute bit;
+ *                    Windows: recognised executable extension such as .exe/.bat/.cmd)
  * @param size        file size in bytes; 0 for directories or when unavailable
  * @param modified    last-modified timestamp; may be {@code null} for synthetic entries
  * @param owner       POSIX owner name; {@code null} when unsupported or unreadable
@@ -24,6 +26,7 @@ public record EntryInfo(
         Path path,
         String displayName,
         boolean directory,
+        boolean executable,
         long size,
         FileTime modified,
         String owner,
@@ -48,6 +51,7 @@ public record EntryInfo(
                 currentDir,
                 PARENT_ENTRY_NAME,
                 true,
+                false,
                 0L,
                 null,
                 null,
