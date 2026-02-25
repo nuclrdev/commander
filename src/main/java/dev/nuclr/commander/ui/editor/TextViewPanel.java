@@ -5,6 +5,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -50,31 +52,45 @@ public class TextViewPanel extends JPanel {
 	 * updates are dispatched to the EDT via {@link SwingUtilities#invokeLater}.
 	 */
 	public void setFile(File file) {
-		long myGen = generation.incrementAndGet();
+		setFile(file.toPath());
 		this.file = file;
+	}
 
-		if (file.length() > 10 * 1024 * 1024) { // 10 MB limit
-			log.warn("File is too large to display: {}", file.getAbsolutePath());
-			showMessage(file.getName(), "File is too large to display.", myGen);
+	/** Path-based overload — works with any NIO.2 filesystem, including ZIP archives. */
+	public void setFile(Path path) {
+		long myGen = generation.incrementAndGet();
+		Path fn = path.getFileName();
+		String name = fn != null ? fn.toString() : path.toString();
+
+		long size;
+		try {
+			size = Files.size(path);
+		} catch (Exception e) {
+			size = 0L;
+		}
+
+		if (size > 10 * 1024 * 1024) { // 10 MB limit
+			log.warn("File is too large to display: {}", path);
+			showMessage(name, "File is too large to display.", myGen);
 			return;
 		}
 
-		if (isBinary(file)) {
-			log.debug("Binary file, skipping text render: {}", file.getAbsolutePath());
-			showMessage(file.getName(), "Binary file — no viewer available.", myGen);
+		if (isBinary(path)) {
+			log.debug("Binary file, skipping text render: {}", path);
+			showMessage(name, "Binary file — no viewer available.", myGen);
 			return;
 		}
 
 		try {
-			var content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+			String content = Files.readString(path, StandardCharsets.UTF_8);
 			SwingUtilities.invokeLater(() -> {
 				if (generation.get() != myGen) return;
-				this.textArea.setText(file.getName(), content);
-				this.textArea.setEditable(false);
+				textArea.setText(name, content);
+				textArea.setEditable(false);
 			});
 		} catch (IOException e) {
-			log.error("Failed to read file: {}", file.getAbsolutePath(), e);
-			showMessage(file.getName(), "Error reading file: " + e.getMessage(), myGen);
+			log.error("Failed to read file: {}", path, e);
+			showMessage(name, "Error reading file: " + e.getMessage(), myGen);
 		}
 	}
 
@@ -87,14 +103,12 @@ public class TextViewPanel extends JPanel {
 	}
 
 	/**
-	 * Reads the first 8 KB of the file and returns true if a null byte is found.
+	 * Reads the first 8 KB and returns true if a null byte is found.
 	 * Null bytes are not valid in any text encoding and reliably indicate binary content.
 	 */
-	private static boolean isBinary(File file) {
-		int limit = (int) Math.min(file.length(), 8192);
-		if (limit == 0) return false;
-		byte[] buf = new byte[limit];
-		try (var in = new FileInputStream(file)) {
+	private static boolean isBinary(Path path) {
+		byte[] buf = new byte[8192];
+		try (var in = Files.newInputStream(path)) {
 			int read = in.read(buf);
 			for (int i = 0; i < read; i++) {
 				if (buf[i] == 0) return true;
@@ -103,6 +117,10 @@ public class TextViewPanel extends JPanel {
 			// If we can't read it, let the main read attempt fail with a proper error
 		}
 		return false;
+	}
+
+	private static boolean isBinary(File file) {
+		return isBinary(file.toPath());
 	}
 
 	public void focus() {
@@ -147,8 +165,9 @@ public class TextViewPanel extends JPanel {
 					"cmd",
 					"properties");
 
-	public static boolean isTextFile(File file) {
-		String name = file.getName();
+	public static boolean isTextFile(Path path) {
+		Path fn = path.getFileName();
+		String name = fn != null ? fn.toString() : "";
 		String ext = FilenameUtils.getExtension(name).toLowerCase();
 		// Dotfiles like ".gitignore" have no extension per FilenameUtils (dot at index 0),
 		// so treat the part after the leading dot as the extension.
@@ -156,6 +175,10 @@ public class TextViewPanel extends JPanel {
 			ext = name.substring(1).toLowerCase();
 		}
 		return SupportedExtensions.contains(ext);
+	}
+
+	public static boolean isTextFile(File file) {
+		return isTextFile(file.toPath());
 	}
 
 }

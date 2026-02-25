@@ -27,6 +27,7 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -46,6 +47,7 @@ import dev.nuclr.commander.event.ListViewFileOpen;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.vfs.EntryInfo;
 import dev.nuclr.commander.vfs.MountRegistry;
+import dev.nuclr.commander.vfs.Operation;
 import dev.nuclr.commander.vfs.ZipMountProvider;
 import lombok.extern.slf4j.Slf4j;
 
@@ -240,6 +242,16 @@ public class FilePanel extends JPanel {
 						eventPublisher.publishEvent(new ShowEditorScreenEvent(this, entry.path()));
 					}
 				}
+			}
+		});
+
+		// F7 — create new directory
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_F7, 0), "newFolder");
+		table.getActionMap().put("newFolder", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				createNewFolder();
 			}
 		});
 
@@ -594,6 +606,45 @@ public class FilePanel extends JPanel {
 				table.scrollRectToVisible(table.getCellRect(i, 0, true));
 				return;
 			}
+		}
+	}
+
+	// ── Folder creation (F7) ─────────────────────────────────────────────────
+
+	/**
+	 * Shows an input dialog for a new folder name and creates the directory.
+	 * Silently ignored when the current filesystem does not support
+	 * {@link Operation#CREATE_DIRECTORY} (e.g. inside a ZIP archive).
+	 */
+	private void createNewFolder() {
+		if (currentPath == null) return;
+		if (!mountRegistry.capabilitiesFor(currentPath).supports(Operation.CREATE_DIRECTORY)) return;
+
+		String name = JOptionPane.showInputDialog(
+				this,
+				"Folder name:",
+				"New Folder",
+				JOptionPane.PLAIN_MESSAGE);
+
+		if (name == null || name.isBlank()) return;
+		name = name.strip();
+
+		if (name.contains("/") || name.contains("\\")) {
+			JOptionPane.showMessageDialog(this,
+					"Folder name cannot contain path separators.",
+					"Invalid Name", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		Path newDir = currentPath.resolve(name);
+		try {
+			Files.createDirectory(newDir);
+			enterPath(currentPath, newDir);
+		} catch (IOException ex) {
+			log.warn("Cannot create directory {}: {}", newDir, ex.getMessage());
+			JOptionPane.showMessageDialog(this,
+					"Cannot create folder: " + ex.getMessage(),
+					"Error", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 

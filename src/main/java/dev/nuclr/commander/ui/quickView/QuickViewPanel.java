@@ -94,7 +94,7 @@ public class QuickViewPanel {
 			return;
 		}
 
-		if (TextViewPanel.isTextFile(path.toFile())) {
+		if (TextViewPanel.isTextFile(path)) {
 			cards.show(panel, CARD_LOADING);
 			panel.repaint();
 			currentLoadThread = Thread.ofVirtual().start(() -> loadTextView(path, myGen, cards));
@@ -201,7 +201,7 @@ public class QuickViewPanel {
 	 */
 	private void loadTextView(Path path, long myGen, CardLayout cards) {
 		if (isStale(myGen)) return;
-		textViewPanel.setFile(path.toFile());
+		textViewPanel.setFile(path);
 		if (!isStale(myGen)) {
 			SwingUtilities.invokeLater(() -> {
 				if (!isStale(myGen)) cards.show(panel, CARD_TEXT);
