@@ -9,7 +9,9 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -382,6 +384,25 @@ public class FilePanel extends JPanel {
 			Path parent = currentPath.getParent();
 			if (parent != null) {
 				enterPath(parent, currentPath);
+			} else {
+				// At the root of a non-local FS (e.g. ZIP archive) — navigate back
+				// to the local directory that contains the archive and re-select it.
+				// currentPath.toUri() for a ZIP root gives jar:file:///path/to/archive.zip!/
+				try {
+					URI zipUri = currentPath.toUri();
+					String ssp = zipUri.getSchemeSpecificPart(); // file:///path/to/archive.zip!/
+					int bang = ssp != null ? ssp.indexOf("!/") : -1;
+					if (bang >= 0) {
+						URI fileUri = URI.create(ssp.substring(0, bang));
+						Path archivePath = Path.of(fileUri);
+						Path archiveDir = archivePath.getParent();
+						if (archiveDir != null) {
+							enterPath(archiveDir, archivePath);
+						}
+					}
+				} catch (Exception ex) {
+					log.warn("Cannot navigate out of archive: {}", ex.getMessage());
+				}
 			}
 			return;
 		}
@@ -459,8 +480,9 @@ public class FilePanel extends JPanel {
 	private List<EntryInfo> listDirectory(Path dir) throws IOException {
 		var entries = new ArrayList<EntryInfo>();
 
-		// ".." entry — only when there is a parent to navigate to
-		if (dir.getParent() != null) {
+		// ".." entry — always shown inside non-local filesystems (e.g. ZIP archives)
+		// so the user can navigate back; on local FS only when a parent exists.
+		if (dir.getParent() != null || !dir.getFileSystem().equals(FileSystems.getDefault())) {
 			entries.add(EntryInfo.parentEntry(dir));
 		}
 
