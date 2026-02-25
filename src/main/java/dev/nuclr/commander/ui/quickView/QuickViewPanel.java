@@ -7,6 +7,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -48,8 +50,18 @@ public class QuickViewPanel {
 
 	private volatile Thread currentLoadThread;
 
+	/** Cancellation token handed to the in-flight plugin's open() call. */
+	private volatile AtomicBoolean currentCancelled;
+
 	/** The provider whose content is currently displayed (null if none). */
 	private volatile QuickViewProvider activeProvider;
+
+	/**
+	 * Monotonically increasing counter. Each call to show() increments it.
+	 * Loading threads capture their generation at start and abandon work if the
+	 * counter has moved on — meaning a newer show() superseded them.
+	 */
+	private final AtomicLong currentGeneration = new AtomicLong(0);
 
 	private static final String CARD_LOADING     = "Loading";
 	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
@@ -67,6 +79,9 @@ public class QuickViewPanel {
 	}
 
 	public void show(Path path) {
+		// Claim the slot before stopping the old thread so that any in-flight
+		// thread sees its generation is stale as soon as we increment.
+		long myGen = currentGeneration.incrementAndGet();
 		stop();
 
 		if (path == null) return;
@@ -79,15 +94,10 @@ public class QuickViewPanel {
 			return;
 		}
 
-		if (textViewPanel.isTextFile(path.toFile())) {
+		if (TextViewPanel.isTextFile(path.toFile())) {
 			cards.show(panel, CARD_LOADING);
 			panel.repaint();
-			currentLoadThread = Thread.ofVirtual().start(() -> {
-				textViewPanel.setFile(path.toFile());
-				if (!Thread.currentThread().isInterrupted()) {
-					SwingUtilities.invokeLater(() -> cards.show(panel, CARD_TEXT));
-				}
-			});
+			currentLoadThread = Thread.ofVirtual().start(() -> loadTextView(path, myGen, cards));
 			return;
 		}
 
@@ -95,9 +105,10 @@ public class QuickViewPanel {
 		var plugins = pluginRegistry.getQuickViewProvidersByItem(item);
 
 		if (plugins == null || plugins.isEmpty()) {
-			log.warn("No quick view providers for: {}", path);
-			noQuickViewAvailablePanel.setPath(path);
-			cards.show(panel, CARD_NO_PROVIDER);
+			log.warn("No quick view providers for: {}, falling back to text view", path);
+			cards.show(panel, CARD_LOADING);
+			panel.repaint();
+			currentLoadThread = Thread.ofVirtual().start(() -> loadTextView(path, myGen, cards));
 			return;
 		}
 
@@ -115,36 +126,55 @@ public class QuickViewPanel {
 		cards.show(panel, CARD_LOADING);
 		panel.repaint();
 
+		AtomicBoolean cancelled = new AtomicBoolean(false);
+		currentCancelled = cancelled;
+
 		currentLoadThread = Thread.ofVirtual().start(() -> {
 			for (var plugin : plugins) {
+				// Bail out before every expensive operation
+				if (isStale(myGen)) return;
+
 				long start = System.currentTimeMillis();
+				boolean success;
 				try {
-					boolean success = plugin.open(item);
+					success = plugin.open(item, cancelled);
 					log.info("Plugin [{}] open took {} ms", plugin.getPluginClass(),
 							System.currentTimeMillis() - start);
-					// Drop the result if stop() was called while we were opening
-					if (Thread.currentThread().isInterrupted()) return;
-					if (success) {
-						activeProvider = plugin;
-						String card = plugin.getPluginClass();
-						SwingUtilities.invokeLater(() -> cards.show(panel, card));
-						return;
-					}
 				} catch (Exception e) {
 					log.error("Error in plugin [{}]: {}", plugin.getPluginClass(), e.getMessage(), e);
+					continue;
+				}
+
+				// If superseded while plugin was opening, close what we just opened
+				if (isStale(myGen)) {
+					closeQuietly(plugin);
+					return;
+				}
+
+				if (success) {
+					activeProvider = plugin;
+					String card = plugin.getPluginClass();
+					SwingUtilities.invokeLater(() -> {
+						if (!isStale(myGen)) cards.show(panel, card);
+					});
+					return;
 				}
 			}
-			if (!Thread.currentThread().isInterrupted()) {
-				SwingUtilities.invokeLater(() -> {
-					noQuickViewAvailablePanel.setPath(path);
-					cards.show(panel, CARD_NO_PROVIDER);
-				});
-			}
+
+			// All plugins failed — fall back to text view
+			loadTextView(path, myGen, cards);
 		});
 	}
 
 	public void stop() {
 		folderQuickViewPanel.stopScan();
+		// Signal the in-flight plugin to abort before interrupting the thread,
+		// so the plugin can react even if it is not sensitive to thread interrupts.
+		AtomicBoolean c = currentCancelled;
+		if (c != null) {
+			c.set(true);
+			currentCancelled = null;
+		}
 		Thread t = currentLoadThread;
 		if (t != null) {
 			t.interrupt();
@@ -153,11 +183,37 @@ public class QuickViewPanel {
 		QuickViewProvider prev = activeProvider;
 		if (prev != null) {
 			activeProvider = null;
-			try {
-				prev.close();
-			} catch (Exception e) {
-				log.warn("Error closing provider [{}]: {}", prev.getPluginClass(), e.getMessage());
-			}
+			closeQuietly(prev);
+		}
+	}
+
+	// -------------------------------------------------------------------------
+
+	/** Returns true if myGen is no longer the current generation. */
+	private boolean isStale(long myGen) {
+		return currentGeneration.get() != myGen || Thread.currentThread().isInterrupted();
+	}
+
+	/**
+	 * Loads the current file into {@link TextViewPanel} and switches the card.
+	 * Safe to call from any thread; all Swing work is dispatched to the EDT.
+	 * Abandons silently if superseded before or after the I/O completes.
+	 */
+	private void loadTextView(Path path, long myGen, CardLayout cards) {
+		if (isStale(myGen)) return;
+		textViewPanel.setFile(path.toFile());
+		if (!isStale(myGen)) {
+			SwingUtilities.invokeLater(() -> {
+				if (!isStale(myGen)) cards.show(panel, CARD_TEXT);
+			});
+		}
+	}
+
+	private void closeQuietly(QuickViewProvider provider) {
+		try {
+			provider.close();
+		} catch (Exception e) {
+			log.warn("Error closing provider [{}]: {}", provider.getPluginClass(), e.getMessage());
 		}
 	}
 

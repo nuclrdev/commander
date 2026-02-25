@@ -6,7 +6,9 @@ import java.io.InputStream;
 import java.util.Map;
 
 import javax.swing.SwingUtilities;
+import javax.swing.text.BadLocationException;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.Theme;
@@ -103,15 +105,38 @@ public class Editor {
 	 * Applies syntax highlighting based on {@code filename}'s extension
 	 * and sets the editor content.
 	 *
+	 * <p>Each call replaces the underlying {@link RSyntaxDocument} entirely.
+	 * This is intentional: RSyntaxTextArea's {@code DefaultTokenFactory} pool
+	 * grows to accommodate the largest document ever tokenized and never shrinks.
+	 * Replacing the document lets the old pool be GC'd instead of accumulating
+	 * across every file the user navigates through. The text is inserted into the
+	 * new document <em>before</em> {@code setDocument()} attaches the undo manager,
+	 * so no undo records are created and {@code discardAllEdits()} is just a
+	 * safety net.
+	 *
 	 * @param filename file name (used only for extension detection, not for I/O)
 	 * @param text     file content to display
 	 */
 	public void setText(String filename, String text) {
 		String ext = FilenameUtils.getExtension(filename).toLowerCase();
-		this.textArea.setSyntaxEditingStyle(
-				EXTENSION_TO_SYNTAX.getOrDefault(ext, SyntaxConstants.SYNTAX_STYLE_NONE));
-		this.textArea.setText(text);
+		String style = EXTENSION_TO_SYNTAX.getOrDefault(ext, SyntaxConstants.SYNTAX_STYLE_NONE);
+
+		RSyntaxDocument newDoc = new RSyntaxDocument(style);
+		try {
+			newDoc.insertString(0, text, null);
+		} catch (BadLocationException e) {
+			log.error("Failed to build document for: {}", filename, e);
+			return;
+		}
+
+		// Swap in the fresh document. The old RSyntaxDocument (and its bloated
+		// DefaultTokenFactory pool) becomes unreachable and can be GC'd.
+		this.textArea.setDocument(newDoc);
+		// Keep RSyntaxTextArea's internal syntaxEditingStyle field in sync.
+		// setSyntaxEditingStyle() skips the re-parse if the style hasn't changed.
+		this.textArea.setSyntaxEditingStyle(style);
 		this.textArea.setCaretPosition(0);
+		this.textArea.discardAllEdits();
 	}
 
 	public void setEditable(boolean b) {
