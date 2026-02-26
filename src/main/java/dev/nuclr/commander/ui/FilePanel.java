@@ -1,6 +1,8 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Font;
 import java.awt.Point;
 import java.awt.event.ActionEvent;
@@ -27,7 +29,9 @@ import java.util.Map;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -663,10 +667,7 @@ public class FilePanel extends JPanel {
 		String name  = entry.displayName();
 
 		if (!entry.directory()) {
-			int confirm = JOptionPane.showConfirmDialog(this,
-					"Delete file '" + name + "'?",
-					"Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-			if (confirm != JOptionPane.YES_OPTION) return;
+			if (!confirmDelete("Delete file '" + name + "'?", "Delete")) return;
 			selectRowAfterLoad = viewRow;
 			Thread.ofVirtual().start(() -> performDelete(target, false));
 			return;
@@ -684,10 +685,7 @@ public class FilePanel extends JPanel {
 		}
 
 		if (empty) {
-			int confirm = JOptionPane.showConfirmDialog(this,
-					"Delete empty folder '" + name + "'?",
-					"Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-			if (confirm != JOptionPane.YES_OPTION) return;
+			if (!confirmDelete("Delete empty folder '" + name + "'?", "Delete")) return;
 			selectRowAfterLoad = viewRow;
 			Thread.ofVirtual().start(() -> performDelete(target, false));
 		} else {
@@ -700,12 +698,65 @@ public class FilePanel extends JPanel {
 			String msg = count >= 0
 					? "'" + name + "' contains " + count + " item(s).\nDelete folder and all its contents?"
 					: "'" + name + "' is not empty.\nDelete folder and all its contents?";
-			int confirm = JOptionPane.showConfirmDialog(this, msg,
-					"Delete Non-Empty Folder", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-			if (confirm != JOptionPane.YES_OPTION) return;
+			if (!confirmDelete(msg, "Delete Non-Empty Folder")) return;
 			selectRowAfterLoad = viewRow;
 			Thread.ofVirtual().start(() -> performDelete(target, true));
 		}
+	}
+
+	/**
+	 * Shows a Yes/No confirmation dialog with "No" as the default focused button.
+	 * Tab and Left/Right arrow keys navigate between buttons.
+	 *
+	 * @return {@code true} if the user explicitly chose "Yes"
+	 */
+	private boolean confirmDelete(String message, String title) {
+		Object[] options = {"Yes", "No"};
+		var pane = new JOptionPane(message,
+				JOptionPane.WARNING_MESSAGE,
+				JOptionPane.YES_NO_OPTION,
+				null,
+				options,
+				options[1]);   // "No" has initial focus
+
+		JDialog dialog = pane.createDialog(this, title);
+
+		// Bind Left/Right arrows on every button to cycle focus between buttons.
+		List<JButton> buttons = collectButtons(dialog);
+		for (int i = 0; i < buttons.size(); i++) {
+			JButton btn = buttons.get(i);
+			int prev = (i - 1 + buttons.size()) % buttons.size();
+			int next = (i + 1) % buttons.size();
+			btn.getInputMap(JComponent.WHEN_FOCUSED)
+					.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT,  0), "focusPrev");
+			btn.getInputMap(JComponent.WHEN_FOCUSED)
+					.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "focusNext");
+			btn.getActionMap().put("focusPrev",
+					new AbstractAction() { public void actionPerformed(ActionEvent e) { buttons.get(prev).requestFocusInWindow(); } });
+			btn.getActionMap().put("focusNext",
+					new AbstractAction() { public void actionPerformed(ActionEvent e) { buttons.get(next).requestFocusInWindow(); } });
+		}
+
+		dialog.setVisible(true);
+		dialog.dispose();
+
+		Object value = pane.getValue();
+		return value != null
+				&& value != JOptionPane.UNINITIALIZED_VALUE
+				&& value.equals(options[0]);   // "Yes"
+	}
+
+	/** Recursively collects all {@link JButton}s in a container, in traversal order. */
+	private static List<JButton> collectButtons(Container container) {
+		List<JButton> result = new ArrayList<>();
+		for (Component c : container.getComponents()) {
+			if (c instanceof JButton btn) {
+				result.add(btn);
+			} else if (c instanceof Container inner) {
+				result.addAll(collectButtons(inner));
+			}
+		}
+		return result;
 	}
 
 	/**

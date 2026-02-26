@@ -165,6 +165,12 @@ public class MainWindow {
 			@Override
 			public boolean dispatchKeyEvent(KeyEvent e) {
 
+				// Never intercept events when a dialog (e.g. a confirmation popup) is active.
+				// Returning false lets the dialog's own focus manager handle Tab, Enter, Escape, etc.
+				if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != mainFrame) {
+					return false;
+				}
+
 				// Ctrl+O — toggle console
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_O
