@@ -22,13 +22,24 @@ public record Capabilities(
     // ── Factory presets ────────────────────────────────────────────────────
 
     /**
-     * Read-only backend (ZIP archive, anonymous FTP, GCS without credentials).
+     * Strictly read-only backend (anonymous FTP, GCS without credentials, etc.).
      * Includes {@link Operation#LIST} because browsing directories is the minimum
      * useful capability — a backend that can't even list is not navigable.
      */
     public static Capabilities readOnly() {
         return new Capabilities(
                 EnumSet.of(Operation.LIST, Operation.READ),
+                false, false, false, false);
+    }
+
+    /**
+     * ZIP / JAR archive opened for browsing and in-memory modification.
+     * Deletions and new directories are held in memory by the NIO.2 ZIP
+     * filesystem and flushed to disk when the filesystem is closed.
+     */
+    public static Capabilities zipArchive() {
+        return new Capabilities(
+                EnumSet.of(Operation.LIST, Operation.READ, Operation.DELETE, Operation.CREATE_DIRECTORY),
                 false, false, false, false);
     }
 

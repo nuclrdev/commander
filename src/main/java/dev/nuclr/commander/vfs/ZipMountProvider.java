@@ -55,7 +55,7 @@ public class ZipMountProvider implements MountProvider {
                 archiveUri.toString(),
                 archiveUri,
                 fs,
-                Capabilities.readOnly());
+                Capabilities.zipArchive());
 
         cache.put(archiveUri, mounted);
         return mounted;

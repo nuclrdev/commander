@@ -11,9 +11,11 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileVisitResult;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
@@ -101,6 +103,13 @@ public class FilePanel extends JPanel {
 	 * be highlighted after the parent listing loads.
 	 */
 	private volatile Path selectAfterLoad;
+
+	/**
+	 * Row index to select after a refresh when no specific path is targeted
+	 * (e.g. after a deletion to stay at the same cursor position).
+	 * Reset to -1 after use.
+	 */
+	private volatile int selectRowAfterLoad = -1;
 
 	// ── Search popup ─────────────────────────────────────────────────────────
 
@@ -252,6 +261,16 @@ public class FilePanel extends JPanel {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				createNewFolder();
+			}
+		});
+
+		// F8 — delete selected entry
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_F8, 0), "deleteEntry");
+		table.getActionMap().put("deleteEntry", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				deleteSelected();
 			}
 		});
 
@@ -462,6 +481,8 @@ public class FilePanel extends JPanel {
 				var entries = listDirectory(dir);
 				final Path target = this.selectAfterLoad;
 				this.selectAfterLoad = null;
+				final int targetRow = this.selectRowAfterLoad;
+				this.selectRowAfterLoad = -1;
 
 				SwingUtilities.invokeLater(() -> {
 					model.setEntries(entries);
@@ -469,6 +490,10 @@ public class FilePanel extends JPanel {
 
 					if (target != null) {
 						selectInTable(target);
+					} else if (targetRow >= 0 && model.getRowCount() > 0) {
+						int row = Math.min(targetRow, model.getRowCount() - 1);
+						table.setRowSelectionInterval(row, row);
+						table.scrollRectToVisible(table.getCellRect(row, 0, true));
 					} else if (model.getRowCount() > 0) {
 						table.setRowSelectionInterval(0, 0);
 					}
@@ -606,6 +631,115 @@ public class FilePanel extends JPanel {
 				table.scrollRectToVisible(table.getCellRect(i, 0, true));
 				return;
 			}
+		}
+	}
+
+	// ── Deletion (F8) ────────────────────────────────────────────────────────
+
+	/**
+	 * Deletes the currently selected entry after user confirmation.
+	 *
+	 * <ul>
+	 *   <li>File → single "Delete file?" confirmation.
+	 *   <li>Empty directory → single "Delete folder?" confirmation.
+	 *   <li>Non-empty directory → stronger second confirmation showing the
+	 *       number of immediate children.
+	 * </ul>
+	 *
+	 * <p>Silently ignored when the current filesystem does not support
+	 * {@link Operation#DELETE} (e.g. a read-only remote mount).
+	 * Works transparently for ZIP archives via the NIO.2 ZIP filesystem.
+	 */
+	private void deleteSelected() {
+		if (currentPath == null) return;
+		if (!mountRegistry.capabilitiesFor(currentPath).supports(Operation.DELETE)) return;
+
+		int viewRow = table.getSelectedRow();
+		if (viewRow < 0) return;
+		var entry = model.getEntryAt(table.convertRowIndexToModel(viewRow));
+		if (entry.isParentEntry()) return;
+
+		Path target = entry.path();
+		String name  = entry.displayName();
+
+		if (!entry.directory()) {
+			int confirm = JOptionPane.showConfirmDialog(this,
+					"Delete file '" + name + "'?",
+					"Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (confirm != JOptionPane.YES_OPTION) return;
+			selectRowAfterLoad = viewRow;
+			Thread.ofVirtual().start(() -> performDelete(target, false));
+			return;
+		}
+
+		// Directory — check if empty using a single DirectoryStream peek
+		boolean empty;
+		try (var stream = Files.newDirectoryStream(target)) {
+			empty = !stream.iterator().hasNext();
+		} catch (IOException ex) {
+			JOptionPane.showMessageDialog(this,
+					"Cannot access folder: " + ex.getMessage(),
+					"Error", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+
+		if (empty) {
+			int confirm = JOptionPane.showConfirmDialog(this,
+					"Delete empty folder '" + name + "'?",
+					"Delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (confirm != JOptionPane.YES_OPTION) return;
+			selectRowAfterLoad = viewRow;
+			Thread.ofVirtual().start(() -> performDelete(target, false));
+		} else {
+			long count;
+			try (var stream = Files.list(target)) {
+				count = stream.count();
+			} catch (IOException ex) {
+				count = -1;
+			}
+			String msg = count >= 0
+					? "'" + name + "' contains " + count + " item(s).\nDelete folder and all its contents?"
+					: "'" + name + "' is not empty.\nDelete folder and all its contents?";
+			int confirm = JOptionPane.showConfirmDialog(this, msg,
+					"Delete Non-Empty Folder", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (confirm != JOptionPane.YES_OPTION) return;
+			selectRowAfterLoad = viewRow;
+			Thread.ofVirtual().start(() -> performDelete(target, true));
+		}
+	}
+
+	/**
+	 * Performs the actual deletion on a virtual thread (never called from EDT).
+	 * Refreshes the listing on completion; shows an error dialog on failure.
+	 *
+	 * @param target    path to delete
+	 * @param recursive if {@code true}, recursively deletes a non-empty directory
+	 */
+	private void performDelete(Path target, boolean recursive) {
+		try {
+			if (recursive) {
+				Files.walkFileTree(target, new SimpleFileVisitor<>() {
+					@Override
+					public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+						Files.delete(file);
+						return FileVisitResult.CONTINUE;
+					}
+					@Override
+					public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+						Files.delete(dir);
+						return FileVisitResult.CONTINUE;
+					}
+				});
+			} else {
+				Files.delete(target);
+			}
+			enterPath(currentPath, null);
+		} catch (IOException ex) {
+			log.warn("Cannot delete {}: {}", target, ex.getMessage());
+			SwingUtilities.invokeLater(() ->
+					JOptionPane.showMessageDialog(this,
+							"Cannot delete: " + ex.getMessage(),
+							"Error", JOptionPane.ERROR_MESSAGE));
 		}
 	}
 
