@@ -64,6 +64,9 @@ public class MainWindow {
 	private boolean quickViewActive;
 	private Component quickViewReplacedComponent;
 
+	/** Current divider position as a fraction (0.0–1.0) of the split-pane width. */
+	private double dividerRatio = 0.5;
+
 	@Autowired
 	private ConsolePanel consolePanel;
 
@@ -135,11 +138,18 @@ public class MainWindow {
 		mainSplitPane.setRightComponent(
 				new FilePanel(applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors));
 
-		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
-		mainSplitPane.setDividerLocation(savedSettings.dividerLocation() > 0 ? savedSettings.dividerLocation() : 512);
+		dividerRatio = savedSettings.dividerRatio();
 
-		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt ->
-				saveDividerLocation((int) evt.getNewValue()));
+		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
+
+		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+			int loc = (int) evt.getNewValue();
+			int paneWidth = mainSplitPane.getWidth();
+			if (paneWidth > 0) {
+				dividerRatio = Math.max(0.01, Math.min(0.99, loc / (double) paneWidth));
+				saveDividerRatio(dividerRatio);
+			}
+		});
 
 		// ── Menu bar ─────────────────────────────────────────────────────────
 		menuBar = new JMenuBar();
@@ -318,6 +328,7 @@ public class MainWindow {
 		mainFrame.setVisible(true);
 
 		SwingUtilities.invokeLater(() -> {
+			mainSplitPane.setDividerLocation(dividerRatio);
 			if (mainSplitPane.getLeftComponent() instanceof FilePanel fp) {
 				fp.focusFileTable();
 			}
@@ -423,16 +434,16 @@ public class MainWindow {
 		settingsStore.save(new LocalSettingsStore.AppSettings(
 				settings.theme(), width, height, x, y, isMaximized,
 				settings.lastOpenedPath(), settings.autosaveInterval(),
-				settings.dividerLocation(), settings.colors()));
+				dividerRatio, settings.colors()));
 	}
 
-	private void saveDividerLocation(int location) {
+	private void saveDividerRatio(double ratio) {
 		var settings = settingsStore.loadOrDefault();
 		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
 		settingsStore.save(new LocalSettingsStore.AppSettings(
 				settings.theme(), settings.windowWidth(), settings.windowHeight(),
 				settings.windowX(), settings.windowY(), isMaximized,
-				settings.lastOpenedPath(), settings.autosaveInterval(), location, settings.colors()));
+				settings.lastOpenedPath(), settings.autosaveInterval(), ratio, settings.colors()));
 	}
 
 	private void toggleFullscreen() {
@@ -441,5 +452,7 @@ public class MainWindow {
 		} else {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		}
+		// Reapply the relative divider position once layout settles after the state change.
+		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
 	}
 }

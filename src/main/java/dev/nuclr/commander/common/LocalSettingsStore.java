@@ -169,12 +169,13 @@ public class LocalSettingsStore {
 			boolean maximized,
 			String lastOpenedPath,
 			Duration autosaveInterval,
-			int dividerLocation,
+			double dividerRatio,       // 0.0–1.0 fraction of split-pane width
 			FilePanelColors colors) {
 
 		/** Normalises null-able fields so callers never need null-checks. */
 		public AppSettings {
 			if (colors == null) colors = FilePanelColors.defaults();
+			if (dividerRatio <= 0.0 || dividerRatio >= 1.0) dividerRatio = 0.5;
 		}
 
 		public static AppSettings defaults() {
@@ -187,7 +188,7 @@ public class LocalSettingsStore {
 					false,
 					null,
 					Duration.ofMinutes(2),
-					-1,
+					0.5,
 					FilePanelColors.defaults());
 		}
 	}
