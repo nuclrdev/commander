@@ -22,4 +22,8 @@ public class PluginManifest {
 	private PluginType type;
 	private List<String> quickViewProviders = new ArrayList<>();
 
+	private List<String> filePanelProviders = new ArrayList<>();
+
+	private List<String> archiveMountProviders = new ArrayList<>();
+
 }

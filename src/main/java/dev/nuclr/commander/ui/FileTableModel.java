@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Locale;
 
 import dev.nuclr.commander.common.FileUtils;
-import dev.nuclr.commander.vfs.EntryInfo;
+import dev.nuclr.plugin.panel.EntryInfo;
 
 /**
  * Swing table model for the file panel.

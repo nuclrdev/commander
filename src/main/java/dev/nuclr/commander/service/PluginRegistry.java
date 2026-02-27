@@ -22,13 +22,17 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import dev.nuclr.commander.panel.FilePanelProviderRegistry;
 import dev.nuclr.commander.plugin.PluginManifest;
 import dev.nuclr.commander.ui.common.Alerts;
+import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
 import dev.nuclr.plugin.NuclrPlugin;
 import dev.nuclr.plugin.PluginInfo;
 import dev.nuclr.plugin.QuickViewItem;
 import dev.nuclr.plugin.QuickViewProvider;
 import dev.nuclr.plugin.ViewProvider;
+import dev.nuclr.plugin.mount.ArchiveMountProvider;
+import dev.nuclr.plugin.panel.FilePanelProvider;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -37,6 +41,12 @@ public final class PluginRegistry {
 
 	@Autowired
 	private ObjectMapper objectMapper;
+
+	@Autowired
+	private FilePanelProviderRegistry filePanelProviderRegistry;
+
+	@Autowired
+	private ArchiveMountProviderRegistry archiveMountProviderRegistry;
 
 	private final List<NuclrPlugin> loadedPlugins = new ArrayList<>();
 	private final List<QuickViewProvider> quickViewProviders = new ArrayList<>();
@@ -131,6 +141,32 @@ public final class PluginRegistry {
 				} catch (Exception e) {
 					log.error("Failed to load QuickViewProvider [{}]: {}", className, e.getMessage(), e);
 					Alerts.showMessageDialog(null, "Failed to load QuickViewProvider [" + className + "]: " + e.getMessage(), "Plugin Load Error", JOptionPane.ERROR_MESSAGE);
+				}
+			}
+
+			// Load FilePanelProviders
+			for (var className : manifest.getFilePanelProviders()) {
+				try {
+					var clazz = classLoader.loadClass(className);
+					var provider = (FilePanelProvider) clazz.getDeclaredConstructor().newInstance();
+					filePanelProviderRegistry.registerProvider(provider);
+					log.info("Loaded FilePanelProvider: [{}]", className);
+				} catch (Exception e) {
+					log.error("Failed to load FilePanelProvider [{}]: {}", className, e.getMessage(), e);
+					Alerts.showMessageDialog(null, "Failed to load FilePanelProvider [" + className + "]: " + e.getMessage(), "Plugin Load Error", JOptionPane.ERROR_MESSAGE);
+				}
+			}
+
+			// Load ArchiveMountProviders
+			for (var className : manifest.getArchiveMountProviders()) {
+				try {
+					var clazz = classLoader.loadClass(className);
+					var provider = (ArchiveMountProvider) clazz.getDeclaredConstructor().newInstance();
+					archiveMountProviderRegistry.registerProvider(provider);
+					log.info("Loaded ArchiveMountProvider: [{}]", className);
+				} catch (Exception e) {
+					log.error("Failed to load ArchiveMountProvider [{}]: {}", className, e.getMessage(), e);
+					Alerts.showMessageDialog(null, "Failed to load ArchiveMountProvider [" + className + "]: " + e.getMessage(), "Plugin Load Error", JOptionPane.ERROR_MESSAGE);
 				}
 			}
 

@@ -6,6 +6,8 @@ import java.net.URI;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 
+import dev.nuclr.plugin.panel.Capabilities;
+
 /**
  * A live, mounted virtual filesystem with its associated metadata.
  *

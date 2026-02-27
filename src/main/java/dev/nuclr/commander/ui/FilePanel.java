@@ -51,10 +51,11 @@ import dev.nuclr.commander.common.FileUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.ListViewFileOpen;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
-import dev.nuclr.commander.vfs.EntryInfo;
+import dev.nuclr.commander.panel.FilePanelProviderRegistry;
+import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
 import dev.nuclr.commander.vfs.MountRegistry;
-import dev.nuclr.commander.vfs.Operation;
-import dev.nuclr.commander.vfs.ZipMountProvider;
+import dev.nuclr.plugin.panel.EntryInfo;
+import dev.nuclr.plugin.panel.Operation;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -83,7 +84,8 @@ public class FilePanel extends JPanel {
 
 	private final ApplicationEventPublisher eventPublisher;
 	private final MountRegistry mountRegistry;
-	private final ZipMountProvider zipMountProvider;
+	private final ArchiveMountProviderRegistry archiveMountProviderRegistry;
+	private final FilePanelProviderRegistry providerRegistry;
 	private final FilePanelColors colors;
 
 
@@ -126,12 +128,14 @@ public class FilePanel extends JPanel {
 	public FilePanel(
 			ApplicationEventPublisher eventPublisher,
 			MountRegistry mountRegistry,
-			ZipMountProvider zipMountProvider,
+			ArchiveMountProviderRegistry archiveMountProviderRegistry,
+			FilePanelProviderRegistry providerRegistry,
 			FilePanelColors colors) {
 
 		this.eventPublisher = eventPublisher;
 		this.mountRegistry = mountRegistry;
-		this.zipMountProvider = zipMountProvider;
+		this.archiveMountProviderRegistry = archiveMountProviderRegistry;
+		this.providerRegistry = providerRegistry;
 		this.colors = colors;
 
 		setLayout(new BorderLayout());
@@ -335,9 +339,9 @@ public class FilePanel extends JPanel {
 		});
 
 		// ── Initial navigation ───────────────────────────────────────────────
-		List<Path> roots = mountRegistry.listLocalRoots();
+		var roots = providerRegistry.listAllRoots();
 		if (!roots.isEmpty()) {
-			navigateTo(roots.get(0));
+			navigateTo(roots.get(0).path());
 		}
 	}
 
@@ -446,12 +450,13 @@ public class FilePanel extends JPanel {
 			log.info("Enter directory: {}", entry.path());
 			enterPath(entry.path(), null);
 		} else {
-			// Check if it's a ZIP/JAR archive — offer to browse inside
-			String name = entry.displayName().toLowerCase();
-			if (name.endsWith(".zip") || name.endsWith(".jar") || name.endsWith(".war") || name.endsWith(".ear")) {
+			// Check if any plugin-provided ArchiveMountProvider can handle this file
+			var archiveProvider = archiveMountProviderRegistry.findFor(entry.path());
+			if (archiveProvider.isPresent()) {
 				try {
-					Path archiveRoot = zipMountProvider.mountAndGetRoot(entry.path());
-					log.info("Entering ZIP archive: {}", entry.path());
+					Path archiveRoot = archiveProvider.get().mountAndGetRoot(entry.path());
+					mountRegistry.registerMount(archiveRoot.getFileSystem(), archiveProvider.get().capabilities());
+					log.info("Entering archive: {}", entry.path());
 					enterPath(archiveRoot, null);
 					return;
 				} catch (IOException ex) {

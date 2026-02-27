@@ -39,10 +39,11 @@ import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
+import dev.nuclr.commander.panel.FilePanelProviderRegistry;
 import dev.nuclr.commander.ui.editor.EditorScreen;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
+import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
 import dev.nuclr.commander.vfs.MountRegistry;
-import dev.nuclr.commander.vfs.ZipMountProvider;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -82,7 +83,10 @@ public class MainWindow {
 	private MountRegistry mountRegistry;
 
 	@Autowired
-	private ZipMountProvider zipMountProvider;
+	private ArchiveMountProviderRegistry archiveMountProviderRegistry;
+
+	@Autowired
+	private FilePanelProviderRegistry filePanelProviderRegistry;
 
 	@PostConstruct
 	public void init() {
@@ -127,9 +131,9 @@ public class MainWindow {
 
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 		mainSplitPane.setLeftComponent(
-				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider, colors));
+				new FilePanel(applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors));
 		mainSplitPane.setRightComponent(
-				new FilePanel(applicationEventPublisher, mountRegistry, zipMountProvider, colors));
+				new FilePanel(applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors));
 
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 		mainSplitPane.setDividerLocation(savedSettings.dividerLocation() > 0 ? savedSettings.dividerLocation() : 512);
@@ -218,7 +222,7 @@ public class MainWindow {
 						&& e.isAltDown()
 						&& mainSplitPane.isVisible()) {
 					if (mainSplitPane.getLeftComponent() instanceof FilePanel fp) {
-						ChangeDrivePopup.show(fp, mountRegistry);
+						ChangeDrivePopup.show(fp, filePanelProviderRegistry);
 					}
 					return true;
 				}
@@ -229,7 +233,7 @@ public class MainWindow {
 						&& e.isAltDown()
 						&& mainSplitPane.isVisible()) {
 					if (mainSplitPane.getRightComponent() instanceof FilePanel fp) {
-						ChangeDrivePopup.show(fp, mountRegistry);
+						ChangeDrivePopup.show(fp, filePanelProviderRegistry);
 					}
 					return true;
 				}

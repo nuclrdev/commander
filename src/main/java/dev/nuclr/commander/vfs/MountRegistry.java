@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import dev.nuclr.plugin.panel.Capabilities;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -141,6 +142,17 @@ public class MountRegistry {
     }
 
     // ── Convenience ───────────────────────────────────────────────────────────
+
+    /**
+     * Registers a filesystem that was mounted by a plugin-provided
+     * {@link dev.nuclr.plugin.mount.ArchiveMountProvider} so that
+     * {@link #capabilitiesFor(Path)} returns the correct capabilities.
+     * Idempotent — repeated calls with the same filesystem are no-ops.
+     */
+    public void registerMount(FileSystem fs, Capabilities capabilities) {
+        var mount = new MountedFs(fs.toString(), null, fs, capabilities);
+        mountsByFs.putIfAbsent(fs, mount);
+    }
 
     /**
      * Lists all root {@link Path} entries on the local (default) filesystem.

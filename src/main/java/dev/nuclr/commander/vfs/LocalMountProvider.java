@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 import dev.nuclr.commander.common.SystemUtils;
+import dev.nuclr.plugin.panel.Capabilities;
 
 /**
  * {@link MountProvider} for the local (default) filesystem.
