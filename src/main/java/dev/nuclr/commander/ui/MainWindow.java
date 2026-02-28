@@ -67,6 +67,9 @@ public class MainWindow {
 	/** Current divider position as a fraction (0.0–1.0) of the split-pane width. */
 	private double dividerRatio = 0.5;
 
+	/** Current UI font size in points. */
+	private int fontSize = LocalSettingsStore.DEFAULT_FONT_SIZE;
+
 	@Autowired
 	private ConsolePanel consolePanel;
 
@@ -96,10 +99,14 @@ public class MainWindow {
 
 		log.info("Initializing MainWindow");
 
-		System.setProperty("apple.laf.useScreenMenuBar", "true");
-		System.setProperty("apple.awt.application.name", "Nuclr Commander");
+		if (SystemUtils.isOsMac()) {
+			System.setProperty("apple.laf.useScreenMenuBar", "true");
+			System.setProperty("apple.awt.application.name", "Nuclr Commander");
+		}
 
-		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, 16));
+		var savedSettings = settingsStore.loadOrDefault();
+		fontSize = savedSettings.fontSize();
+		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
 
 		 FlatDarculaLaf.setup();
 		// FlatLightLaf.setup();
@@ -108,7 +115,6 @@ public class MainWindow {
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-		var savedSettings = settingsStore.loadOrDefault();
 		mainFrame.setSize(savedSettings.windowWidth(), savedSettings.windowHeight());
 		if (savedSettings.windowX() >= 0 && savedSettings.windowY() >= 0) {
 			mainFrame.setLocation(savedSettings.windowX(), savedSettings.windowY());
@@ -287,6 +293,36 @@ public class MainWindow {
 					return true;
 				}
 
+				// Ctrl+= or Ctrl+numpad+ — increase font size
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.isControlDown()
+						&& !e.isAltDown()
+						&& (e.getKeyCode() == KeyEvent.VK_EQUALS
+								|| e.getKeyCode() == KeyEvent.VK_PLUS
+								|| e.getKeyCode() == KeyEvent.VK_ADD)) {
+					applyFontSize(Math.min(fontSize + 1, 32));
+					return true;
+				}
+
+				// Ctrl+- or Ctrl+numpad- — decrease font size
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.isControlDown()
+						&& !e.isAltDown()
+						&& (e.getKeyCode() == KeyEvent.VK_MINUS
+								|| e.getKeyCode() == KeyEvent.VK_SUBTRACT)) {
+					applyFontSize(Math.max(fontSize - 1, 8));
+					return true;
+				}
+
+				// Ctrl+0 — reset font size to default
+				if (e.getID() == KeyEvent.KEY_PRESSED
+						&& e.isControlDown()
+						&& !e.isAltDown()
+						&& e.getKeyCode() == KeyEvent.VK_0) {
+					applyFontSize(LocalSettingsStore.DEFAULT_FONT_SIZE);
+					return true;
+				}
+
 				// Tab — switch focus between left and right panels
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_TAB
@@ -424,6 +460,13 @@ public class MainWindow {
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
+	private void applyFontSize(int size) {
+		fontSize = size;
+		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
+		SwingUtilities.updateComponentTreeUI(mainFrame);
+		saveFontSize(fontSize);
+	}
+
 	private void saveWindowState() {
 		var settings = settingsStore.loadOrDefault();
 		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
@@ -434,7 +477,7 @@ public class MainWindow {
 		settingsStore.save(new LocalSettingsStore.AppSettings(
 				settings.theme(), width, height, x, y, isMaximized,
 				settings.lastOpenedPath(), settings.autosaveInterval(),
-				dividerRatio, settings.colors()));
+				dividerRatio, settings.colors(), fontSize));
 	}
 
 	private void saveDividerRatio(double ratio) {
@@ -443,7 +486,18 @@ public class MainWindow {
 		settingsStore.save(new LocalSettingsStore.AppSettings(
 				settings.theme(), settings.windowWidth(), settings.windowHeight(),
 				settings.windowX(), settings.windowY(), isMaximized,
-				settings.lastOpenedPath(), settings.autosaveInterval(), ratio, settings.colors()));
+				settings.lastOpenedPath(), settings.autosaveInterval(),
+				ratio, settings.colors(), fontSize));
+	}
+
+	private void saveFontSize(int size) {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(), settings.windowWidth(), settings.windowHeight(),
+				settings.windowX(), settings.windowY(), isMaximized,
+				settings.lastOpenedPath(), settings.autosaveInterval(),
+				dividerRatio, settings.colors(), size));
 	}
 
 	private void toggleFullscreen() {

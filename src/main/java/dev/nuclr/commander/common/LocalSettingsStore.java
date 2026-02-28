@@ -160,6 +160,8 @@ public class LocalSettingsStore {
 
 	// ---------- Example settings DTO ----------
 
+	public static final int DEFAULT_FONT_SIZE = 13;
+
 	public record AppSettings(
 			String theme,              // e.g. "dark" / "light"
 			int windowWidth,
@@ -170,12 +172,14 @@ public class LocalSettingsStore {
 			String lastOpenedPath,
 			Duration autosaveInterval,
 			double dividerRatio,       // 0.0–1.0 fraction of split-pane width
-			FilePanelColors colors) {
+			FilePanelColors colors,
+			int fontSize) {
 
 		/** Normalises null-able fields so callers never need null-checks. */
 		public AppSettings {
 			if (colors == null) colors = FilePanelColors.defaults();
 			if (dividerRatio <= 0.0 || dividerRatio >= 1.0) dividerRatio = 0.5;
+			if (fontSize < 8 || fontSize > 32) fontSize = DEFAULT_FONT_SIZE;
 		}
 
 		public static AppSettings defaults() {
@@ -189,7 +193,8 @@ public class LocalSettingsStore {
 					null,
 					Duration.ofMinutes(2),
 					0.5,
-					FilePanelColors.defaults());
+					FilePanelColors.defaults(),
+					DEFAULT_FONT_SIZE);
 		}
 	}
 }
