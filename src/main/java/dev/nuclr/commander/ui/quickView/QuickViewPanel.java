@@ -20,7 +20,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.service.PluginRegistry;
-import dev.nuclr.commander.ui.editor.TextViewPanel;
 import dev.nuclr.plugin.QuickViewProvider;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
@@ -39,9 +38,6 @@ public class QuickViewPanel {
 
 	@Autowired
 	private FolderQuickViewPanel folderQuickViewPanel;
-
-	@Autowired
-	private TextViewPanel textViewPanel;
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
@@ -66,7 +62,6 @@ public class QuickViewPanel {
 	private static final String CARD_LOADING     = "Loading";
 	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
 	private static final String CARD_FOLDER      = "FolderQuickViewPanel";
-	private static final String CARD_TEXT        = "TextViewPanel";
 
 	@PostConstruct
 	public void init() {
@@ -74,7 +69,6 @@ public class QuickViewPanel {
 		this.panel = new JPanel(new CardLayout());
 		this.panel.add(noQuickViewAvailablePanel, CARD_NO_PROVIDER);
 		this.panel.add(folderQuickViewPanel, CARD_FOLDER);
-		this.panel.add(textViewPanel, CARD_TEXT);
 		this.panel.add(buildLoadingPanel(), CARD_LOADING);
 	}
 
@@ -94,21 +88,11 @@ public class QuickViewPanel {
 			return;
 		}
 
-		if (TextViewPanel.isTextFile(path)) {
-			cards.show(panel, CARD_LOADING);
-			panel.repaint();
-			currentLoadThread = Thread.ofVirtual().start(() -> loadTextView(path, myGen, cards));
-			return;
-		}
-
 		var item = new PathQuickViewItem(path);
 		var plugins = pluginRegistry.getQuickViewProvidersByItem(item);
 
 		if (plugins == null || plugins.isEmpty()) {
-			log.warn("No quick view providers for: {}, falling back to text view", path);
-			cards.show(panel, CARD_LOADING);
-			panel.repaint();
-			currentLoadThread = Thread.ofVirtual().start(() -> loadTextView(path, myGen, cards));
+			cards.show(panel, CARD_NO_PROVIDER);
 			return;
 		}
 
@@ -161,8 +145,10 @@ public class QuickViewPanel {
 				}
 			}
 
-			// All plugins failed — fall back to text view
-			loadTextView(path, myGen, cards);
+			// All plugins failed — nothing to show
+			SwingUtilities.invokeLater(() -> {
+				if (!isStale(myGen)) cards.show(panel, CARD_NO_PROVIDER);
+			});
 		});
 	}
 
@@ -192,21 +178,6 @@ public class QuickViewPanel {
 	/** Returns true if myGen is no longer the current generation. */
 	private boolean isStale(long myGen) {
 		return currentGeneration.get() != myGen || Thread.currentThread().isInterrupted();
-	}
-
-	/**
-	 * Loads the current file into {@link TextViewPanel} and switches the card.
-	 * Safe to call from any thread; all Swing work is dispatched to the EDT.
-	 * Abandons silently if superseded before or after the I/O completes.
-	 */
-	private void loadTextView(Path path, long myGen, CardLayout cards) {
-		if (isStale(myGen)) return;
-		textViewPanel.setFile(path);
-		if (!isStale(myGen)) {
-			SwingUtilities.invokeLater(() -> {
-				if (!isStale(myGen)) cards.show(panel, CARD_TEXT);
-			});
-		}
 	}
 
 	private void closeQuietly(QuickViewProvider provider) {
