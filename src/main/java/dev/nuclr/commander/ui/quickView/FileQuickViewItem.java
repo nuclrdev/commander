@@ -28,9 +28,10 @@ public class FileQuickViewItem implements QuickViewItem {
 
 	@Override
 	public String extension() {
-		return file.getName().contains(".")
-				? file.getName().substring(file.getName().lastIndexOf(".") + 1)
-				: "";
+		String name = file.getName();
+		return name.contains(".")
+				? name.substring(name.lastIndexOf(".") + 1)
+				: name;
 	}
 
 	@Override

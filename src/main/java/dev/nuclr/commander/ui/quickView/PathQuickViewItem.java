@@ -40,7 +40,10 @@ public class PathQuickViewItem implements QuickViewItem {
 	public String extension() {
 		String n = name();
 		int dot = n.lastIndexOf('.');
-		return dot >= 0 ? n.substring(dot + 1) : "";
+		if (dot >= 0) {
+			return n.substring(dot + 1);
+		}
+		return n;
 	}
 
 	@Override

@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -68,11 +69,26 @@ public final class PluginRegistry {
 	}
 
 	public List<QuickViewProvider> getQuickViewProvidersByItem(QuickViewItem item) {
-		return this
+		var matches = this
 				.getQuickViewProviders()
 				.stream()
 				.filter(p -> p.matches(item))
 				.sorted(Comparator.comparingInt(QuickViewProvider::priority)) // lower first
+				.toList();
+
+		if (!matches.isEmpty()) {
+			return matches;
+		}
+
+		if (!item.extension().isBlank() || !isLikelyText(item)) {
+			return matches;
+		}
+
+		return this
+				.getQuickViewProviders()
+				.stream()
+				.filter(p -> p.getClass().getSimpleName().equals("TextQuickViewProvider"))
+				.sorted(Comparator.comparingInt(QuickViewProvider::priority))
 				.toList();
 	}
 
@@ -233,6 +249,43 @@ public final class PluginRegistry {
 		}
 
 		return urls;
+	}
+
+	private boolean isLikelyText(QuickViewItem item) {
+		final int sampleSize = 4096;
+		byte[] buffer = new byte[sampleSize];
+
+		try (InputStream in = item.openStream()) {
+			int read = in.read(buffer);
+			if (read <= 0) {
+				return true;
+			}
+
+			int suspicious = 0;
+			for (int i = 0; i < read; i++) {
+				int b = buffer[i] & 0xFF;
+				if (b == 0) {
+					return false;
+				}
+				if (b < 0x20 && b != '\n' && b != '\r' && b != '\t' && b != '\f') {
+					suspicious++;
+				}
+			}
+
+			if (suspicious == 0) {
+				return true;
+			}
+
+			String sample = new String(buffer, 0, read, StandardCharsets.UTF_8);
+			if (sample.indexOf('\uFFFD') >= 0) {
+				return false;
+			}
+
+			return suspicious * 20 < read;
+		} catch (Exception e) {
+			log.debug("Failed to inspect quick-view item [{}]: {}", item.name(), e.getMessage());
+			return false;
+		}
 	}
 
 }
