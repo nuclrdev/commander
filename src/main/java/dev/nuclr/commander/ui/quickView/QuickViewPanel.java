@@ -84,7 +84,7 @@ public class QuickViewPanel {
 
 		if (Files.isDirectory(path)) {
 			folderQuickViewPanel.show(path);
-			cards.show(panel, CARD_FOLDER);
+			showCard(cards, CARD_FOLDER);
 			return;
 		}
 
@@ -92,7 +92,7 @@ public class QuickViewPanel {
 		var plugins = pluginRegistry.getQuickViewProvidersByItem(item);
 
 		if (plugins == null || plugins.isEmpty()) {
-			cards.show(panel, CARD_NO_PROVIDER);
+			showNoProvider(path, cards);
 			return;
 		}
 
@@ -107,8 +107,7 @@ public class QuickViewPanel {
 		}
 
 		// Show loading feedback immediately while the plugin opens the file
-		cards.show(panel, CARD_LOADING);
-		panel.repaint();
+		showCard(cards, CARD_LOADING);
 
 		AtomicBoolean cancelled = new AtomicBoolean(false);
 		currentCancelled = cancelled;
@@ -138,17 +137,13 @@ public class QuickViewPanel {
 				if (success) {
 					activeProvider = plugin;
 					String card = plugin.getPluginClass();
-					SwingUtilities.invokeLater(() -> {
-						if (!isStale(myGen)) cards.show(panel, card);
-					});
+					if (!isStale(myGen)) showCard(cards, card);
 					return;
 				}
 			}
 
 			// All plugins failed — nothing to show
-			SwingUtilities.invokeLater(() -> {
-				if (!isStale(myGen)) cards.show(panel, CARD_NO_PROVIDER);
-			});
+			if (!isStale(myGen)) showNoProvider(path, cards);
 		});
 	}
 
@@ -186,6 +181,27 @@ public class QuickViewPanel {
 		} catch (Exception e) {
 			log.warn("Error closing provider [{}]: {}", provider.getPluginClass(), e.getMessage());
 		}
+	}
+
+	private void showNoProvider(Path path, CardLayout cards) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			noQuickViewAvailablePanel.setPath(path);
+			showCard(cards, CARD_NO_PROVIDER);
+			return;
+		}
+
+		SwingUtilities.invokeLater(() -> showNoProvider(path, cards));
+	}
+
+	private void showCard(CardLayout cards, String card) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			cards.show(panel, card);
+			panel.revalidate();
+			panel.repaint();
+			return;
+		}
+
+		SwingUtilities.invokeLater(() -> showCard(cards, card));
 	}
 
 	private static JPanel buildLoadingPanel() {
