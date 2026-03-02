@@ -6,6 +6,8 @@ import java.awt.Container;
 import java.awt.Font;
 import java.awt.Point;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -94,6 +96,7 @@ public class FilePanel extends JPanel {
 	private final FileTableModel model;
 	private final JLabel topPathTextLabel;
 	private final JLabel bottomFileInfoTextLabel;
+	private String fullTopPathText = " ";
 
 	/**
 	 * Per filesystem-root: the last directory visited on that root.
@@ -208,6 +211,12 @@ public class FilePanel extends JPanel {
 		// ── Path label (top) ────────────────────────────────────────────────
 		topPathTextLabel = new JLabel(" ");
 		topPathTextLabel.setHorizontalAlignment(JLabel.CENTER);
+		topPathTextLabel.addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentResized(ComponentEvent e) {
+				updateTopPathLabel();
+			}
+		});
 		add(topPathTextLabel, BorderLayout.NORTH);
 
 		// ── Status bar (bottom) ─────────────────────────────────────────────
@@ -485,7 +494,7 @@ public class FilePanel extends JPanel {
 		this.selectAfterLoad = selectAfter;
 
 		// Update path label immediately for snappy feedback
-		SwingUtilities.invokeLater(() -> topPathTextLabel.setText(dir.toAbsolutePath().toString()));
+		SwingUtilities.invokeLater(() -> setTopPathText(buildDisplayPath(dir)));
 
 		Thread.ofVirtual().start(() -> {
 			try {
@@ -562,6 +571,88 @@ public class FilePanel extends JPanel {
 	}
 
 	private record NestedArchiveMount(Path archivePath, Path tempArchivePath) {
+	}
+
+	private void setTopPathText(String text) {
+		fullTopPathText = text != null ? text : " ";
+		updateTopPathLabel();
+	}
+
+	private void updateTopPathLabel() {
+		String text = ellipsizeLeft(fullTopPathText, topPathTextLabel);
+		topPathTextLabel.setText(text);
+		topPathTextLabel.setToolTipText(fullTopPathText);
+	}
+
+	private String ellipsizeLeft(String text, JLabel label) {
+		if (text == null || text.isEmpty()) {
+			return " ";
+		}
+
+		int width = label.getWidth();
+		if (width <= 0) {
+			return text;
+		}
+
+		var fm = label.getFontMetrics(label.getFont());
+		int available = Math.max(0, width - 8);
+		if (fm.stringWidth(text) <= available) {
+			return text;
+		}
+
+		String prefix = "...";
+		if (fm.stringWidth(prefix) >= available) {
+			return prefix;
+		}
+
+		for (int start = text.length() - 1; start >= 0; start--) {
+			String candidate = prefix + text.substring(start);
+			if (fm.stringWidth(candidate) <= available) {
+				return candidate;
+			}
+		}
+
+		return prefix;
+	}
+
+	private String buildDisplayPath(Path path) {
+		if (path.getFileSystem().equals(FileSystems.getDefault())) {
+			return path.toAbsolutePath().toString();
+		}
+
+		var nestedMount = nestedArchiveMounts.get(path.getFileSystem());
+		if (nestedMount != null) {
+			return buildArchiveDisplayPath(nestedMount.archivePath(), path);
+		}
+
+		URI uri = path.toUri();
+		String ssp = uri.getSchemeSpecificPart();
+		int bang = ssp != null ? ssp.indexOf("!/") : -1;
+		if (bang >= 0) {
+			try {
+				Path archivePath = Path.of(URI.create(ssp.substring(0, bang)));
+				return buildArchiveDisplayPath(archivePath, path);
+			} catch (Exception ex) {
+				log.debug("Cannot resolve archive display path for {}: {}", path, ex.getMessage());
+			}
+		}
+
+		return path.toString();
+	}
+
+	private String buildArchiveDisplayPath(Path archivePath, Path mountedPath) {
+		String base = buildDisplayPath(archivePath);
+		char separator = base.indexOf('\\') >= 0 ? '\\' : '/';
+		String entryPath = mountedPath.toString()
+				.replace('\\', separator)
+				.replace('/', separator);
+		if (entryPath.isEmpty()) {
+			entryPath = String.valueOf(separator);
+		}
+		if (entryPath.charAt(0) != separator) {
+			entryPath = separator + entryPath;
+		}
+		return base + entryPath;
 	}
 
 	/**

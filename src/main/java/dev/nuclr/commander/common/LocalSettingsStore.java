@@ -160,7 +160,7 @@ public class LocalSettingsStore {
 
 	// ---------- Example settings DTO ----------
 
-	public static final int DEFAULT_FONT_SIZE = 13;
+	public static final int DEFAULT_FONT_SIZE = 14;
 
 	public record AppSettings(
 			String theme,              // e.g. "dark" / "light"
