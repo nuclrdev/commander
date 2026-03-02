@@ -41,6 +41,7 @@ import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.panel.FilePanelProviderRegistry;
 import dev.nuclr.commander.ui.editor.EditorScreen;
+import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
 import dev.nuclr.commander.vfs.MountRegistry;
@@ -93,6 +94,9 @@ public class MainWindow {
 
 	@Autowired
 	private FilePanelProviderRegistry filePanelProviderRegistry;
+
+	@Autowired
+	private PluginManagementPopup pluginManagementPopup;
 
 	@PostConstruct
 	public void init() {
@@ -263,12 +267,20 @@ public class MainWindow {
 				}
 
 				// Alt+Enter — fullscreen
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_ENTER
-						&& e.isAltDown()) {
-					toggleFullscreen();
-					return true;
-				}
+					if (e.getID() == KeyEvent.KEY_PRESSED
+							&& e.getKeyCode() == KeyEvent.VK_F11
+							&& !e.isAltDown()
+							&& !e.isControlDown()) {
+						pluginManagementPopup.show(mainFrame);
+						return true;
+					}
+
+					if (e.getID() == KeyEvent.KEY_PRESSED
+							&& e.getKeyCode() == KeyEvent.VK_ENTER
+							&& e.isAltDown()) {
+						toggleFullscreen();
+						return true;
+					}
 
 				// Escape — close editor / console
 				if (e.getID() == KeyEvent.KEY_PRESSED

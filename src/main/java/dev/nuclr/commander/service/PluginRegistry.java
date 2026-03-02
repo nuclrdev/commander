@@ -96,6 +96,10 @@ public final class PluginRegistry {
 		return Collections.unmodifiableList(quickViewProviders);
 	}
 
+	public List<NuclrPlugin> getLoadedPlugins() {
+		return Collections.unmodifiableList(loadedPlugins);
+	}
+
 	public void removeViewProvider(ViewProvider provider) {
 		log.info("Removing ViewProvider: [{}]", provider.getClass().getName());
 		if (provider instanceof QuickViewProvider qvp) {
