@@ -280,7 +280,7 @@ public class MainWindow {
 							&& e.getKeyCode() <= KeyEvent.VK_F12) {
 						int functionKeyNumber = e.getKeyCode() - KeyEvent.VK_F1 + 1;
 						functionKeyBar.publish(functionKeyNumber);
-						return true;
+						return false;
 					}
 
 					if (e.getID() == KeyEvent.KEY_PRESSED
