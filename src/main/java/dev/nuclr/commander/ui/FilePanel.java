@@ -12,6 +12,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.FileSystem;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileSystems;
@@ -100,6 +101,7 @@ public class FilePanel extends JPanel {
 	 * Used to restore position when switching drives.
 	 */
 	private final Map<Path, Path> lastPathPerRoot = new HashMap<>();
+	private final Map<FileSystem, NestedArchiveMount> nestedArchiveMounts = new HashMap<>();
 
 	/** Currently displayed directory. Set on the EDT after a listing completes. */
 	private Path currentPath;
@@ -424,6 +426,17 @@ public class FilePanel extends JPanel {
 			if (parent != null) {
 				enterPath(parent, currentPath);
 			} else {
+				var nestedMount = nestedArchiveMounts.get(currentPath.getFileSystem());
+				if (nestedMount != null) {
+					Path archivePath = nestedMount.archivePath();
+					Path archiveDir = archivePath.getParent();
+					if (archiveDir == null) {
+						archiveDir = archivePath.getFileSystem().getPath("/");
+					}
+					enterPath(archiveDir, archivePath);
+					return;
+				}
+
 				// At the root of a non-local FS (e.g. ZIP archive) — navigate back
 				// to the local directory that contains the archive and re-select it.
 				// currentPath.toUri() for a ZIP root gives jar:file:///path/to/archive.zip!/
@@ -450,19 +463,8 @@ public class FilePanel extends JPanel {
 			log.info("Enter directory: {}", entry.path());
 			enterPath(entry.path(), null);
 		} else {
-			// Check if any plugin-provided ArchiveMountProvider can handle this file
-			var archiveProvider = archiveMountProviderRegistry.findFor(entry.path());
-			if (archiveProvider.isPresent()) {
-				try {
-					Path archiveRoot = archiveProvider.get().mountAndGetRoot(entry.path());
-					mountRegistry.registerMount(archiveRoot.getFileSystem(), archiveProvider.get().capabilities());
-					log.info("Entering archive: {}", entry.path());
-					enterPath(archiveRoot, null);
-					return;
-				} catch (IOException ex) {
-					log.warn("Cannot mount archive {}: {}", entry.path(), ex.getMessage());
-					// fall through to default open
-				}
+			if (tryEnterArchive(entry.path())) {
+				return;
 			}
 
 			log.info("Open file: {}", entry.path());
@@ -513,6 +515,53 @@ public class FilePanel extends JPanel {
 						bottomFileInfoTextLabel.setText("Error: " + ex.getMessage()));
 			}
 		});
+	}
+
+	private boolean tryEnterArchive(Path archivePath) {
+		var archiveProvider = archiveMountProviderRegistry.findFor(archivePath);
+		if (archiveProvider.isEmpty()) {
+			return false;
+		}
+
+		try {
+			Path mountSource = archivePath;
+			if (!archivePath.getFileSystem().equals(FileSystems.getDefault())) {
+				mountSource = materializeNestedArchive(archivePath);
+			}
+
+			Path archiveRoot = archiveProvider.get().mountAndGetRoot(mountSource);
+			mountRegistry.registerMount(archiveRoot.getFileSystem(), archiveProvider.get().capabilities());
+
+			if (!mountSource.equals(archivePath)) {
+				nestedArchiveMounts.put(archiveRoot.getFileSystem(), new NestedArchiveMount(archivePath, mountSource));
+			}
+
+			log.info("Entering archive: {}", archivePath);
+			enterPath(archiveRoot, null);
+			return true;
+		} catch (IOException ex) {
+			log.warn("Cannot mount archive {}: {}", archivePath, ex.getMessage());
+			return false;
+		}
+	}
+
+	private Path materializeNestedArchive(Path archivePath) throws IOException {
+		String filename = archivePath.getFileName() != null
+				? archivePath.getFileName().toString()
+				: "archive.zip";
+		String suffix = ".zip";
+		int dot = filename.lastIndexOf('.');
+		if (dot >= 0 && dot < filename.length() - 1) {
+			suffix = filename.substring(dot);
+		}
+
+		Path tempArchive = Files.createTempFile("nuclr-nested-archive-", suffix);
+		Files.copy(archivePath, tempArchive, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+		tempArchive.toFile().deleteOnExit();
+		return tempArchive;
+	}
+
+	private record NestedArchiveMount(Path archivePath, Path tempArchivePath) {
 	}
 
 	/**
