@@ -579,40 +579,21 @@ public class FilePanel extends JPanel {
 	}
 
 	private void updateTopPathLabel() {
-		String text = ellipsizeLeft(fullTopPathText, topPathTextLabel);
+		String text = truncateTopPath(fullTopPathText);
 		topPathTextLabel.setText(text);
 		topPathTextLabel.setToolTipText(fullTopPathText);
 	}
 
-	private String ellipsizeLeft(String text, JLabel label) {
+	private String truncateTopPath(String text) {
 		if (text == null || text.isEmpty()) {
 			return " ";
 		}
 
-		int width = label.getWidth();
-		if (width <= 0) {
+		if (text.length() <= 32) {
 			return text;
 		}
 
-		var fm = label.getFontMetrics(label.getFont());
-		int available = Math.max(0, width - 8);
-		if (fm.stringWidth(text) <= available) {
-			return text;
-		}
-
-		String prefix = "...";
-		if (fm.stringWidth(prefix) >= available) {
-			return prefix;
-		}
-
-		for (int start = text.length() - 1; start >= 0; start--) {
-			String candidate = prefix + text.substring(start);
-			if (fm.stringWidth(candidate) <= available) {
-				return candidate;
-			}
-		}
-
-		return prefix;
+		return "..." + text.substring(text.length() - 32);
 	}
 
 	private String buildDisplayPath(Path path) {
