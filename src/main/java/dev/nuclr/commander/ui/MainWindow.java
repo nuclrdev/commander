@@ -35,12 +35,14 @@ import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.event.FileSelectedEvent;
+import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.panel.FilePanelProviderRegistry;
 import dev.nuclr.commander.ui.editor.EditorScreen;
+import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
@@ -98,6 +100,9 @@ public class MainWindow {
 	@Autowired
 	private PluginManagementPopup pluginManagementPopup;
 
+	@Autowired
+	private FunctionKeyBar functionKeyBar;
+
 	@PostConstruct
 	public void init() {
 
@@ -151,6 +156,7 @@ public class MainWindow {
 		dividerRatio = savedSettings.dividerRatio();
 
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
+		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
 
 		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
 			int loc = (int) evt.getNewValue();
@@ -268,10 +274,12 @@ public class MainWindow {
 
 				// Alt+Enter — fullscreen
 					if (e.getID() == KeyEvent.KEY_PRESSED
-							&& e.getKeyCode() == KeyEvent.VK_F11
 							&& !e.isAltDown()
-							&& !e.isControlDown()) {
-						pluginManagementPopup.show(mainFrame);
+							&& !e.isControlDown()
+							&& e.getKeyCode() >= KeyEvent.VK_F1
+							&& e.getKeyCode() <= KeyEvent.VK_F12) {
+						int functionKeyNumber = e.getKeyCode() - KeyEvent.VK_F1 + 1;
+						functionKeyBar.publish(functionKeyNumber);
 						return true;
 					}
 
@@ -468,6 +476,13 @@ public class MainWindow {
 		}
 		mainFrame.revalidate();
 		mainFrame.repaint();
+	}
+
+	@EventListener
+	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
+		if (event.getFunctionKeyNumber() == 11) {
+			pluginManagementPopup.show(mainFrame);
+		}
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
