@@ -41,6 +41,7 @@ import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.panel.FilePanelProviderRegistry;
+import dev.nuclr.commander.ui.copy.CopyCommandHandler;
 import dev.nuclr.commander.ui.editor.EditorScreen;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
@@ -105,6 +106,9 @@ public class MainWindow {
 
 	@Autowired
 	private FunctionKeyBar functionKeyBar;
+
+	@Autowired
+	private CopyCommandHandler copyCommandHandler;
 
 	@PostConstruct
 	public void init() {
@@ -489,6 +493,13 @@ public class MainWindow {
 
 	@EventListener
 	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
+		if (event.getFunctionKeyNumber() == 5) {
+			FilePanel sourcePanel = getFocusedVisibleFilePanel();
+			FilePanel targetPanel = getOppositeVisibleFilePanel(sourcePanel);
+			copyCommandHandler.copyBetween(sourcePanel, targetPanel, mainFrame);
+			return;
+		}
+
 		if (event.getFunctionKeyNumber() == 11) {
 			pluginManagementPopup.show(mainFrame);
 		}
@@ -534,6 +545,47 @@ public class MainWindow {
 				settings.windowX(), settings.windowY(), isMaximized,
 				settings.lastOpenedPath(), settings.autosaveInterval(),
 				dividerRatio, settings.colors(), size));
+	}
+
+	private FilePanel getFocusedVisibleFilePanel() {
+		var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		FilePanel leftVisible = getVisibleFilePanel(true);
+		FilePanel rightVisible = getVisibleFilePanel(false);
+
+		if (rightVisible != null
+				&& focusOwner != null
+				&& SwingUtilities.isDescendingFrom(focusOwner, rightVisible)) {
+			return rightVisible;
+		}
+		if (leftVisible != null
+				&& focusOwner != null
+				&& SwingUtilities.isDescendingFrom(focusOwner, leftVisible)) {
+			return leftVisible;
+		}
+		if (leftVisible != null) {
+			return leftVisible;
+		}
+		return rightVisible;
+	}
+
+	private FilePanel getOppositeVisibleFilePanel(FilePanel sourcePanel) {
+		FilePanel leftVisible = getVisibleFilePanel(true);
+		FilePanel rightVisible = getVisibleFilePanel(false);
+		if (sourcePanel == null) {
+			return null;
+		}
+		if (sourcePanel == leftVisible) {
+			return rightVisible;
+		}
+		if (sourcePanel == rightVisible) {
+			return leftVisible;
+		}
+		return null;
+	}
+
+	private FilePanel getVisibleFilePanel(boolean leftSide) {
+		Component current = leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent();
+		return current instanceof FilePanel fp ? fp : null;
 	}
 
 	private void ensureFilePanelVisible(boolean leftSide) {

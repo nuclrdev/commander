@@ -44,6 +44,7 @@ import javax.swing.KeyStroke;
 import javax.swing.Popup;
 import javax.swing.PopupFactory;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.table.DefaultTableCellRenderer;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -146,11 +147,12 @@ public class FilePanel extends JPanel {
 		setLayout(new BorderLayout());
 
 		// ── Table ───────────────────────────────────────────────────────────
-		model = new FileTableModel();
-		table = new JTable(model);
-		table.setFillsViewportHeight(true);
-		table.getTableHeader().setReorderingAllowed(false);
-		table.setRowHeight(table.getRowHeight() + 4);
+			model = new FileTableModel();
+			table = new JTable(model);
+			table.setFillsViewportHeight(true);
+			table.getTableHeader().setReorderingAllowed(false);
+			table.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+			table.setRowHeight(table.getRowHeight() + 4);
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
 		table.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 		table.setShowVerticalLines(true);
@@ -411,9 +413,45 @@ public class FilePanel extends JPanel {
 		return entry.isParentEntry() ? null : entry.path();
 	}
 
+	public List<Path> getSelectedPaths() {
+		int[] rows = table.getSelectedRows();
+		var paths = new ArrayList<Path>();
+		for (int row : rows) {
+			var entry = model.getEntryAt(table.convertRowIndexToModel(row));
+			if (!entry.isParentEntry()) {
+				paths.add(entry.path());
+			}
+		}
+		return paths;
+	}
+
 	/** Requests keyboard focus on the file table. */
 	public void focusFileTable() {
 		table.requestFocusInWindow();
+	}
+
+	public void refresh() {
+		if (currentPath != null) {
+			enterPath(currentPath, null);
+		}
+	}
+
+	public boolean canAcceptCopies() {
+		if (currentPath == null) {
+			return false;
+		}
+		var capabilities = mountRegistry.capabilitiesFor(currentPath);
+		return capabilities.supports(Operation.COPY)
+				|| capabilities.supports(Operation.WRITE)
+				|| capabilities.supports(Operation.CREATE_DIRECTORY)
+				|| capabilities.supports(Operation.DELETE);
+	}
+
+	public void showTransientMessage(String message) {
+		bottomFileInfoTextLabel.setText(message);
+		Timer timer = new Timer(1800, e -> bottomFileInfoTextLabel.setText(" "));
+		timer.setRepeats(false);
+		timer.start();
 	}
 
 	// ── Internal navigation ───────────────────────────────────────────────────
