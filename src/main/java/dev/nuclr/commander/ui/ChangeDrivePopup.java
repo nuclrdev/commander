@@ -1,5 +1,6 @@
 package dev.nuclr.commander.ui;
 
+import java.awt.Component;
 import java.nio.file.Path;
 
 import javax.swing.JMenuItem;
@@ -21,6 +22,18 @@ import dev.nuclr.plugin.panel.PanelRoot;
 public class ChangeDrivePopup {
 
     public static void show(FilePanel targetPanel, FilePanelProviderRegistry providerRegistry) {
+        show(targetPanel, targetPanel, providerRegistry, null);
+    }
+
+    public static void show(FilePanel targetPanel, Component anchorComponent, FilePanelProviderRegistry providerRegistry) {
+        show(targetPanel, anchorComponent, providerRegistry, null);
+    }
+
+    public static void show(
+            FilePanel targetPanel,
+            Component anchorComponent,
+            FilePanelProviderRegistry providerRegistry,
+            Runnable beforeNavigate) {
         JPopupMenu popup = new JPopupMenu("Change Drive");
 
         Path currentRoot = targetPanel.getCurrentRoot();
@@ -29,7 +42,12 @@ public class ChangeDrivePopup {
         for (PanelRoot root : providerRegistry.listAllRoots()) {
             String label = root.displayName();
             JMenuItem item = new JMenuItem(label);
-            item.addActionListener(e -> targetPanel.navigateTo(root.path()));
+            item.addActionListener(e -> {
+                if (beforeNavigate != null) {
+                    beforeNavigate.run();
+                }
+                targetPanel.navigateTo(root.path());
+            });
             if (!label.isEmpty()) {
                 item.setMnemonic(Character.toUpperCase(label.charAt(0)));
             }
@@ -39,7 +57,15 @@ public class ChangeDrivePopup {
             }
         }
 
-        popup.show(targetPanel, targetPanel.getWidth() / 2, 0);
+        Component anchor = anchorComponent != null ? anchorComponent : targetPanel;
+        if (!anchor.isShowing()) {
+            anchor = targetPanel.isShowing() ? targetPanel : null;
+        }
+        if (anchor == null || !anchor.isShowing()) {
+            return;
+        }
+
+        popup.show(anchor, Math.max(anchor.getWidth() / 2, 0), 0);
 
         if (currentItem != null) {
             final JMenuItem itemToSelect = currentItem;

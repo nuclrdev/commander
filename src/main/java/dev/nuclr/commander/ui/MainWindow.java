@@ -60,6 +60,9 @@ public class MainWindow {
 
 	private JSplitPane mainSplitPane;
 
+	private FilePanel leftFilePanel;
+	private FilePanel rightFilePanel;
+
 	private Component lastFocusedInSplitPane;
 
 	private EditorScreen editorScreen;
@@ -148,10 +151,12 @@ public class MainWindow {
 		var colors = savedSettings.colors();
 
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-		mainSplitPane.setLeftComponent(
-				new FilePanel(applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors));
-		mainSplitPane.setRightComponent(
-				new FilePanel(applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors));
+		leftFilePanel = new FilePanel(
+				applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors);
+		rightFilePanel = new FilePanel(
+				applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors);
+		mainSplitPane.setLeftComponent(leftFilePanel);
+		mainSplitPane.setRightComponent(rightFilePanel);
 
 		dividerRatio = savedSettings.dividerRatio();
 
@@ -243,26 +248,30 @@ public class MainWindow {
 				}
 
 				// Alt+F1 — change drive on left panel
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_F1
-						&& e.isAltDown()
-						&& mainSplitPane.isVisible()) {
-					if (mainSplitPane.getLeftComponent() instanceof FilePanel fp) {
-						ChangeDrivePopup.show(fp, filePanelProviderRegistry);
+					if (e.getID() == KeyEvent.KEY_PRESSED
+							&& e.getKeyCode() == KeyEvent.VK_F1
+							&& e.isAltDown()
+							&& mainSplitPane.isVisible()) {
+						ChangeDrivePopup.show(
+								leftFilePanel,
+								mainSplitPane.getLeftComponent(),
+								filePanelProviderRegistry,
+								() -> ensureFilePanelVisible(true));
+						return true;
 					}
-					return true;
-				}
 
 				// Alt+F2 — change drive on right panel
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_F2
-						&& e.isAltDown()
-						&& mainSplitPane.isVisible()) {
-					if (mainSplitPane.getRightComponent() instanceof FilePanel fp) {
-						ChangeDrivePopup.show(fp, filePanelProviderRegistry);
+					if (e.getID() == KeyEvent.KEY_PRESSED
+							&& e.getKeyCode() == KeyEvent.VK_F2
+							&& e.isAltDown()
+							&& mainSplitPane.isVisible()) {
+						ChangeDrivePopup.show(
+								rightFilePanel,
+								mainSplitPane.getRightComponent(),
+								filePanelProviderRegistry,
+								() -> ensureFilePanelVisible(false));
+						return true;
 					}
-					return true;
-				}
 
 				// Alt+F4 — exit
 				if (e.getID() == KeyEvent.KEY_PRESSED
@@ -525,6 +534,30 @@ public class MainWindow {
 				settings.windowX(), settings.windowY(), isMaximized,
 				settings.lastOpenedPath(), settings.autosaveInterval(),
 				dividerRatio, settings.colors(), size));
+	}
+
+	private void ensureFilePanelVisible(boolean leftSide) {
+		Component current = leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent();
+		FilePanel target = leftSide ? leftFilePanel : rightFilePanel;
+		if (current == target) {
+			return;
+		}
+
+		boolean replacingQuickView = current == quickViewPanel.getPanel();
+		if (leftSide) {
+			mainSplitPane.setLeftComponent(target);
+		} else {
+			mainSplitPane.setRightComponent(target);
+		}
+
+		if (replacingQuickView) {
+			quickViewPanel.stop();
+			quickViewActive = false;
+			quickViewReplacedComponent = null;
+		}
+
+		mainFrame.revalidate();
+		mainFrame.repaint();
 	}
 
 	private void toggleFullscreen() {
