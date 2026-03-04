@@ -1,6 +1,7 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
 import java.awt.Image;
@@ -34,6 +35,7 @@ import com.formdev.flatlaf.FlatLightLaf;
 import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
+import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.commander.event.QuickViewEvent;
@@ -93,6 +95,9 @@ public class MainWindow {
 	private LocalSettingsStore settingsStore;
 
 	@Autowired
+	private ThemeSchemeStore themeSchemeStore;
+
+	@Autowired
 	private MountRegistry mountRegistry;
 
 	@Autowired
@@ -122,9 +127,9 @@ public class MainWindow {
 
 		var savedSettings = settingsStore.loadOrDefault();
 		fontSize = savedSettings.fontSize();
+		FlatDarculaLaf.setup();
+		applyThemeScheme();
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
-
-		 FlatDarculaLaf.setup();
 		// FlatLightLaf.setup();
 //		FlatIntelliJLaf.setup();
 
@@ -620,5 +625,16 @@ public class MainWindow {
 		}
 		// Reapply the relative divider position once layout settles after the state change.
 		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
+	}
+
+	private void applyThemeScheme() {
+		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
+		for (var entry : scheme.uiDefaults().entrySet()) {
+			try {
+				UIManager.put(entry.getKey(), Color.decode(entry.getValue()));
+			} catch (Exception ex) {
+				log.warn("Invalid theme color for {}: {}", entry.getKey(), entry.getValue());
+			}
+		}
 	}
 }
