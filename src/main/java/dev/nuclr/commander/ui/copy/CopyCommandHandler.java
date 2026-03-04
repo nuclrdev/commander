@@ -5,6 +5,7 @@ import java.awt.Frame;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -18,7 +19,9 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -467,13 +470,20 @@ public class CopyCommandHandler {
 		private final AtomicBoolean cancelled = new AtomicBoolean(false);
 		private final JDialog dialog;
 		private final JLabel label;
+		private final JLabel elapsedLabel;
 		private final JProgressBar progressBar;
+		private final long startTimeMillis;
+		private final Timer timer;
 
 		private ProgressDialog(Frame owner, int maximum) {
 			dialog = new JDialog(owner, "Copying", false);
 			label = new JLabel("Preparing copy...");
+			elapsedLabel = new JLabel("Elapsed: 00:00");
+			elapsedLabel.setHorizontalAlignment(SwingConstants.LEFT);
 			progressBar = new JProgressBar(0, Math.max(maximum, 1));
 			progressBar.setStringPainted(true);
+			startTimeMillis = System.currentTimeMillis();
+			timer = new Timer(1000, e -> elapsedLabel.setText("Elapsed: " + formatElapsed()));
 
 			JButton cancelButton = new JButton("Cancel");
 			cancelButton.addActionListener(e -> cancelled.set(true));
@@ -481,9 +491,13 @@ public class CopyCommandHandler {
 			JPanel content = new JPanel(new BorderLayout(0, 8));
 			content.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
 			content.add(label, BorderLayout.NORTH);
-			content.add(progressBar, BorderLayout.CENTER);
+			JPanel center = new JPanel(new BorderLayout(0, 6));
+			center.add(progressBar, BorderLayout.NORTH);
+			center.add(elapsedLabel, BorderLayout.SOUTH);
+			content.add(center, BorderLayout.CENTER);
 			content.add(Box.createVerticalStrut(4), BorderLayout.WEST);
 			content.add(cancelButton, BorderLayout.SOUTH);
+			content.setPreferredSize(new java.awt.Dimension(620, 190));
 
 			dialog.setContentPane(content);
 			dialog.pack();
@@ -491,7 +505,10 @@ public class CopyCommandHandler {
 		}
 
 		private void show() {
-			SwingUtilities.invokeLater(() -> dialog.setVisible(true));
+			SwingUtilities.invokeLater(() -> {
+				timer.start();
+				dialog.setVisible(true);
+			});
 		}
 
 		private void setCurrentItem(String item) {
@@ -503,11 +520,25 @@ public class CopyCommandHandler {
 		}
 
 		private void close() {
-			SwingUtilities.invokeLater(() -> dialog.dispose());
+			SwingUtilities.invokeLater(() -> {
+				timer.stop();
+				dialog.dispose();
+			});
 		}
 
 		private AtomicBoolean cancelled() {
 			return cancelled;
+		}
+
+		private String formatElapsed() {
+			Duration duration = Duration.ofMillis(System.currentTimeMillis() - startTimeMillis);
+			long hours = duration.toHours();
+			long minutes = duration.toMinutesPart();
+			long seconds = duration.toSecondsPart();
+			if (hours > 0) {
+				return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+			}
+			return String.format("%02d:%02d", minutes, seconds);
 		}
 	}
 
