@@ -46,6 +46,9 @@ public record ThemeSchemesConfig(
 								Map.entry("Table.selectionBackground", "#d8c35a"),
 								Map.entry("Table.selectionForeground", "#091f3a"),
 								Map.entry("Table.gridColor", "#1f4a7a"),
+								Map.entry("TableHeader.background", "#123a6a"),
+								Map.entry("TableHeader.foreground", "#e8f1ff"),
+								Map.entry("TableHeader.separatorColor", "#1f4a7a"),
 								Map.entry("Label.foreground", "#d7e8ff"),
 								Map.entry("Button.background", "#184a86"),
 								Map.entry("Button.foreground", "#e8f1ff"),
@@ -63,9 +66,14 @@ public record ThemeSchemesConfig(
 								Map.entry("ProgressBar.foreground", "#d8c35a"),
 								Map.entry("ProgressBar.selectionBackground", "#091f3a"),
 								Map.entry("ProgressBar.selectionForeground", "#d8c35a"),
-							Map.entry("Component.focusColor", "#d8c35a"),
-							Map.entry("Component.linkColor", "#8dc6ff")
-					))
-			);
+								Map.entry("Component.focusColor", "#d8c35a"),
+								Map.entry("Component.linkColor", "#8dc6ff"),
+								Map.entry("TitlePane.background", "#123a6a"),
+								Map.entry("TitlePane.foreground", "#e8f1ff"),
+								Map.entry("TitlePane.inactiveBackground", "#0f2f54"),
+								Map.entry("TitlePane.inactiveForeground", "#a8bfd8"),
+								Map.entry("TitlePane.embeddedForeground", "#e8f1ff")
+						))
+				);
 		}
 	}

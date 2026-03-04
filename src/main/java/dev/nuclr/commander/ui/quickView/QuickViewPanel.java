@@ -3,6 +3,7 @@ package dev.nuclr.commander.ui.quickView;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Font;
+import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -14,11 +15,13 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.plugin.QuickViewProvider;
 import jakarta.annotation.PostConstruct;
@@ -41,6 +44,9 @@ public class QuickViewPanel {
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
+
+	@Autowired
+	private ThemeSchemeStore themeSchemeStore;
 
 	private Map<String, QuickViewProvider> loadedPlugins = new HashMap<>();
 
@@ -99,10 +105,11 @@ public class QuickViewPanel {
 		// Initialise plugin panels on the EDT before going async
 		for (var plugin : plugins) {
 			log.info("Found provider [{}] for: {}", plugin.getClass().getName(), path);
+			applyTheme(plugin);
 			if (!loadedPlugins.containsKey(plugin.getPluginClass())) {
-				plugin.getPanel();
+				var pluginPanel = plugin.getPanel();
 				loadedPlugins.put(plugin.getPluginClass(), plugin);
-				panel.add(plugin.getPanel(), plugin.getPluginClass());
+				panel.add(pluginPanel, plugin.getPluginClass());
 			}
 		}
 
@@ -212,5 +219,45 @@ public class QuickViewPanel {
 		label.setFont(label.getFont().deriveFont(Font.PLAIN, 13f));
 		p.add(label);
 		return p;
+	}
+
+	private void applyTheme(QuickViewProvider plugin) {
+		Object pluginTheme = currentPluginTheme();
+		if (pluginTheme == null) {
+			return;
+		}
+
+		try {
+			plugin.getClass()
+					.getMethod("applyTheme", pluginTheme.getClass())
+					.invoke(plugin, pluginTheme);
+		} catch (NoSuchMethodException ignored) {
+			// Older plugins can ignore host theme settings.
+		} catch (Exception e) {
+			log.warn("Failed to apply theme to provider [{}]: {}", plugin.getPluginClass(), e.getMessage());
+		}
+	}
+
+	private Object currentPluginTheme() {
+		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
+		Font defaultFont = UIManager.getFont("defaultFont");
+		String fontFamily = defaultFont != null ? defaultFont.getFamily() : Font.MONOSPACED;
+		int themeFontSize = defaultFont != null ? defaultFont.getSize() : 12;
+		try {
+			Class<?> themeClass = Class.forName("dev.nuclr.plugin.PluginTheme");
+			Constructor<?> constructor = themeClass.getConstructor(
+					String.class,
+					Map.class,
+					String.class,
+					int.class);
+			return constructor.newInstance(
+					scheme.name(),
+					scheme.uiDefaults(),
+					fontFamily,
+					themeFontSize);
+		} catch (Exception e) {
+			log.debug("PluginTheme is not available on the current classpath", e);
+			return null;
+		}
 	}
 }

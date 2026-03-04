@@ -15,6 +15,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
 import javax.swing.ImageIcon;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -129,6 +130,8 @@ public class MainWindow {
 		fontSize = savedSettings.fontSize();
 		FlatDarculaLaf.setup();
 		applyThemeScheme();
+		JFrame.setDefaultLookAndFeelDecorated(true);
+		JDialog.setDefaultLookAndFeelDecorated(true);
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
 		// FlatLightLaf.setup();
 //		FlatIntelliJLaf.setup();
