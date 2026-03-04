@@ -71,13 +71,15 @@ public class CopyCommandHandler {
 			return;
 		}
 
-		var progress = createProgressDialog(owner, selected.size());
+		int plannedItems = countPlannedItems(selected);
+		var progress = createProgressDialog(owner, plannedItems);
 		progress.show();
 
 		Thread.ofVirtual().start(() -> {
 			var state = new ConflictState();
 			var failures = new ArrayList<String>();
 			var copied = new AtomicInteger();
+			var progressed = new AtomicInteger();
 
 			try {
 				for (Path source : selected) {
@@ -87,14 +89,23 @@ public class CopyCommandHandler {
 					Path target = targetPanel.getCurrentPath().resolve(source.getFileName().toString());
 					progress.setCurrentItem(source.getFileName() != null ? source.getFileName().toString() : source.toString());
 					try {
-						executeCopy(source, targetPanel.getCurrentPath(), target, owner, targetProvider, state, progress, copied, failures);
+						executeCopy(
+								source,
+								targetPanel.getCurrentPath(),
+								target,
+								owner,
+								targetProvider,
+								state,
+								progress,
+								copied,
+								progressed,
+								failures);
 					} catch (CancelledCopyException ex) {
 						break;
 					} catch (Exception ex) {
 						log.warn("Copy failed for {} -> {}: {}", source, target, ex.getMessage(), ex);
 						failures.add(source + " -> " + ex.getMessage());
 					}
-					progress.setProgress(copied.get());
 				}
 			} finally {
 				progress.close();
@@ -128,6 +139,7 @@ public class CopyCommandHandler {
 			ConflictState state,
 			ProgressDialog progress,
 			AtomicInteger copied,
+			AtomicInteger progressed,
 			List<String> failures) throws CancelledCopyException {
 
 		checkCancelled(progress);
@@ -168,10 +180,14 @@ public class CopyCommandHandler {
 								? itemSource.getFileName().toString()
 								: itemSource.toString());
 					}
+
+					@Override
+					public void onItemCompleted(Path itemSource, Path itemTarget) {
+						progress.setProgress(progressed.incrementAndGet());
+					}
 				});
 
 		copied.addAndGet(result.copiedItems());
-		progress.setProgress(copied.get());
 
 		if (result.userMessage() != null
 				&& (result.status() == CopyStatus.NOT_SUPPORTED || result.status() == CopyStatus.FAILED)) {
@@ -401,6 +417,27 @@ public class CopyCommandHandler {
 		@SuppressWarnings("unchecked")
 		T value = (T) box[0];
 		return value;
+	}
+
+	private int countPlannedItems(List<Path> items) {
+		int total = 0;
+		for (Path item : items) {
+			total += countPathItems(item);
+		}
+		return Math.max(total, 1);
+	}
+
+	private int countPathItems(Path path) {
+		try {
+			if (!Files.isDirectory(path)) {
+				return 1;
+			}
+			try (var walk = Files.walk(path)) {
+				return Math.toIntExact(walk.count());
+			}
+		} catch (Exception e) {
+			return 1;
+		}
 	}
 
 	private interface EdtSupplier<T> {
