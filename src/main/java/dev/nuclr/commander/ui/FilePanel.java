@@ -14,6 +14,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.FileSystem;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
@@ -601,6 +602,13 @@ public class FilePanel extends JPanel {
 		}
 
 		if (entry.directory()) {
+			if (!Files.isReadable(entry.path())) {
+				if (tryNavigateViaRealPath(entry.path())) {
+					return;
+				}
+				showTransientMessage("Access denied: " + entry.displayName());
+				return;
+			}
 			log.info("Enter directory: {}", entry.path());
 			enterPath(entry.path(), null);
 		} else {
@@ -624,6 +632,7 @@ public class FilePanel extends JPanel {
 	 */
 	private void enterPath(Path dir, Path selectAfter) {
 		this.selectAfterLoad = selectAfter;
+		final Path previousPath = currentPath;
 
 		// Update path label immediately for snappy feedback
 		SwingUtilities.invokeLater(() -> setTopPathText(buildDisplayPath(dir)));
@@ -650,12 +659,55 @@ public class FilePanel extends JPanel {
 						table.setRowSelectionInterval(0, 0);
 					}
 				});
+			} catch (AccessDeniedException ex) {
+				log.warn("Access denied: {}", dir);
+				if (tryNavigateViaRealPath(dir)) {
+					return;
+				}
+				SwingUtilities.invokeLater(() -> {
+					if (previousPath != null) {
+						setTopPathText(buildDisplayPath(previousPath));
+					}
+					bottomFileInfoTextLabel.setText("Access denied: " + dir);
+				});
 			} catch (IOException ex) {
 				log.error("Cannot list directory: {}", dir, ex);
-				SwingUtilities.invokeLater(() ->
-						bottomFileInfoTextLabel.setText("Error: " + ex.getMessage()));
+				SwingUtilities.invokeLater(() -> {
+					if (previousPath != null) {
+						setTopPathText(buildDisplayPath(previousPath));
+					}
+					bottomFileInfoTextLabel.setText("Error: " + ex.getMessage());
+				});
 			}
 		});
+	}
+
+	private boolean tryNavigateViaRealPath(Path deniedPath) {
+		if (!isWindows()) {
+			return false;
+		}
+
+		try {
+			Path resolved = deniedPath.toRealPath();
+			if (resolved == null || resolved.equals(deniedPath)) {
+				return false;
+			}
+			if (!Files.isDirectory(resolved) || !Files.isReadable(resolved)) {
+				return false;
+			}
+
+			log.info("Following reparse target: {} -> {}", deniedPath, resolved);
+			enterPath(resolved, null);
+			return true;
+		} catch (IOException ex) {
+			log.debug("Cannot resolve reparse target for {}: {}", deniedPath, ex.getMessage());
+			return false;
+		}
+	}
+
+	private static boolean isWindows() {
+		String os = System.getProperty("os.name", "");
+		return os.toLowerCase().startsWith("win");
 	}
 
 	private boolean tryEnterArchive(Path archivePath) {
