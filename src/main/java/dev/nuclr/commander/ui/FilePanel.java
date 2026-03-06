@@ -504,11 +504,16 @@ public class FilePanel extends JPanel {
 		}
 
 		var entry = model.getEntryAt(table.convertRowIndexToModel(viewRow));
+		Path path;
 		if (entry.isParentEntry()) {
-			return;
+			if (currentPath == null) {
+				return;
+			}
+			path = currentPath;
+		} else {
+			path = entry.path();
 		}
 
-		Path path = entry.path();
 		if (!path.getFileSystem().equals(FileSystems.getDefault())) {
 			showTransientMessage("Cannot open non-local path in system application");
 			return;
