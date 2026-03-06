@@ -14,6 +14,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.text.NumberFormat;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -22,6 +23,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 
 import org.springframework.stereotype.Component;
 
@@ -32,53 +34,59 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 public class FolderQuickViewPanel extends JPanel {
 
-	private static final Color BG_COLOR      = new Color(0x2B, 0x2B, 0x2B);
-	private static final Color TEXT_PRIMARY   = new Color(0xBB, 0xBB, 0xBB);
-	private static final Color TEXT_SECONDARY = new Color(0x78, 0x78, 0x78);
-	private static final Color TEXT_MUTED     = new Color(0x5A, 0x5A, 0x5A);
-	private static final Color BUTTON_BG      = new Color(0x3C, 0x3F, 0x41);
-
-	private static final int KEY_LABEL_WIDTH = 110;
+	private static final int INFO_PANEL_WIDTH = 420;
 	private static final DateTimeFormatter DATE_FMT =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
+	private JLabel iconLabel;
 	private JLabel nameLabel;
 	private JLabel subfoldersValue;
 	private JLabel filesValue;
 	private JLabel sizeValue;
 	private JLabel lastModifiedValue;
 	private JLabel hiddenValue;
+	private JPanel centerPanel;
+	private JPanel infoPanel;
+	private JPanel separatorPanel;
 	private JPanel hiddenRow;
 
 	private volatile Thread scanThread;
 
 	private boolean uiBuilt = false;
 
+	@Override
+	public void updateUI() {
+		super.updateUI();
+		if (uiBuilt) {
+			SwingUtilities.invokeLater(this::applyTheme);
+		}
+	}
+
 	private void buildUI() {
 		setLayout(new BorderLayout());
-		setBackground(BG_COLOR);
+		setBackground(uiColor("Panel.background", getBackground()));
 
-		JPanel centerPanel = new JPanel();
+		centerPanel = new JPanel();
 		centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
-		centerPanel.setBackground(BG_COLOR);
+		centerPanel.setBackground(uiColor("Panel.background", centerPanel.getBackground()));
 		centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
 
-		JLabel iconLabel = new JLabel("\uD83D\uDCC1", SwingConstants.CENTER);
-		iconLabel.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 52));
-		iconLabel.setForeground(TEXT_MUTED);
+		iconLabel = new JLabel("\uD83D\uDCC1", SwingConstants.CENTER);
+		iconLabel.setFont(uiFontRelative(Font.PLAIN, 4.0f, 20));
+		iconLabel.setForeground(uiColor("Label.disabledForeground", iconLabel.getForeground()));
 		iconLabel.setAlignmentX(CENTER_ALIGNMENT);
 
 		nameLabel = new JLabel(" ");
-		nameLabel.setFont(new Font("JetBrains Mono", Font.BOLD, 16));
-		nameLabel.setForeground(TEXT_PRIMARY);
+		nameLabel.setFont(uiFontRelative(Font.BOLD, 1.3f, 14));
+		nameLabel.setForeground(uiColor("Label.foreground", nameLabel.getForeground()));
 		nameLabel.setAlignmentX(CENTER_ALIGNMENT);
 		nameLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-		JPanel separator = new JPanel();
-		separator.setBackground(BUTTON_BG);
-		separator.setMaximumSize(new Dimension(260, 1));
-		separator.setPreferredSize(new Dimension(260, 1));
-		separator.setAlignmentX(CENTER_ALIGNMENT);
+		separatorPanel = new JPanel();
+		separatorPanel.setBackground(uiColor("Separator.foreground", separatorPanel.getBackground()));
+		separatorPanel.setMaximumSize(new Dimension(INFO_PANEL_WIDTH, 1));
+		separatorPanel.setPreferredSize(new Dimension(INFO_PANEL_WIDTH, 1));
+		separatorPanel.setAlignmentX(CENTER_ALIGNMENT);
 
 		subfoldersValue  = new JLabel("Scanning\u2026");
 		filesValue       = new JLabel("Scanning\u2026");
@@ -86,9 +94,9 @@ public class FolderQuickViewPanel extends JPanel {
 		lastModifiedValue = new JLabel(" ");
 		hiddenValue      = new JLabel("0");
 
-		JPanel infoPanel = new JPanel();
+		infoPanel = new JPanel();
 		infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
-		infoPanel.setBackground(BG_COLOR);
+		infoPanel.setBackground(uiColor("Panel.background", infoPanel.getBackground()));
 		infoPanel.setAlignmentX(CENTER_ALIGNMENT);
 
 		infoPanel.add(makeRow("Subfolders",    subfoldersValue));
@@ -104,7 +112,7 @@ public class FolderQuickViewPanel extends JPanel {
 		centerPanel.add(Box.createVerticalStrut(10));
 		centerPanel.add(nameLabel);
 		centerPanel.add(Box.createVerticalStrut(12));
-		centerPanel.add(separator);
+		centerPanel.add(separatorPanel);
 		centerPanel.add(Box.createVerticalStrut(12));
 		centerPanel.add(infoPanel);
 		centerPanel.add(Box.createVerticalGlue());
@@ -115,17 +123,17 @@ public class FolderQuickViewPanel extends JPanel {
 
 	private JPanel makeRow(String key, JLabel valueLabel) {
 		JPanel row = new JPanel(new GridLayout(1, 2, 8, 0));
-		row.setBackground(BG_COLOR);
+		row.setBackground(uiColor("Panel.background", row.getBackground()));
 		row.setAlignmentX(CENTER_ALIGNMENT);
-		row.setMaximumSize(new Dimension(260, 18));
-		row.setPreferredSize(new Dimension(260, 18));
+		row.setMaximumSize(new Dimension(INFO_PANEL_WIDTH, 18));
+		row.setPreferredSize(new Dimension(INFO_PANEL_WIDTH, 18));
 
 		JLabel keyLabel = new JLabel(key);
-		keyLabel.setFont(new Font("JetBrains Mono", Font.PLAIN, 13));
-		keyLabel.setForeground(TEXT_SECONDARY);
+		keyLabel.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+		keyLabel.setForeground(uiColor("Label.disabledForeground", keyLabel.getForeground()));
 
-		valueLabel.setFont(new Font("JetBrains Mono", Font.PLAIN, 13));
-		valueLabel.setForeground(TEXT_PRIMARY);
+		valueLabel.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+		valueLabel.setForeground(uiColor("Label.foreground", valueLabel.getForeground()));
 
 		row.add(keyLabel);
 		row.add(valueLabel);
@@ -134,6 +142,7 @@ public class FolderQuickViewPanel extends JPanel {
 
 	public void show(Path path) {
 		if (!uiBuilt) buildUI();
+		applyTheme();
 
 		stopScan();
 
@@ -168,6 +177,8 @@ public class FolderQuickViewPanel extends JPanel {
 
 	private void scanFolder(Path root) {
 		long[] counts = {0, 0, 0, 0}; // subfolders, files, totalSize, hidden
+		long[] lastUiUpdateNanos = {System.nanoTime()};
+		final long uiUpdateIntervalNanos = 250_000_000L; // 250 ms
 
 		try {
 			Files.walkFileTree(root, new SimpleFileVisitor<>() {
@@ -177,6 +188,7 @@ public class FolderQuickViewPanel extends JPanel {
 					if (!dir.equals(root)) {
 						counts[0]++;
 						isHiddenCount(dir, counts);
+						maybePublishProgress(counts, lastUiUpdateNanos, uiUpdateIntervalNanos);
 					}
 					return FileVisitResult.CONTINUE;
 				}
@@ -187,6 +199,7 @@ public class FolderQuickViewPanel extends JPanel {
 					counts[1]++;
 					counts[2] += attrs.size();
 					isHiddenCount(file, counts);
+					maybePublishProgress(counts, lastUiUpdateNanos, uiUpdateIntervalNanos);
 					return FileVisitResult.CONTINUE;
 				}
 
@@ -214,15 +227,7 @@ public class FolderQuickViewPanel extends JPanel {
 		final long finalSize       = counts[2];
 		final long finalHidden     = counts[3];
 
-		SwingUtilities.invokeLater(() -> {
-			subfoldersValue.setText(String.valueOf(finalSubfolders));
-			filesValue.setText(String.valueOf(finalFiles));
-			sizeValue.setText(FileUtils.byteCountToDisplaySize(finalSize));
-			hiddenValue.setText(String.valueOf(finalHidden));
-			hiddenRow.setVisible(finalHidden > 0);
-			revalidate();
-			repaint();
-		});
+		publishProgress(finalSubfolders, finalFiles, finalSize, finalHidden, false);
 	}
 
 	private static void isHiddenCount(Path path, long[] counts) {
@@ -230,5 +235,86 @@ public class FolderQuickViewPanel extends JPanel {
 			String name = path.getFileName() != null ? path.getFileName().toString() : "";
 			if (name.startsWith(".") || Files.isHidden(path)) counts[3]++;
 		} catch (IOException ignored) {}
+	}
+
+	private void maybePublishProgress(long[] counts, long[] lastUiUpdateNanos, long intervalNanos) {
+		long now = System.nanoTime();
+		if (now - lastUiUpdateNanos[0] < intervalNanos) {
+			return;
+		}
+		lastUiUpdateNanos[0] = now;
+		long subfolders = counts[0];
+		long files = counts[1];
+		long totalSize = counts[2];
+		long hidden = counts[3];
+		publishProgress(subfolders, files, totalSize, hidden, true);
+	}
+
+	private void publishProgress(long subfolders, long files, long totalSize, long hidden, boolean inProgress) {
+		SwingUtilities.invokeLater(() -> {
+			subfoldersValue.setText(formatCount(subfolders));
+			filesValue.setText(formatCount(files));
+			String sizeText = FileUtils.byteCountToDisplaySize(totalSize);
+			sizeValue.setText(inProgress ? sizeText + " (scanning…)" : sizeText);
+			hiddenValue.setText(String.valueOf(hidden));
+			hiddenRow.setVisible(hidden > 0);
+			revalidate();
+			repaint();
+		});
+	}
+
+	private static String formatCount(long value) {
+		return NumberFormat.getIntegerInstance().format(value);
+	}
+
+	private void applyTheme() {
+		Color panelBackground = uiColor("Panel.background", getBackground());
+		Color primaryText = uiColor("Label.foreground", Color.LIGHT_GRAY);
+		Color secondaryText = uiColor("Label.disabledForeground", primaryText);
+
+		setBackground(panelBackground);
+		centerPanel.setBackground(panelBackground);
+		infoPanel.setBackground(panelBackground);
+		separatorPanel.setBackground(uiColor("Separator.foreground", uiColor("Table.gridColor", separatorPanel.getBackground())));
+
+		iconLabel.setFont(uiFontRelative(Font.PLAIN, 4.0f, 20));
+		nameLabel.setFont(uiFontRelative(Font.BOLD, 1.3f, 14));
+		subfoldersValue.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+		filesValue.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+		sizeValue.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+		lastModifiedValue.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+		hiddenValue.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+
+		iconLabel.setForeground(secondaryText);
+		nameLabel.setForeground(primaryText);
+		subfoldersValue.setForeground(primaryText);
+		filesValue.setForeground(primaryText);
+		sizeValue.setForeground(primaryText);
+		lastModifiedValue.setForeground(primaryText);
+		hiddenValue.setForeground(primaryText);
+
+		for (var component : infoPanel.getComponents()) {
+			if (component instanceof JPanel row) {
+				row.setBackground(panelBackground);
+				if (row.getComponentCount() > 0 && row.getComponent(0) instanceof JLabel keyLabel) {
+					keyLabel.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
+					keyLabel.setForeground(secondaryText);
+				}
+			}
+		}
+	}
+
+	private static Color uiColor(String key, Color fallback) {
+		Color color = UIManager.getColor(key);
+		return color != null ? color : fallback;
+	}
+
+	private static Font uiFontRelative(int style, float scale, int minSize) {
+		Font base = UIManager.getFont("defaultFont");
+		if (base == null) {
+			return new Font(Font.MONOSPACED, style, minSize);
+		}
+		int size = Math.max(minSize, Math.round(base.getSize2D() * scale));
+		return base.deriveFont(style, (float) size);
 	}
 }
