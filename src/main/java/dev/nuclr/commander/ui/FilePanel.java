@@ -19,6 +19,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -26,6 +27,7 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -293,6 +295,8 @@ public class FilePanel extends JPanel {
 		// F8 — delete selected entry
 		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
 				.put(KeyStroke.getKeyStroke(KeyEvent.VK_F8, 0), "deleteEntry");
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "deleteEntry");
 		table.getActionMap().put("deleteEntry", new AbstractAction() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -913,10 +917,37 @@ public class FilePanel extends JPanel {
 		if (currentPath == null) return;
 		if (!mountRegistry.capabilitiesFor(currentPath).supports(Operation.DELETE)) return;
 
-		int viewRow = table.getSelectedRow();
-		if (viewRow < 0) return;
-		var entry = model.getEntryAt(table.convertRowIndexToModel(viewRow));
-		if (entry.isParentEntry()) return;
+		int[] viewRows = table.getSelectedRows();
+		if (viewRows == null || viewRows.length == 0) return;
+
+		var selectedEntries = new ArrayList<EntryInfo>();
+		int firstSelectedViewRow = Integer.MAX_VALUE;
+		for (int viewRow : viewRows) {
+			var candidate = model.getEntryAt(table.convertRowIndexToModel(viewRow));
+			if (candidate.isParentEntry()) continue;
+			selectedEntries.add(candidate);
+			firstSelectedViewRow = Math.min(firstSelectedViewRow, viewRow);
+		}
+		if (selectedEntries.isEmpty()) return;
+
+		if (selectedEntries.size() > 1) {
+			long folderCount = selectedEntries.stream().filter(EntryInfo::directory).count();
+			long fileCount = selectedEntries.size() - folderCount;
+			String msg =
+					"Delete " + selectedEntries.size() + " selected item(s)?\n"
+					+ "Folders: " + folderCount + ", Files: " + fileCount + "\n"
+					+ "Non-empty folders will be deleted recursively.";
+			if (!confirmDelete(msg, "Delete Selected Items")) return;
+
+			selectRowAfterLoad = firstSelectedViewRow == Integer.MAX_VALUE ? -1 : firstSelectedViewRow;
+			Path refreshPath = currentPath;
+			var toDelete = new ArrayList<>(selectedEntries);
+			Thread.ofVirtual().start(() -> performDeleteMany(refreshPath, toDelete));
+			return;
+		}
+
+		var entry = selectedEntries.get(0);
+		int viewRow = firstSelectedViewRow == Integer.MAX_VALUE ? table.getSelectedRow() : firstSelectedViewRow;
 
 		Path target = entry.path();
 		String name  = entry.displayName();
@@ -924,7 +955,8 @@ public class FilePanel extends JPanel {
 		if (!entry.directory()) {
 			if (!confirmDelete("Delete file '" + name + "'?", "Delete")) return;
 			selectRowAfterLoad = viewRow;
-			Thread.ofVirtual().start(() -> performDelete(target, false));
+			Path refreshPath = currentPath;
+			Thread.ofVirtual().start(() -> performDelete(refreshPath, target, false));
 			return;
 		}
 
@@ -942,7 +974,8 @@ public class FilePanel extends JPanel {
 		if (empty) {
 			if (!confirmDelete("Delete empty folder '" + name + "'?", "Delete")) return;
 			selectRowAfterLoad = viewRow;
-			Thread.ofVirtual().start(() -> performDelete(target, false));
+			Path refreshPath = currentPath;
+			Thread.ofVirtual().start(() -> performDelete(refreshPath, target, false));
 		} else {
 			long count;
 			try (var stream = Files.list(target)) {
@@ -955,7 +988,8 @@ public class FilePanel extends JPanel {
 					: "'" + name + "' is not empty.\nDelete folder and all its contents?";
 			if (!confirmDelete(msg, "Delete Non-Empty Folder")) return;
 			selectRowAfterLoad = viewRow;
-			Thread.ofVirtual().start(() -> performDelete(target, true));
+			Path refreshPath = currentPath;
+			Thread.ofVirtual().start(() -> performDelete(refreshPath, target, true));
 		}
 	}
 
@@ -1021,25 +1055,12 @@ public class FilePanel extends JPanel {
 	 * @param target    path to delete
 	 * @param recursive if {@code true}, recursively deletes a non-empty directory
 	 */
-	private void performDelete(Path target, boolean recursive) {
+	private void performDelete(Path refreshPath, Path target, boolean recursive) {
 		try {
-			if (recursive) {
-				Files.walkFileTree(target, new SimpleFileVisitor<>() {
-					@Override
-					public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-						Files.delete(file);
-						return FileVisitResult.CONTINUE;
-					}
-					@Override
-					public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-						Files.delete(dir);
-						return FileVisitResult.CONTINUE;
-					}
-				});
-			} else {
-				Files.delete(target);
+			deletePath(target, recursive);
+			if (refreshPath != null) {
+				enterPath(refreshPath, null);
 			}
-			enterPath(currentPath, null);
 		} catch (IOException ex) {
 			log.warn("Cannot delete {}: {}", target, ex.getMessage());
 			SwingUtilities.invokeLater(() ->
@@ -1047,6 +1068,56 @@ public class FilePanel extends JPanel {
 							"Cannot delete: " + ex.getMessage(),
 							"Error", JOptionPane.ERROR_MESSAGE));
 		}
+	}
+
+	private void performDeleteMany(Path refreshPath, List<EntryInfo> entries) {
+		var failures = new ArrayList<String>();
+
+		entries.sort(Comparator.comparingInt((EntryInfo e) -> e.path().getNameCount()).reversed());
+		for (EntryInfo entry : entries) {
+			try {
+				deletePath(entry.path(), entry.directory());
+			} catch (NoSuchFileException ignored) {
+				// Can happen when a selected child is already removed via parent recursive delete.
+			} catch (IOException ex) {
+				log.warn("Cannot delete {}: {}", entry.path(), ex.getMessage());
+				failures.add(entry.displayName() + ": " + ex.getMessage());
+			}
+		}
+
+		if (refreshPath != null) {
+			enterPath(refreshPath, null);
+		}
+
+		if (!failures.isEmpty()) {
+			String details = String.join("\n", failures.stream().limit(12).toList());
+			String suffix = failures.size() > 12 ? "\n..." : "";
+			SwingUtilities.invokeLater(() ->
+					JOptionPane.showMessageDialog(
+							this,
+							"Some items could not be deleted:\n" + details + suffix,
+							"Delete Errors",
+							JOptionPane.ERROR_MESSAGE));
+		}
+	}
+
+	private void deletePath(Path target, boolean recursive) throws IOException {
+		if (recursive) {
+			Files.walkFileTree(target, new SimpleFileVisitor<>() {
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+					Files.delete(file);
+					return FileVisitResult.CONTINUE;
+				}
+				@Override
+				public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+					Files.delete(dir);
+					return FileVisitResult.CONTINUE;
+				}
+			});
+			return;
+		}
+		Files.delete(target);
 	}
 
 	// ── Folder creation (F7) ─────────────────────────────────────────────────
