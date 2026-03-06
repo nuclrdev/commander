@@ -232,6 +232,15 @@ public class FilePanel extends JPanel {
 				updateTopPathLabel();
 			}
 		});
+		topPathTextLabel.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (!SwingUtilities.isLeftMouseButton(e)) {
+					return;
+				}
+				ChangeDrivePopup.show(FilePanel.this, topPathTextLabel, providerRegistry);
+			}
+		});
 		add(topPathTextLabel, BorderLayout.NORTH);
 
 		// ── Status bar (bottom) ─────────────────────────────────────────────
@@ -269,6 +278,16 @@ public class FilePanel extends JPanel {
 			public void actionPerformed(ActionEvent e) {
 				int row = table.getSelectedRow();
 				if (row >= 0) onRowActivated(table.convertRowIndexToModel(row));
+			}
+		});
+
+		// Shift+Enter — open with system application / file explorer
+		table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.SHIFT_DOWN_MASK), "openWithSystem");
+		table.getActionMap().put("openWithSystem", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				openSelectedWithSystemApplication();
 			}
 		});
 
@@ -476,6 +495,26 @@ public class FilePanel extends JPanel {
 		Timer timer = new Timer(1800, e -> bottomFileInfoTextLabel.setText(" "));
 		timer.setRepeats(false);
 		timer.start();
+	}
+
+	private void openSelectedWithSystemApplication() {
+		int viewRow = table.getSelectedRow();
+		if (viewRow < 0) {
+			return;
+		}
+
+		var entry = model.getEntryAt(table.convertRowIndexToModel(viewRow));
+		if (entry.isParentEntry()) {
+			return;
+		}
+
+		Path path = entry.path();
+		if (!path.getFileSystem().equals(FileSystems.getDefault())) {
+			showTransientMessage("Cannot open non-local path in system application");
+			return;
+		}
+
+		eventPublisher.publishEvent(new ListViewFileOpen(this, path));
 	}
 
 	private void applyThemeColors() {
