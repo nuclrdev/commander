@@ -21,6 +21,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -33,16 +34,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Component
 public class NoQuickViewAvailablePanel extends JPanel {
-
-	private static final Color BG_COLOR = new Color(0x2B, 0x2B, 0x2B);
-	private static final Color ACCENT_COLOR = new Color(0x4E, 0x9A, 0xE1);
-	private static final Color TEXT_PRIMARY = new Color(0xBB, 0xBB, 0xBB);
-	private static final Color TEXT_SECONDARY = new Color(0x78, 0x78, 0x78);
-	private static final Color TEXT_MUTED = new Color(0x5A, 0x5A, 0x5A);
-	private static final Color BUTTON_BG = new Color(0x3C, 0x3F, 0x41);
-	private static final Color BUTTON_HOVER = new Color(0x4C, 0x50, 0x52);
-	private static final Color LINK_COLOR = new Color(0x58, 0x9D, 0xF6);
-	private static final Color WARNING_COLOR = new Color(0xBB, 0x86, 0x3B);
 
 	private static final String GITHUB_ISSUES_URL = "https://github.com/nuclrdev/commander/issues";
 
@@ -57,44 +48,45 @@ public class NoQuickViewAvailablePanel extends JPanel {
 	private JLabel extensionLabel;
 	private JLabel fileNameLabel;
 	private JPanel actionsPanel;
+	private JPanel centerPanel;
 
 	private boolean uiBuilt = false;
 
 	private void buildUI() {
 		setLayout(new BorderLayout());
-		setBackground(BG_COLOR);
+		setBackground(uiColor("Panel.background", getBackground()));
 
-		JPanel centerPanel = new JPanel();
+		centerPanel = new JPanel();
 		centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
-		centerPanel.setBackground(BG_COLOR);
+		centerPanel.setBackground(uiColor("Panel.background", centerPanel.getBackground()));
 		centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
 
 		iconLabel = new JLabel("?", SwingConstants.CENTER);
-		iconLabel.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 64));
-		iconLabel.setForeground(TEXT_MUTED);
+		iconLabel.setFont(uiFont(Font.PLAIN, 64));
+		iconLabel.setForeground(uiColor("Label.disabledForeground", iconLabel.getForeground()));
 		iconLabel.setAlignmentX(CENTER_ALIGNMENT);
 
 		titleLabel = new JLabel("No Quick View Available");
-		titleLabel.setFont(new Font("JetBrains Mono", Font.BOLD, 18));
-		titleLabel.setForeground(TEXT_PRIMARY);
+		titleLabel.setFont(uiFont(Font.BOLD, 18));
+		titleLabel.setForeground(uiColor("Label.foreground", titleLabel.getForeground()));
 		titleLabel.setAlignmentX(CENTER_ALIGNMENT);
 		titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
 		extensionLabel = new JLabel(" ");
-		extensionLabel.setFont(new Font("JetBrains Mono", Font.PLAIN, 15));
-		extensionLabel.setForeground(TEXT_SECONDARY);
+		extensionLabel.setFont(uiFont(Font.PLAIN, 15));
+		extensionLabel.setForeground(uiColor("Label.foreground", extensionLabel.getForeground()));
 		extensionLabel.setAlignmentX(CENTER_ALIGNMENT);
 		extensionLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
 		fileNameLabel = new JLabel(" ");
-		fileNameLabel.setFont(new Font("JetBrains Mono", Font.PLAIN, 14));
-		fileNameLabel.setForeground(TEXT_MUTED);
+		fileNameLabel.setFont(uiFont(Font.PLAIN, 14));
+		fileNameLabel.setForeground(uiColor("Label.disabledForeground", fileNameLabel.getForeground()));
 		fileNameLabel.setAlignmentX(CENTER_ALIGNMENT);
 		fileNameLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
 		actionsPanel = new JPanel();
 		actionsPanel.setLayout(new BoxLayout(actionsPanel, BoxLayout.Y_AXIS));
-		actionsPanel.setBackground(BG_COLOR);
+		actionsPanel.setBackground(uiColor("Panel.background", actionsPanel.getBackground()));
 		actionsPanel.setAlignmentX(CENTER_ALIGNMENT);
 
 		centerPanel.add(Box.createVerticalGlue());
@@ -115,6 +107,7 @@ public class NoQuickViewAvailablePanel extends JPanel {
 
 	public void setPath(Path path) {
 		if (!uiBuilt) buildUI();
+		applyTheme();
 
 		var fn = path.getFileName();
 		String filename = fn != null ? fn.toString() : path.toString();
@@ -157,8 +150,8 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		} else {
 			JLabel devHint = new JLabel(
 					"<html><center>Enable Developer Mode in settings<br>to install local plugins</center></html>");
-			devHint.setFont(new Font("JetBrains Mono", Font.ITALIC, 13));
-			devHint.setForeground(WARNING_COLOR);
+			devHint.setFont(uiFont(Font.ITALIC, 13));
+			devHint.setForeground(uiColor("Component.warning.focusedBorderColor", uiColor("Label.foreground", devHint.getForeground())));
 			devHint.setAlignmentX(CENTER_ALIGNMENT);
 			devHint.setHorizontalAlignment(SwingConstants.CENTER);
 			actionsPanel.add(devHint);
@@ -166,7 +159,7 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		}
 
 		JPanel separator = new JPanel();
-		separator.setBackground(new Color(0x3C, 0x3F, 0x41));
+		separator.setBackground(uiColor("Separator.foreground", uiColor("Table.gridColor", separator.getBackground())));
 		separator.setMaximumSize(new Dimension(200, 1));
 		separator.setPreferredSize(new Dimension(200, 1));
 		separator.setAlignmentX(CENTER_ALIGNMENT);
@@ -182,9 +175,11 @@ public class NoQuickViewAvailablePanel extends JPanel {
 	private JButton createActionButton(String text, String tooltip) {
 		JButton btn = new JButton(text);
 		btn.setToolTipText(tooltip);
-		btn.setFont(new Font("JetBrains Mono", Font.PLAIN, 15));
-		btn.setForeground(TEXT_PRIMARY);
-		btn.setBackground(BUTTON_BG);
+		btn.setFont(uiFont(Font.PLAIN, 15));
+		Color defaultBg = uiColor("Button.background", btn.getBackground());
+		Color hoverBg = uiColor("Button.hoverBackground", defaultBg.brighter());
+		btn.setForeground(uiColor("Button.foreground", btn.getForeground()));
+		btn.setBackground(defaultBg);
 		btn.setFocusPainted(false);
 		btn.setBorderPainted(false);
 		btn.setContentAreaFilled(true);
@@ -193,16 +188,16 @@ public class NoQuickViewAvailablePanel extends JPanel {
 		btn.setPreferredSize(new Dimension(300, 38));
 		btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		btn.addMouseListener(new MouseAdapter() {
-			@Override public void mouseEntered(MouseEvent e) { btn.setBackground(BUTTON_HOVER); }
-			@Override public void mouseExited(MouseEvent e)  { btn.setBackground(BUTTON_BG); }
+			@Override public void mouseEntered(MouseEvent e) { btn.setBackground(hoverBg); }
+			@Override public void mouseExited(MouseEvent e)  { btn.setBackground(defaultBg); }
 		});
 		return btn;
 	}
 
 	private JLabel createLinkLabel(String text, String url) {
 		JLabel label = new JLabel(text);
-		label.setFont(new Font("JetBrains Mono", Font.PLAIN, 14));
-		label.setForeground(LINK_COLOR);
+		label.setFont(uiFont(Font.PLAIN, 14));
+		label.setForeground(uiColor("Component.linkColor", label.getForeground()));
 		label.setAlignmentX(CENTER_ALIGNMENT);
 		label.setHorizontalAlignment(SwingConstants.CENTER);
 		label.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -216,5 +211,30 @@ public class NoQuickViewAvailablePanel extends JPanel {
 			@Override public void mouseExited(MouseEvent e)  { label.setText(text); }
 		});
 		return label;
+	}
+
+	private void applyTheme() {
+		Color panelBackground = uiColor("Panel.background", getBackground());
+		setBackground(panelBackground);
+		if (centerPanel != null) centerPanel.setBackground(panelBackground);
+		if (actionsPanel != null) actionsPanel.setBackground(panelBackground);
+
+		if (iconLabel != null) iconLabel.setForeground(uiColor("Label.disabledForeground", iconLabel.getForeground()));
+		if (titleLabel != null) titleLabel.setForeground(uiColor("Label.foreground", titleLabel.getForeground()));
+		if (extensionLabel != null) extensionLabel.setForeground(uiColor("Label.foreground", extensionLabel.getForeground()));
+		if (fileNameLabel != null) fileNameLabel.setForeground(uiColor("Label.disabledForeground", fileNameLabel.getForeground()));
+	}
+
+	private static Color uiColor(String key, Color fallback) {
+		Color color = UIManager.getColor(key);
+		return color != null ? color : fallback;
+	}
+
+	private static Font uiFont(int style, int size) {
+		Font base = UIManager.getFont("defaultFont");
+		if (base == null) {
+			return new Font(Font.MONOSPACED, style, size);
+		}
+		return base.deriveFont(style, (float) size);
 	}
 }
