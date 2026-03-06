@@ -106,6 +106,7 @@ public class FilePanel extends JPanel {
 	 */
 	private final Map<Path, Path> lastPathPerRoot = new HashMap<>();
 	private final Map<FileSystem, NestedArchiveMount> nestedArchiveMounts = new HashMap<>();
+	private final Map<FileSystem, Path> mountedArchivePaths = new HashMap<>();
 
 	/** Currently displayed directory. Set on the EDT after a listing completes. */
 	private Path currentPath;
@@ -470,7 +471,7 @@ public class FilePanel extends JPanel {
 
 		if (entry.isParentEntry()) {
 			Path parent = currentPath.getParent();
-			if (parent != null) {
+			if (parent != null && !parent.equals(currentPath)) {
 				enterPath(parent, currentPath);
 			} else {
 				var nestedMount = nestedArchiveMounts.get(currentPath.getFileSystem());
@@ -487,21 +488,17 @@ public class FilePanel extends JPanel {
 				// At the root of a non-local FS (e.g. ZIP archive) — navigate back
 				// to the local directory that contains the archive and re-select it.
 				// currentPath.toUri() for a ZIP root gives jar:file:///path/to/archive.zip!/
-				try {
-					URI zipUri = currentPath.toUri();
-					String ssp = zipUri.getSchemeSpecificPart(); // file:///path/to/archive.zip!/
-					int bang = ssp != null ? ssp.indexOf("!/") : -1;
-					if (bang >= 0) {
-						URI fileUri = URI.create(ssp.substring(0, bang));
-						Path archivePath = Path.of(fileUri);
-						Path archiveDir = archivePath.getParent();
-						if (archiveDir != null) {
-							enterPath(archiveDir, archivePath);
-						}
+				Path archivePath = mountedArchivePaths.get(currentPath.getFileSystem());
+				if (archivePath != null) {
+					Path archiveDir = archivePath.getParent();
+					if (archiveDir != null) {
+						enterPath(archiveDir, archivePath);
+						return;
 					}
-				} catch (Exception ex) {
-					log.warn("Cannot navigate out of archive: {}", ex.getMessage());
+					log.warn("Cannot navigate out of archive: no parent directory for {}", archivePath);
+					return;
 				}
+				log.warn("Cannot navigate out of archive: mount source is unknown for {}", currentPath);
 			}
 			return;
 		}
@@ -578,6 +575,7 @@ public class FilePanel extends JPanel {
 
 			Path archiveRoot = archiveProvider.get().mountAndGetRoot(mountSource);
 			mountRegistry.registerMount(archiveRoot.getFileSystem(), archiveProvider.get().capabilities());
+			mountedArchivePaths.put(archiveRoot.getFileSystem(), archivePath);
 
 			if (!mountSource.equals(archivePath)) {
 				nestedArchiveMounts.put(archiveRoot.getFileSystem(), new NestedArchiveMount(archivePath, mountSource));
