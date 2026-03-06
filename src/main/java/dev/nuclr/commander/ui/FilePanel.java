@@ -24,6 +24,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.DosFileAttributes;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -192,7 +193,11 @@ public class FilePanel extends JPanel {
 						: comp.getFont().deriveFont(Font.PLAIN));
 				if (!isSelected) {
 					java.awt.Color fg;
-					if (entry.executable() && !entry.directory()) {
+					if (extraFlag(entry, "system")) {
+						fg = colors.systemAwtColor();
+					} else if (extraFlag(entry, "hidden")) {
+						fg = colors.hiddenAwtColor();
+					} else if (entry.executable() && !entry.directory()) {
 						fg = colors.executableAwtColor();
 					} else if (entry.archive()) {
 						fg = colors.archiveAwtColor();
@@ -850,6 +855,8 @@ public class FilePanel extends JPanel {
 						boolean isDir = attrs.isDirectory();
 						boolean exec  = !isDir && attrs.permissions().contains(PosixFilePermission.OWNER_EXECUTE);
 						boolean arch  = !isDir && colors.isArchive(child);
+						boolean hidden = isHiddenEntry(child);
+						boolean system = isSystemEntry(child);
 						info = new EntryInfo(
 								child,
 								child.getFileName().toString(),
@@ -860,12 +867,14 @@ public class FilePanel extends JPanel {
 								attrs.lastModifiedTime(),
 								attrs.owner().getName(),
 								PosixFilePermissions.toString(attrs.permissions()),
-								Map.of());
+								Map.of("hidden", hidden, "system", system));
 					} else {
 						var attrs = Files.readAttributes(child, BasicFileAttributes.class);
 						boolean isDir = attrs.isDirectory();
 						boolean exec  = !isDir && colors.isWindowsExecutable(child);
 						boolean arch  = !isDir && colors.isArchive(child);
+						boolean hidden = isHiddenEntry(child);
+						boolean system = isSystemEntry(child);
 						info = new EntryInfo(
 								child,
 								child.getFileName().toString(),
@@ -875,7 +884,7 @@ public class FilePanel extends JPanel {
 								isDir ? 0L : attrs.size(),
 								attrs.lastModifiedTime(),
 								null, null,
-								Map.of());
+								Map.of("hidden", hidden, "system", system));
 					}
 					entries.add(info);
 				} catch (IOException ex) {
@@ -1222,5 +1231,30 @@ public class FilePanel extends JPanel {
 		String name = path.getFileName().toString();
 		int dot = name.lastIndexOf('.');
 		return dot >= 0 && Defaults.EXECUTABLE_EXTENSIONS.contains(name.substring(dot).toLowerCase());
+	}
+
+	private static boolean isHiddenEntry(Path path) {
+		try {
+			return Files.isHidden(path);
+		} catch (IOException ex) {
+			return false;
+		}
+	}
+
+	private static boolean isSystemEntry(Path path) {
+		try {
+			DosFileAttributes attrs = Files.readAttributes(path, DosFileAttributes.class);
+			return attrs.isSystem();
+		} catch (Exception ex) {
+			return false;
+		}
+	}
+
+	private static boolean extraFlag(EntryInfo entry, String key) {
+		if (entry.extras() == null) {
+			return false;
+		}
+		Object value = entry.extras().get(key);
+		return value instanceof Boolean b && b;
 	}
 }
