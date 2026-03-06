@@ -39,12 +39,14 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JScrollBar;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.Popup;
 import javax.swing.PopupFactory;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -94,6 +96,7 @@ public class FilePanel extends JPanel {
 
 
 	private final JTable table;
+	private final JScrollPane tableScrollPane;
 	private final FileTableModel model;
 	private final JLabel topPathTextLabel;
 	private final JLabel bottomFileInfoTextLabel;
@@ -209,7 +212,8 @@ public class FilePanel extends JPanel {
 			}
 		});
 
-		add(new JScrollPane(table), BorderLayout.CENTER);
+		tableScrollPane = new JScrollPane(table);
+		add(tableScrollPane, BorderLayout.CENTER);
 
 		// ── Path label (top) ────────────────────────────────────────────────
 		topPathTextLabel = new JLabel(" ");
@@ -353,9 +357,18 @@ public class FilePanel extends JPanel {
 		});
 
 		// ── Initial navigation ───────────────────────────────────────────────
+		applyThemeColors();
 		var roots = providerRegistry.listAllRoots();
 		if (!roots.isEmpty()) {
 			navigateTo(roots.get(0).path());
+		}
+	}
+
+	@Override
+	public void updateUI() {
+		super.updateUI();
+		if (table != null) {
+			applyThemeColors();
 		}
 	}
 
@@ -453,6 +466,86 @@ public class FilePanel extends JPanel {
 		Timer timer = new Timer(1800, e -> bottomFileInfoTextLabel.setText(" "));
 		timer.setRepeats(false);
 		timer.start();
+	}
+
+	private void applyThemeColors() {
+		java.awt.Color panelBg = uiColor("Panel.background", getBackground());
+		java.awt.Color tableBg = uiColor("Table.background", table.getBackground());
+		java.awt.Color tableFg = uiColor("Table.foreground", table.getForeground());
+		java.awt.Color viewportBg = uiColor("Viewport.background", tableBg);
+		java.awt.Color scrollBg = uiColor("ScrollPane.background", panelBg);
+		java.awt.Color scrollTrack = uiColor("ScrollBar.track", viewportBg);
+		java.awt.Color scrollThumb = uiColor("ScrollBar.thumb", uiColor("TableHeader.background", tableBg));
+		java.awt.Color scrollButton = uiColor("ScrollBar.background", scrollBg);
+
+		setBackground(panelBg);
+		table.setBackground(tableBg);
+		table.setForeground(tableFg);
+		table.setGridColor(uiColor("Table.gridColor", table.getGridColor()));
+		table.setSelectionBackground(uiColor("Table.selectionBackground", table.getSelectionBackground()));
+		table.setSelectionForeground(uiColor("Table.selectionForeground", table.getSelectionForeground()));
+
+		tableScrollPane.setBackground(scrollBg);
+		tableScrollPane.setForeground(tableFg);
+		tableScrollPane.getViewport().setBackground(viewportBg);
+		if (tableScrollPane.getColumnHeader() != null) {
+			tableScrollPane.getColumnHeader().setBackground(uiColor("TableHeader.background", viewportBg));
+		}
+		if (tableScrollPane.getCorner(JScrollPane.UPPER_RIGHT_CORNER) != null) {
+			tableScrollPane.getCorner(JScrollPane.UPPER_RIGHT_CORNER)
+					.setBackground(uiColor("TableHeader.background", viewportBg));
+		}
+
+		applyScrollBarTheme(tableScrollPane.getVerticalScrollBar(), scrollTrack, scrollThumb, scrollButton);
+		applyScrollBarTheme(tableScrollPane.getHorizontalScrollBar(), scrollTrack, scrollThumb, scrollButton);
+
+		topPathTextLabel.setBackground(panelBg);
+		topPathTextLabel.setForeground(uiColor("Label.foreground", topPathTextLabel.getForeground()));
+		bottomFileInfoTextLabel.setBackground(panelBg);
+		bottomFileInfoTextLabel.setForeground(uiColor("Label.foreground", bottomFileInfoTextLabel.getForeground()));
+	}
+
+	private static void applyScrollBarTheme(
+			JScrollBar bar,
+			java.awt.Color track,
+			java.awt.Color thumb,
+			java.awt.Color button) {
+		if (bar == null) {
+			return;
+		}
+		bar.setBackground(track);
+		bar.setForeground(thumb);
+		for (Component c : bar.getComponents()) {
+			c.setBackground(button);
+			c.setForeground(thumb);
+		}
+		applyFlatScrollBarStyle(bar, track, thumb, button);
+		bar.repaint();
+	}
+
+	private static void applyFlatScrollBarStyle(
+			JScrollBar bar,
+			java.awt.Color track,
+			java.awt.Color thumb,
+			java.awt.Color button) {
+		String style = "track:" + toHex(track) + ";"
+				+ "thumb:" + toHex(thumb) + ";"
+				+ "hoverThumbColor:" + toHex(thumb.brighter()) + ";"
+				+ "pressedThumbColor:" + toHex(thumb.darker()) + ";"
+				+ "hoverTrackColor:" + toHex(track.brighter()) + ";"
+				+ "pressedTrackColor:" + toHex(track.darker()) + ";"
+				+ "background:" + toHex(button) + ";";
+		bar.putClientProperty("JComponent.style", style);
+		bar.putClientProperty("FlatLaf.style", style);
+	}
+
+	private static String toHex(java.awt.Color c) {
+		return String.format("#%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue());
+	}
+
+	private static java.awt.Color uiColor(String key, java.awt.Color fallback) {
+		java.awt.Color c = UIManager.getColor(key);
+		return c != null ? c : fallback;
 	}
 
 	// ── Internal navigation ───────────────────────────────────────────────────
