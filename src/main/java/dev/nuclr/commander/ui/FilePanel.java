@@ -116,6 +116,7 @@ public class FilePanel extends JPanel {
 	private final Map<Path, Path> lastPathPerRoot = new HashMap<>();
 	private final Map<FileSystem, NestedArchiveMount> nestedArchiveMounts = new HashMap<>();
 	private final Map<FileSystem, Path> mountedArchivePaths = new HashMap<>();
+	private final Map<Path, Path> extractedArchiveRoots = new HashMap<>();
 
 	/** Currently displayed directory. Set on the EDT after a listing completes. */
 	private Path currentPath;
@@ -619,6 +620,16 @@ public class FilePanel extends JPanel {
 		var entry = model.getEntryAt(modelRow);
 
 		if (entry.isParentEntry()) {
+			Path extractedArchiveSource = extractedArchiveRoots.get(currentPath.normalize());
+			if (extractedArchiveSource != null) {
+				Path archiveDir = extractedArchiveSource.getParent();
+				if (archiveDir == null) {
+					archiveDir = extractedArchiveSource.getFileSystem().getPath("/");
+				}
+				enterPath(archiveDir, extractedArchiveSource);
+				return;
+			}
+
 			Path parent = currentPath.getParent();
 			if (parent != null && !parent.equals(currentPath)) {
 				enterPath(parent, currentPath);
@@ -790,6 +801,9 @@ public class FilePanel extends JPanel {
 			}
 			mountRegistry.registerMount(archiveRoot.getFileSystem(), archiveProvider.get().capabilities());
 			mountedArchivePaths.put(archiveRoot.getFileSystem(), archivePath);
+			if (archiveRoot.getFileSystem().equals(FileSystems.getDefault())) {
+				extractedArchiveRoots.put(archiveRoot.normalize(), archivePath);
+			}
 
 			if (!mountSource.equals(archivePath)) {
 				nestedArchiveMounts.put(archiveRoot.getFileSystem(), new NestedArchiveMount(archivePath, mountSource));

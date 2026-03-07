@@ -2,8 +2,6 @@ package dev.nuclr.commander;
 
 import java.io.IOException;
 
-import javax.swing.SwingUtilities;
-
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
@@ -25,10 +23,8 @@ public final class Nuclr {
 			MacOSIntegration.installAboutHandler();
 		}
 
-		SwingUtilities.invokeLater(() -> {
-			ctx = new AnnotationConfigApplicationContext("dev.nuclr.commander");
-			ctx.start();
-		});
+		ctx = new AnnotationConfigApplicationContext("dev.nuclr.commander");
+		ctx.start();
 
 	}
 

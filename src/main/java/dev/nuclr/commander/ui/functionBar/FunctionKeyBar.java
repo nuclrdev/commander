@@ -1,11 +1,13 @@
 package dev.nuclr.commander.ui.functionBar;
 
-import java.awt.Color;
 import java.awt.GridLayout;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JPanel;
+import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -18,11 +20,6 @@ import lombok.Getter;
 @Component
 @Getter
 public class FunctionKeyBar {
-
-	private static final Color BAR_BG = new Color(0x00, 0x00, 0x80);
-	private static final Color BTN_BG = new Color(0x00, 0x00, 0xA8);
-	private static final Color BTN_FG = new Color(0xF2, 0xF2, 0xF2);
-	private static final Color KEY_COLOR = new Color(0xFF, 0xE0, 0x66);
 
 	private static final Item[] ITEMS = new Item[] {
 			new Item(1, "Help"),
@@ -43,16 +40,19 @@ public class FunctionKeyBar {
 	private ApplicationEventPublisher applicationEventPublisher;
 
 	private JPanel panel;
+	private final List<JButton> buttons = new ArrayList<>();
 
 	@PostConstruct
 	public void init() {
 		panel = new JPanel(new GridLayout(1, ITEMS.length, 2, 0));
-		panel.setBackground(BAR_BG);
 		panel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
 		for (Item item : ITEMS) {
-			panel.add(createButton(item));
+			JButton button = createButton(item);
+			buttons.add(button);
+			panel.add(button);
 		}
+		applyTheme();
 	}
 
 	public void publish(int functionKeyNumber) {
@@ -67,13 +67,9 @@ public class FunctionKeyBar {
 
 	private JButton createButton(Item item) {
 		JButton button = new JButton(
-				"<html><span style='color:" + toHtml(KEY_COLOR) + ";font-weight:bold;'>" + item.number()
-						+ "</span> "
-						+ "<span style='color:" + toHtml(BTN_FG) + ";'>" + item.label() + "</span></html>");
+				"<html><b>" + item.number() + "</b> " + item.label() + "</html>");
 		button.setFocusPainted(false);
 		button.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
-		button.setBackground(BTN_BG);
-		button.setForeground(BTN_FG);
 		button.setOpaque(true);
 		button.setContentAreaFilled(true);
 		button.addActionListener(e -> applicationEventPublisher.publishEvent(
@@ -81,8 +77,21 @@ public class FunctionKeyBar {
 		return button;
 	}
 
-	private String toHtml(Color color) {
-		return String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
+	private void applyTheme() {
+		var barBg = uiColor("Panel.background", panel.getBackground());
+		var btnBg = uiColor("Button.background", barBg);
+		var btnFg = uiColor("Button.foreground", panel.getForeground());
+
+		panel.setBackground(barBg);
+		for (JButton button : buttons) {
+			button.setBackground(btnBg);
+			button.setForeground(btnFg);
+		}
+	}
+
+	private static java.awt.Color uiColor(String key, java.awt.Color fallback) {
+		java.awt.Color c = UIManager.getColor(key);
+		return c != null ? c : fallback;
 	}
 
 	private record Item(int number, String label) {

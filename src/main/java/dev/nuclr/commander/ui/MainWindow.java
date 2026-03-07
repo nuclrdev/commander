@@ -118,7 +118,14 @@ public class MainWindow {
 
 	@PostConstruct
 	public void init() {
+		if (SwingUtilities.isEventDispatchThread()) {
+			initOnEdt();
+		} else {
+			SwingUtilities.invokeLater(this::initOnEdt);
+		}
+	}
 
+	private void initOnEdt() {
 		log.info("Initializing MainWindow");
 
 		if (SystemUtils.isOsMac()) {
