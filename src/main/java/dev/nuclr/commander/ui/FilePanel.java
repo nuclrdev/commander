@@ -42,6 +42,7 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JScrollBar;
 import javax.swing.JTable;
@@ -64,6 +65,7 @@ import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.panel.FilePanelProviderRegistry;
 import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
 import dev.nuclr.commander.vfs.MountRegistry;
+import dev.nuclr.plugin.mount.ArchiveMountRequest;
 import dev.nuclr.plugin.panel.EntryInfo;
 import dev.nuclr.plugin.panel.Operation;
 import lombok.extern.slf4j.Slf4j;
@@ -771,7 +773,21 @@ public class FilePanel extends JPanel {
 				mountSource = materializeNestedArchive(archivePath);
 			}
 
-			Path archiveRoot = archiveProvider.get().mountAndGetRoot(mountSource);
+			Path archiveRoot;
+			try {
+				archiveRoot = archiveProvider.get().mountAndGetRoot(mountSource, new ArchiveMountRequest(null));
+			} catch (IOException firstError) {
+				if (!isPasswordRequiredError(firstError)) {
+					throw firstError;
+				}
+				String password = promptArchivePassword(archivePath);
+				if (password == null) {
+					return true;
+				}
+				archiveRoot = archiveProvider.get().mountAndGetRoot(
+						mountSource,
+						new ArchiveMountRequest(password));
+			}
 			mountRegistry.registerMount(archiveRoot.getFileSystem(), archiveProvider.get().capabilities());
 			mountedArchivePaths.put(archiveRoot.getFileSystem(), archivePath);
 
@@ -1096,6 +1112,40 @@ public class FilePanel extends JPanel {
 			Path refreshPath = currentPath;
 			Thread.ofVirtual().start(() -> performDelete(refreshPath, target, true));
 		}
+	}
+
+	private String promptArchivePassword(Path archivePath) {
+		JPasswordField field = new JPasswordField(20);
+		JOptionPane pane = new JOptionPane(
+				new Object[] { "Password for " + archivePath.getFileName() + ":", field },
+				JOptionPane.QUESTION_MESSAGE,
+				JOptionPane.OK_CANCEL_OPTION);
+		JDialog dialog = pane.createDialog(this, "Password Protected Archive");
+		dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+			@Override
+			public void windowOpened(java.awt.event.WindowEvent e) {
+				SwingUtilities.invokeLater(field::requestFocusInWindow);
+			}
+		});
+		dialog.setVisible(true);
+		dialog.dispose();
+		Object value = pane.getValue();
+		int result = value instanceof Integer i ? i : JOptionPane.CANCEL_OPTION;
+		if (result != JOptionPane.OK_OPTION) {
+			return null;
+		}
+		return new String(field.getPassword());
+	}
+
+	private static boolean isPasswordRequiredError(IOException error) {
+		String msg = error.getMessage();
+		if (msg == null) {
+			return false;
+		}
+		String lower = msg.toLowerCase();
+		return lower.contains("password")
+				|| lower.contains("encrypted")
+				|| lower.contains("wrong password");
 	}
 
 	/**
