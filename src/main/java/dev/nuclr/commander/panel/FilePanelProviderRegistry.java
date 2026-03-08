@@ -76,6 +76,9 @@ public class FilePanelProviderRegistry {
     public Optional<FilePanelProvider> findProviderFor(Path path) {
         return providers.stream()
                 .filter(provider -> provider.supportsPath(path))
-                .findFirst();
+                // For path ownership, prefer more specific providers over generic
+                // local filesystem providers. We treat higher priority value as
+                // more specific for this lookup only.
+                .max(Comparator.comparingInt(FilePanelProvider::priority));
     }
 }

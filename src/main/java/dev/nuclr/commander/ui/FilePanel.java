@@ -300,6 +300,9 @@ public class FilePanel extends JPanel {
 		table.getActionMap().put("editFile", new AbstractAction() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				if (handleProviderFunctionKey(4, false)) {
+					return;
+				}
 				int row = table.getSelectedRow();
 				if (row >= 0) {
 					var entry = model.getEntryAt(table.convertRowIndexToModel(row));
@@ -664,15 +667,19 @@ public class FilePanel extends JPanel {
 		}
 
 		if (entry.directory()) {
-			if (!Files.isReadable(entry.path())) {
-				if (tryNavigateViaRealPath(entry.path())) {
+			Path targetPath = resolveProviderEnterPath(entry.path());
+			if (targetPath == null) {
+				return;
+			}
+			if (!Files.isReadable(targetPath)) {
+				if (tryNavigateViaRealPath(targetPath)) {
 					return;
 				}
 				showTransientMessage("Access denied: " + entry.displayName());
 				return;
 			}
-			log.info("Enter directory: {}", entry.path());
-			enterPath(entry.path(), null);
+			log.info("Enter directory: {}", targetPath);
+			enterPath(targetPath, null);
 		} else {
 			if (tryEnterArchive(entry.path())) {
 				return;
@@ -870,16 +877,21 @@ public class FilePanel extends JPanel {
 			return buildArchiveDisplayPath(nestedMount.archivePath(), path);
 		}
 
-		URI uri = path.toUri();
-		String ssp = uri.getSchemeSpecificPart();
-		int bang = ssp != null ? ssp.indexOf("!/") : -1;
-		if (bang >= 0) {
-			try {
-				Path archivePath = Path.of(URI.create(ssp.substring(0, bang)));
-				return buildArchiveDisplayPath(archivePath, path);
-			} catch (Exception ex) {
-				log.debug("Cannot resolve archive display path for {}: {}", path, ex.getMessage());
+		try {
+			URI uri = path.toUri();
+			String ssp = uri.getSchemeSpecificPart();
+			int bang = ssp != null ? ssp.indexOf("!/") : -1;
+			if (bang >= 0) {
+				try {
+					Path archivePath = Path.of(URI.create(ssp.substring(0, bang)));
+					return buildArchiveDisplayPath(archivePath, path);
+				} catch (Exception ex) {
+					log.debug("Cannot resolve archive display path for {}: {}", path, ex.getMessage());
+				}
 			}
+		} catch (UnsupportedOperationException ex) {
+			// Some provider-specific paths (e.g. Apache SSHD SFTP) do not support
+			// toUri()/toFile conversion. Fall back to provider-native path text.
 		}
 
 		return path.toString();
@@ -1364,5 +1376,32 @@ public class FilePanel extends JPanel {
 		}
 		Object value = entry.extras().get(key);
 		return value instanceof Boolean b && b;
+	}
+
+	private boolean handleProviderFunctionKey(int functionKeyNumber, boolean shiftDown) {
+		if (currentPath == null) {
+			return false;
+		}
+		return providerRegistry.findProviderFor(currentPath)
+				.map(p -> p.functionKeyHandler().handle(functionKeyNumber, shiftDown, currentPath, selectedPathOrNull()))
+				.orElse(false);
+	}
+
+	private Path selectedPathOrNull() {
+		int viewRow = table.getSelectedRow();
+		if (viewRow < 0) {
+			return null;
+		}
+		var entry = model.getEntryAt(table.convertRowIndexToModel(viewRow));
+		return entry.isParentEntry() ? null : entry.path();
+	}
+
+	private Path resolveProviderEnterPath(Path selectedPath) {
+		if (currentPath == null) {
+			return selectedPath;
+		}
+		return providerRegistry.findProviderFor(currentPath)
+				.map(p -> p.resolveEnter(currentPath, selectedPath))
+				.orElse(selectedPath);
 	}
 }
