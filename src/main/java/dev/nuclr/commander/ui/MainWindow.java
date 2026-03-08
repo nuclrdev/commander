@@ -467,7 +467,13 @@ public class MainWindow {
 		mainSplitPane.setVisible(false);
 		mainFrame.add(activeScreenComponent, BorderLayout.CENTER);
 		activeScreenComponent.setVisible(true);
-		activeScreenComponent.requestFocusInWindow();
+		SwingUtilities.invokeLater(() -> {
+			if (activeScreenProvider != null) {
+				activeScreenProvider.focus();
+			} else {
+				activeScreenComponent.requestFocusInWindow();
+			}
+		});
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
