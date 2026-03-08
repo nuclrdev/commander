@@ -4,15 +4,14 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
-import java.awt.Image;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.Taskbar;
+import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 import java.util.Map;
 
 import javax.swing.ImageIcon;
@@ -20,8 +19,10 @@ import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JSplitPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
@@ -32,8 +33,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
-import com.formdev.flatlaf.FlatIntelliJLaf;
-import com.formdev.flatlaf.FlatLightLaf;
 
 import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
@@ -47,9 +46,9 @@ import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.panel.FilePanelProviderRegistry;
 import dev.nuclr.commander.service.PluginRegistry;
+import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.copy.CopyCommandHandler;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
-import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
@@ -132,6 +131,13 @@ public class MainWindow {
 			SwingUtilities.invokeLater(this::initOnEdt);
 		}
 	}
+	
+	private JMenuItem item(String text, KeyStroke stroke, ActionListener action) {
+        var saveItem = new JMenuItem(text);
+        saveItem.setAccelerator(stroke);
+        saveItem.addActionListener(action);
+        return saveItem;
+	}
 
 	private void initOnEdt() {
 		log.info("Initializing MainWindow");
@@ -202,9 +208,11 @@ public class MainWindow {
 		// ── Menu bar ─────────────────────────────────────────────────────────
 		menuBar = new JMenuBar();
 		mainFrame.setJMenuBar(menuBar);
+		
 
 		{
 			JMenu menu = new JMenu("Left");
+			menu.setMnemonic(KeyEvent.VK_L);
 			menuBar.add(menu);
 			menu.add("Brief");
 			menu.add("Medium");
@@ -221,6 +229,189 @@ public class MainWindow {
 			menu.add("Re-read");
 			menu.add("Change drive");
 		}
+		
+		{
+			JMenu menu = new JMenu("Files");
+			menu.setMnemonic(KeyEvent.VK_F);
+			menuBar.add(menu);
+			
+			menu.add(item("View", KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), (e)->{}));
+			menu.add(item("Edit", KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0), (e)->{}));
+			menu.add(item("Copy", KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), (e)->{}));
+			menu.add(item("Rename or move", KeyStroke.getKeyStroke(KeyEvent.VK_F6, 0), (e)->{}));
+			menu.add(item("Make a folder", KeyStroke.getKeyStroke(KeyEvent.VK_F7, 0), (e)->{}));
+			menu.add(item("Delete", KeyStroke.getKeyStroke(KeyEvent.VK_F8, 0), (e)->{}));
+			
+			menu.addSeparator();
+			
+			menu.add(item("Select files by wildcard", KeyStroke.getKeyStroke(KeyEvent.VK_ADD, 0), (e)->{}));
+			menu.add(item("Unselect files by wildcard", KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, 0), (e)->{}));
+			menu.add(item("Invert selection", KeyStroke.getKeyStroke(KeyEvent.VK_MULTIPLY, 0), (e)->{}));
+			
+		/*
+  View               F3
+  Edit               F4
+  Copy               F5
+  Rename or move     F6
+  Link               Alt+F6
+  Make folder        F7
+  Delete             F8
+  Wipe               Alt+Del
+──────────────────────────────
+  Add to archive     Shift+F1
+  Extract files      Shift+F2
+  Archive commands   Shift+F3
+──────────────────────────────
+  File attributes    Ctrl+A
+  Apply command      Ctrl+G
+  Describe files     Ctrl+Z
+──────────────────────────────
+  Select group       Gray +
+  Unselect group     Gray -
+  Invert selection   Gray *
+  Restore selection  Ctrl+M		 
+		 
+		 */
+			
+		}
+		
+		{
+			JMenu menu = new JMenu("Commands");
+			menu.setMnemonic(KeyEvent.VK_C);
+			menuBar.add(menu);
+			
+			menu.add(item("Find file", KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK), (e)->{}));
+			menu.add(item("History", KeyStroke.getKeyStroke(KeyEvent.VK_F8, InputEvent.ALT_DOWN_MASK), (e)->{}));
+			menu.add(item("Video mode", KeyStroke.getKeyStroke(KeyEvent.VK_F9, InputEvent.ALT_DOWN_MASK), (e)->{}));
+			menu.add(item("File view history", KeyStroke.getKeyStroke(KeyEvent.VK_F11, InputEvent.ALT_DOWN_MASK), (e)->{}));
+			menu.add(item("Folders history", KeyStroke.getKeyStroke(KeyEvent.VK_F12, InputEvent.ALT_DOWN_MASK), (e)->{}));
+			
+			menu.addSeparator();
+			
+			menu.add(item("Swap panels", KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK), (e)->{}));
+			menu.add(item("Panels On/Off", KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK), (e)->{}));
+			menu.add(item("Compare folders", null, (e)->{}));
+			
+			menu.addSeparator();
+			
+			menu.add(item("Edit user menu", null, (e)->{}));
+			menu.add(item("File associations", null, (e)->{}));
+			menu.add(item("Folder shortcuts", null, (e)->{}));
+			menu.add(item("File panel filter", KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_DOWN_MASK), (e)->{}));
+			
+			menu.addSeparator();
+			
+			menu.add(item("Plugin commands", KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0), (e)->{}));
+			menu.add(item("Screens list", KeyStroke.getKeyStroke(KeyEvent.VK_F12, 0), (e)->{}));
+			menu.add(item("Task list", KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK), (e)->{}));
+			menu.add(item("Hotplug devices list", null, (e)->{}));
+			
+			
+			
+			/*
+			 
+			 
+Find file             Alt+F7
+History               Alt+F8
+Video mode            Alt+F9
+File view history     Alt+F11
+Folders history       Alt+F12
+──────────────────────────────
+Swap panels           Ctrl+U
+Panels On/Off         Ctrl+O
+Compare folders
+──────────────────────────────
+Edit user menu
+File associations
+Folder shortcuts
+File panel filter     Ctrl+I
+──────────────────────────────
+Plugin commands       F11
+Screens list          F12
+Task list             Ctrl+W
+Hotplug devices list			 
+
+
+			 */
+			
+		}
+		
+		{
+			
+			JMenu menu = new JMenu("Options");
+			menu.setMnemonic(KeyEvent.VK_O);
+			menuBar.add(menu);
+			
+			menu.add("System settings");
+			menu.add("Panel settings");
+			menu.add("Interface settings");
+			menu.add("Languages");
+			menu.add("Plugins configuration");
+			menu.add("Plugins manager settings");
+			menu.add("Dialog settings");
+			menu.add("Menu settings");
+			menu.add("Command line settings");
+			menu.add("AutoComplete settings");
+			menu.add("InfoPanel settings");
+			menu.add("Groups of file masks");
+			
+			
+			
+			/*
+			 
+System settings
+Panel settings
+Interface settings
+Languages
+Plugins configuration
+Plugins manager settings
+Dialog settings
+Menu settings
+Command line settings
+AutoComplete settings
+InfoPanel settings
+Groups of file masks
+─────────────────────────────────────────────
+Confirmations
+File panel modes
+File descriptions
+Folder description files
+─────────────────────────────────────────────
+Viewer settings
+Editor settings
+Code pages
+─────────────────────────────────────────────
+Colors
+Files highlighting and sort groups
+─────────────────────────────────────────────
+Save setup                          Shift+F9			 
+			 
+			 */
+			
+		}
+		
+		{
+			JMenu menu = new JMenu("Right");
+			menu.setMnemonic(KeyEvent.VK_R);
+			menuBar.add(menu);
+			menu.add("Brief");
+			menu.add("Medium");
+			menu.add("Full");
+			menu.add("Wide");
+			menu.add("Detailed");
+			menu.addSeparator();
+			menu.add("Info panel");
+			menu.add("Quick view");
+			menu.addSeparator();
+			menu.add("Sort modes");
+			menu.add("Show long names");
+			menu.add("Panel on/off");
+			menu.add("Re-read");
+			menu.add("Change drive");
+		}
+		
+
+		
 
 		// ── Global keyboard shortcuts ─────────────────────────────────────────
 		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
