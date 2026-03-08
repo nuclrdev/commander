@@ -2,7 +2,9 @@ package dev.nuclr.commander.ui.functionBar;
 
 import java.awt.GridLayout;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -41,6 +43,8 @@ public class FunctionKeyBar {
 
 	private JPanel panel;
 	private final List<JButton> buttons = new ArrayList<>();
+	private final Map<Integer, String> defaultLabels = new HashMap<>();
+	private final Map<Integer, String> currentLabels = new HashMap<>();
 
 	@PostConstruct
 	public void init() {
@@ -48,7 +52,9 @@ public class FunctionKeyBar {
 		panel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
 		for (Item item : ITEMS) {
-			JButton button = createButton(item);
+			defaultLabels.put(item.number(), item.label());
+			currentLabels.put(item.number(), item.label());
+			JButton button = createButton(item.number(), item.label());
 			buttons.add(button);
 			panel.add(button);
 		}
@@ -56,25 +62,40 @@ public class FunctionKeyBar {
 	}
 
 	public void publish(int functionKeyNumber) {
-		for (Item item : ITEMS) {
-			if (item.number() == functionKeyNumber) {
-				applicationEventPublisher.publishEvent(
-						new FunctionKeyCommandEvent(this, item.number(), item.label()));
-				return;
-			}
+		String label = currentLabels.getOrDefault(functionKeyNumber, "");
+		applicationEventPublisher.publishEvent(
+				new FunctionKeyCommandEvent(this, functionKeyNumber, label));
+	}
+
+	public void setLabels(Map<Integer, String> labels) {
+		for (int key = 1; key <= ITEMS.length; key++) {
+			String label = labels.getOrDefault(key, "");
+			currentLabels.put(key, label);
+			JButton button = buttons.get(key - 1);
+			button.setText(buttonText(key, label));
+			button.setEnabled(!label.isBlank());
 		}
 	}
 
-	private JButton createButton(Item item) {
-		JButton button = new JButton(
-				"<html><b>" + item.number() + "</b> " + item.label() + "</html>");
+	public void resetDefaultLabels() {
+		setLabels(defaultLabels);
+	}
+
+	private JButton createButton(int number, String label) {
+		JButton button = new JButton(buttonText(number, label));
 		button.setFocusPainted(false);
 		button.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
 		button.setOpaque(true);
 		button.setContentAreaFilled(true);
-		button.addActionListener(e -> applicationEventPublisher.publishEvent(
-				new FunctionKeyCommandEvent(this, item.number(), item.label())));
+		button.addActionListener(e -> publish(number));
 		return button;
+	}
+
+	private static String buttonText(int number, String label) {
+		if (label == null || label.isBlank()) {
+			return "<html><b>" + number + "</b></html>";
+		}
+		return "<html><b>" + number + "</b> " + label + "</html>";
 	}
 
 	private void applyTheme() {

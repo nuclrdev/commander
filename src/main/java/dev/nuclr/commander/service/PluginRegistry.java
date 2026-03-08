@@ -31,6 +31,7 @@ import dev.nuclr.plugin.NuclrPlugin;
 import dev.nuclr.plugin.PluginInfo;
 import dev.nuclr.plugin.QuickViewItem;
 import dev.nuclr.plugin.QuickViewProvider;
+import dev.nuclr.plugin.ScreenProvider;
 import dev.nuclr.plugin.ViewProvider;
 import dev.nuclr.plugin.mount.ArchiveMountProvider;
 import dev.nuclr.plugin.panel.FilePanelProvider;
@@ -51,6 +52,7 @@ public final class PluginRegistry {
 
 	private final List<NuclrPlugin> loadedPlugins = new ArrayList<>();
 	private final List<QuickViewProvider> quickViewProviders = new ArrayList<>();
+	private final List<ScreenProvider> screenProviders = new ArrayList<>();
 
 	public void registerViewProvider(ViewProvider provider) {
 		log.info("Registering ViewProvider: [{}]", provider.getClass().getName());
@@ -94,6 +96,14 @@ public final class PluginRegistry {
 
 	public Collection<QuickViewProvider> getQuickViewProviders() {
 		return Collections.unmodifiableList(quickViewProviders);
+	}
+
+	public ScreenProvider getScreenProviderByPath(Path path) {
+		return screenProviders.stream()
+				.filter(p -> p.matches(path))
+				.sorted(Comparator.comparingInt(ScreenProvider::priority))
+				.findFirst()
+				.orElse(null);
 	}
 
 	public List<NuclrPlugin> getLoadedPlugins() {
@@ -161,6 +171,24 @@ public final class PluginRegistry {
 				} catch (Exception e) {
 					log.error("Failed to load QuickViewProvider [{}]: {}", className, e.getMessage(), e);
 					Alerts.showMessageDialog(null, "Failed to load QuickViewProvider [" + className + "]: " + e.getMessage(), "Plugin Load Error", JOptionPane.ERROR_MESSAGE);
+				}
+			}
+
+			// Load ScreenProviders
+			for (var className : manifest.getScreenProviders()) {
+				try {
+					var clazz = classLoader.loadClass(className);
+					var provider = (ScreenProvider) clazz.getDeclaredConstructor().newInstance();
+					plugin.getScreenProviders().add(provider);
+					screenProviders.add(provider);
+					log.info("Loaded ScreenProvider: [{}]", className);
+				} catch (Exception e) {
+					log.error("Failed to load ScreenProvider [{}]: {}", className, e.getMessage(), e);
+					Alerts.showMessageDialog(
+							null,
+							"Failed to load ScreenProvider [" + className + "]: " + e.getMessage(),
+							"Plugin Load Error",
+							JOptionPane.ERROR_MESSAGE);
 				}
 			}
 

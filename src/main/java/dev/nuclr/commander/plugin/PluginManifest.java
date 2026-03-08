@@ -21,6 +21,7 @@ public class PluginManifest {
 	private String docUrl;
 	private PluginType type;
 	private List<String> quickViewProviders = new ArrayList<>();
+	private List<String> screenProviders = new ArrayList<>();
 
 	private List<String> filePanelProviders = new ArrayList<>();
 

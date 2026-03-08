@@ -13,12 +13,14 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Map;
 
 import javax.swing.ImageIcon;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
+import javax.swing.JOptionPane;
 import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -44,9 +46,10 @@ import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.panel.FilePanelProviderRegistry;
+import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.commander.ui.copy.CopyCommandHandler;
-import dev.nuclr.commander.ui.editor.EditorScreen;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
+import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
@@ -69,7 +72,8 @@ public class MainWindow {
 
 	private Component lastFocusedInSplitPane;
 
-	private EditorScreen editorScreen;
+	private Component activeScreenComponent;
+	private dev.nuclr.plugin.ScreenProvider activeScreenProvider;
 
 	private boolean quickViewActive;
 	private Component quickViewReplacedComponent;
@@ -115,6 +119,9 @@ public class MainWindow {
 
 	@Autowired
 	private CopyCommandHandler copyCommandHandler;
+
+	@Autowired
+	private PluginRegistry pluginRegistry;
 
 	@PostConstruct
 	public void init() {
@@ -321,8 +328,8 @@ public class MainWindow {
 				// Escape — close editor / console
 				if (e.getID() == KeyEvent.KEY_PRESSED
 						&& e.getKeyCode() == KeyEvent.VK_ESCAPE
-						&& editorScreen != null) {
-					applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
+						&& activeScreenComponent != null) {
+					tryCloseActiveScreen();
 					return true;
 				}
 
@@ -423,6 +430,7 @@ public class MainWindow {
 
 	@EventListener
 	public void onShowConsoleScreen(ShowConsoleScreenEvent event) {
+		functionKeyBar.resetDefaultLabels();
 		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
 		mainFrame.remove(mainSplitPane);
 		mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
@@ -436,12 +444,30 @@ public class MainWindow {
 	@EventListener
 	public void onShowEditorScreen(ShowEditorScreenEvent event) {
 		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-		editorScreen = new EditorScreen(event.getPath());
+		var provider = pluginRegistry.getScreenProviderByPath(event.getPath());
+		if (provider == null) {
+			log.warn("No screen provider found for {}", event.getPath());
+			Alerts.showMessageDialog(mainFrame, "No screen plugin can open:\n" + event.getPath(), "No Screen Provider", javax.swing.JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		Component panel;
+		try {
+			panel = provider.open(event.getPath());
+		} catch (Exception ex) {
+			log.error("Cannot open screen provider [{}] for {}: {}", provider.getPluginClass(), event.getPath(), ex.getMessage(), ex);
+			return;
+		}
+		activeScreenProvider = provider;
+		activeScreenComponent = panel;
+		functionKeyBar.setLabels(Map.of(
+				1, "Help",
+				2, "Save",
+				10, "Exit"));
 		mainFrame.remove(mainSplitPane);
 		mainSplitPane.setVisible(false);
-		mainFrame.add(editorScreen.getPanel(), BorderLayout.CENTER);
-		editorScreen.getPanel().setVisible(true);
-		editorScreen.focus();
+		mainFrame.add(activeScreenComponent, BorderLayout.CENTER);
+		activeScreenComponent.setVisible(true);
+		activeScreenComponent.requestFocusInWindow();
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
@@ -490,10 +516,18 @@ public class MainWindow {
 
 	@EventListener
 	public void onShowFilePanelsView(ShowFilePanelsViewEvent event) {
-		if (editorScreen != null) {
-			mainFrame.remove(editorScreen.getPanel());
-			editorScreen.dispose();
-			editorScreen = null;
+		functionKeyBar.resetDefaultLabels();
+		if (activeScreenComponent != null) {
+			mainFrame.remove(activeScreenComponent);
+			if (activeScreenProvider != null) {
+				try {
+					activeScreenProvider.close();
+				} catch (Exception ex) {
+					log.warn("Error while closing screen provider [{}]: {}", activeScreenProvider.getPluginClass(), ex.getMessage());
+				}
+			}
+			activeScreenComponent = null;
+			activeScreenProvider = null;
 		}
 		mainFrame.remove(consolePanel.getConsolePanel());
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
@@ -508,6 +542,17 @@ public class MainWindow {
 
 	@EventListener
 	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
+		if (activeScreenProvider != null) {
+			if (event.getFunctionKeyNumber() == 2) {
+				saveActiveScreen();
+				return;
+			}
+			if (event.getFunctionKeyNumber() == 10) {
+				tryCloseActiveScreen();
+				return;
+			}
+		}
+
 		if (event.getFunctionKeyNumber() == 5) {
 			FilePanel sourcePanel = getFocusedVisibleFilePanel();
 			FilePanel targetPanel = getOppositeVisibleFilePanel(sourcePanel);
@@ -635,6 +680,62 @@ public class MainWindow {
 		}
 		// Reapply the relative divider position once layout settles after the state change.
 		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
+	}
+
+	private void saveActiveScreen() {
+		if (activeScreenProvider == null) {
+			return;
+		}
+		try {
+			boolean saved = activeScreenProvider.save();
+			if (!saved) {
+				Alerts.showMessageDialog(
+						mainFrame,
+						"Nothing to save or screen is read-only.",
+						"Save",
+						JOptionPane.INFORMATION_MESSAGE);
+			}
+		} catch (Exception ex) {
+			log.error("Failed to save screen provider [{}]: {}", activeScreenProvider.getPluginClass(), ex.getMessage(), ex);
+			Alerts.showMessageDialog(
+					mainFrame,
+					"Save failed:\n" + ex.getMessage(),
+					"Save Error",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void tryCloseActiveScreen() {
+		if (activeScreenProvider != null && activeScreenProvider.isDirty()) {
+			Object[] options = {"Write", "Discard", "Cancel"};
+			int choice = JOptionPane.showOptionDialog(
+					mainFrame,
+					"File has unsaved changes.\nWhat do you want to do?",
+					"Unsaved Changes",
+					JOptionPane.DEFAULT_OPTION,
+					JOptionPane.WARNING_MESSAGE,
+					null,
+					options,
+					options[0]);
+
+			if (choice == 0) {
+				try {
+					boolean saved = activeScreenProvider.save();
+					if (!saved) {
+						Alerts.showMessageDialog(mainFrame, "Cannot save this screen.", "Save", JOptionPane.WARNING_MESSAGE);
+						return;
+					}
+				} catch (Exception ex) {
+					Alerts.showMessageDialog(mainFrame, "Save failed:\n" + ex.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE);
+					return;
+				}
+			} else if (choice == 1) {
+				// discard and continue closing
+			} else {
+				return;
+			}
+		}
+		applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
 	}
 
 	private void applyThemeScheme() {
