@@ -1,17 +1,16 @@
 package dev.nuclr.commander.ui.editor;
 
+import java.awt.Color;
 import java.awt.Font;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.Map;
 
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.text.BadLocationException;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
-import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import dev.nuclr.commander.common.FilenameUtils;
@@ -78,16 +77,7 @@ public class Editor {
 
 	public Editor() {
 		this.textArea = new RSyntaxTextArea();
-
-		try (InputStream in = getClass()
-				.getResourceAsStream("/org/fife/ui/rsyntaxtextarea/themes/dark.xml")) {
-			Theme theme = Theme.load(in);
-			theme.apply(textArea);
-		} catch (IOException e) {
-			log.error("Failed to load theme", e);
-		}
-
-		this.textArea.setFont(new Font("JetBrains Mono", Font.PLAIN, 16));
+		applyUiTheme();
 		this.textArea.setCodeFoldingEnabled(true);
 		this.textArea.setAntiAliasingEnabled(true);
 		this.textArea.setTabSize(4);
@@ -97,6 +87,14 @@ public class Editor {
 	public RTextScrollPane getPanel() {
 		var scroll = new RTextScrollPane(this.textArea);
 		scroll.setLineNumbersEnabled(true);
+		var gutter = scroll.getGutter();
+		if (gutter != null) {
+			gutter.setBackground(uiColor("Panel.background", scroll.getBackground()));
+			gutter.setLineNumberColor(uiColor("Label.foreground", textArea.getForeground()));
+			gutter.setLineNumberFont(textArea.getFont());
+		}
+		scroll.getViewport().setBackground(textArea.getBackground());
+		scroll.setBackground(uiColor("Panel.background", scroll.getBackground()));
 		SwingUtilities.updateComponentTreeUI(scroll);
 		return scroll;
 	}
@@ -145,5 +143,24 @@ public class Editor {
 
 	public void focus() {
 		this.textArea.requestFocusInWindow();
+	}
+
+	private void applyUiTheme() {
+		Font base = UIManager.getFont("defaultFont");
+		if (base == null) {
+			base = new Font("JetBrains Mono", Font.PLAIN, 12);
+		}
+		textArea.setFont(base.deriveFont(Font.PLAIN, base.getSize2D()));
+		textArea.setBackground(uiColor("TextArea.background", textArea.getBackground()));
+		textArea.setForeground(uiColor("TextArea.foreground", textArea.getForeground()));
+		textArea.setCaretColor(uiColor("TextArea.caretForeground", textArea.getForeground()));
+		textArea.setSelectionColor(uiColor("TextArea.selectionBackground", textArea.getSelectionColor()));
+		textArea.setCurrentLineHighlightColor(
+				uiColor("TextArea.selectionBackground", textArea.getCurrentLineHighlightColor()));
+	}
+
+	private static Color uiColor(String key, Color fallback) {
+		Color color = UIManager.getColor(key);
+		return color != null ? color : fallback;
 	}
 }
