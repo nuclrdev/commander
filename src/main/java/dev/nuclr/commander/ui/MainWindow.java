@@ -54,6 +54,7 @@ import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
 import dev.nuclr.commander.vfs.MountRegistry;
+import dev.nuclr.plugin.PluginTheme;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -452,6 +453,7 @@ public class MainWindow {
 		}
 		Component panel;
 		try {
+			provider.applyTheme(currentPluginTheme());
 			panel = provider.open(event.getPath());
 		} catch (Exception ex) {
 			log.error("Cannot open screen provider [{}] for {}: {}", provider.getPluginClass(), event.getPath(), ex.getMessage(), ex);
@@ -753,5 +755,17 @@ public class MainWindow {
 				log.warn("Invalid theme color for {}: {}", entry.getKey(), entry.getValue());
 			}
 		}
+	}
+
+	private PluginTheme currentPluginTheme() {
+		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
+		Font defaultFont = UIManager.getFont("defaultFont");
+		String fontFamily = defaultFont != null ? defaultFont.getFamily() : Font.MONOSPACED;
+		int themeFontSize = defaultFont != null ? defaultFont.getSize() : 12;
+		return new PluginTheme(
+				scheme.name(),
+				scheme.uiDefaults(),
+				fontFamily,
+				themeFontSize);
 	}
 }
