@@ -561,6 +561,11 @@ public class MainWindow {
 			}
 		}
 
+		if (event.getFunctionKeyNumber() == 10) {
+			confirmAndExitApplication();
+			return;
+		}
+
 		if (event.getFunctionKeyNumber() == 5) {
 			FilePanel sourcePanel = getFocusedVisibleFilePanel();
 			FilePanel targetPanel = getOppositeVisibleFilePanel(sourcePanel);
@@ -715,7 +720,7 @@ public class MainWindow {
 
 	private void tryCloseActiveScreen() {
 		if (activeScreenProvider != null && activeScreenProvider.isDirty()) {
-			Object[] options = {"Write", "Discard", "Cancel"};
+			Object[] options = {"Save", "Discard", "Cancel"};
 			int choice = JOptionPane.showOptionDialog(
 					mainFrame,
 					"File has unsaved changes.\nWhat do you want to do?",
@@ -744,6 +749,22 @@ public class MainWindow {
 			}
 		}
 		applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
+	}
+
+	private void confirmAndExitApplication() {
+		Object[] options = {"Yes", "No"};
+		int choice = JOptionPane.showOptionDialog(
+				mainFrame,
+				"Exit Nuclr Commander?",
+				"Confirm Exit",
+				JOptionPane.YES_NO_OPTION,
+				JOptionPane.QUESTION_MESSAGE,
+				null,
+				options,
+				options[1]);
+		if (choice == 0 || choice == JOptionPane.YES_OPTION) {
+			Nuclr.exit();
+		}
 	}
 
 	private void applyThemeScheme() {
