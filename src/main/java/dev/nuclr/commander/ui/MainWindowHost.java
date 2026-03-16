@@ -339,7 +339,7 @@ public class MainWindowHost {
 			}
 
 			if (leftSide && rightPanelState.provider == null && provider instanceof FocusablePlugin focusable) {
-				focusable.onFocusGained();
+				SwingUtilities.invokeLater(focusable::onFocusGained);
 			}
 
 			mainFrame.revalidate();
@@ -390,11 +390,15 @@ public class MainWindowHost {
 		boolean focusInRight = focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component);
 
 		if (focusInRight) {
-			rightFocusable.onFocusLost();
-			leftFocusable.onFocusGained();
+			SwingUtilities.invokeLater(() -> {
+				rightFocusable.onFocusLost();
+				leftFocusable.onFocusGained();
+			});
 		} else {
-			leftFocusable.onFocusLost();
-			rightFocusable.onFocusGained();
+			SwingUtilities.invokeLater(() -> {
+				leftFocusable.onFocusLost();
+				rightFocusable.onFocusGained();
+			});
 		}
 
 		return true;
