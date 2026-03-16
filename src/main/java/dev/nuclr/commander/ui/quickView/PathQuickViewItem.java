@@ -4,30 +4,37 @@ import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 
-import dev.nuclr.plugin.QuickViewItem;
+import dev.nuclr.plugin.PluginPathResource;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
 /**
- * {@link QuickViewItem} adapter for a NIO.2 {@link Path}.
+ * {@link PluginPathResource} adapter for a NIO.2 {@link Path}.
  *
  * <p>Works with any filesystem backend (local, ZIP, SFTP, etc.) — plugins
  * receive a plain {@link InputStream} and never see the underlying path.
  */
 @Data
 @AllArgsConstructor
-public class PathQuickViewItem implements QuickViewItem {
+public class PathQuickViewItem extends PluginPathResource {
 
 	private final Path path;
 
-	@Override
+	{
+		setUuid(UUID.randomUUID().toString());
+		setName(name());
+		setSizeBytes(sizeBytes());
+		setExtension(extension());
+		setMimeType(mimeType());
+	}
+
 	public String name() {
 		var fn = path.getFileName();
 		return fn != null ? fn.toString() : path.toString();
 	}
 
-	@Override
 	public long sizeBytes() {
 		try {
 			return Files.size(path);
@@ -36,7 +43,6 @@ public class PathQuickViewItem implements QuickViewItem {
 		}
 	}
 
-	@Override
 	public String extension() {
 		String n = name();
 		int dot = n.lastIndexOf('.');
@@ -46,7 +52,6 @@ public class PathQuickViewItem implements QuickViewItem {
 		return n;
 	}
 
-	@Override
 	public String mimeType() {
 		try {
 			return Files.probeContentType(path);
@@ -58,10 +63,5 @@ public class PathQuickViewItem implements QuickViewItem {
 	@Override
 	public InputStream openStream() throws Exception {
 		return new BufferedInputStream(Files.newInputStream(path));
-	}
-
-	@Override
-	public Path path() {
-		return path;
 	}
 }

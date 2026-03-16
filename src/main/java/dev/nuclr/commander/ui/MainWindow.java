@@ -3,6 +3,7 @@ package dev.nuclr.commander.ui;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.Font;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -12,9 +13,11 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.net.URI;
 import java.util.Map;
 
 import javax.swing.ImageIcon;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
@@ -44,15 +47,10 @@ import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
-import dev.nuclr.commander.panel.FilePanelProviderRegistry;
 import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
-import dev.nuclr.commander.ui.copy.CopyCommandHandler;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
-import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
-import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
-import dev.nuclr.commander.vfs.MountRegistry;
 import dev.nuclr.plugin.PluginTheme;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -67,13 +65,13 @@ public class MainWindow {
 
 	private JSplitPane mainSplitPane;
 
-	private FilePanel leftFilePanel;
-	private FilePanel rightFilePanel;
+	private JComponent leftFilePanel;
+	
+	private JComponent rightFilePanel;
 
 	private Component lastFocusedInSplitPane;
 
 	private Component activeScreenComponent;
-	private dev.nuclr.plugin.ScreenProvider activeScreenProvider;
 
 	private boolean quickViewActive;
 	private Component quickViewReplacedComponent;
@@ -103,22 +101,7 @@ public class MainWindow {
 	private ThemeSchemeStore themeSchemeStore;
 
 	@Autowired
-	private MountRegistry mountRegistry;
-
-	@Autowired
-	private ArchiveMountProviderRegistry archiveMountProviderRegistry;
-
-	@Autowired
-	private FilePanelProviderRegistry filePanelProviderRegistry;
-
-	@Autowired
-	private PluginManagementPopup pluginManagementPopup;
-
-	@Autowired
 	private FunctionKeyBar functionKeyBar;
-
-	@Autowired
-	private CopyCommandHandler copyCommandHandler;
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
@@ -184,12 +167,6 @@ public class MainWindow {
 		var colors = savedSettings.colors();
 
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-		leftFilePanel = new FilePanel(
-				applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors);
-		rightFilePanel = new FilePanel(
-				applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors);
-		mainSplitPane.setLeftComponent(leftFilePanel);
-		mainSplitPane.setRightComponent(rightFilePanel);
 
 		dividerRatio = savedSettings.dividerRatio();
 
@@ -409,8 +386,6 @@ Save setup                          Shift+F9
 			menu.add("Re-read");
 			menu.add("Change drive");
 		}
-		
-
 		
 
 		// ── Global keyboard shortcuts ─────────────────────────────────────────
@@ -742,6 +717,10 @@ Save setup                          Shift+F9
 	@EventListener
 	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
 		if (activeScreenProvider != null) {
+			if (event.getFunctionKeyNumber() == 1) {
+				openActiveScreenPluginDocs();
+				return;
+			}
 			if (event.getFunctionKeyNumber() == 2) {
 				saveActiveScreen();
 				return;
@@ -940,6 +919,31 @@ Save setup                          Shift+F9
 			}
 		}
 		applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
+	}
+
+	private void openActiveScreenPluginDocs() {
+		if (activeScreenProvider == null) {
+			return;
+		}
+		var info = pluginRegistry.getPluginInfoByScreenProvider(activeScreenProvider);
+		String docUrl = info != null ? info.getDocUrl() : null;
+		if (docUrl == null || docUrl.isBlank()) {
+			Alerts.showMessageDialog(
+					mainFrame,
+					"No plugin documentation URL configured.",
+					"Plugin Help",
+					JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		try {
+			Desktop.getDesktop().browse(URI.create(docUrl));
+		} catch (Exception ex) {
+			Alerts.showMessageDialog(
+					mainFrame,
+					"Cannot open plugin documentation:\n" + docUrl,
+					"Plugin Help",
+					JOptionPane.ERROR_MESSAGE);
+		}
 	}
 
 	private void confirmAndExitApplication() {

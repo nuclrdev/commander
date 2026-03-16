@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.commander.service.PluginRegistry;
-import dev.nuclr.plugin.QuickViewProvider;
+import dev.nuclr.plugin.QuickViewProviderPlugin;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +48,7 @@ public class QuickViewPanel {
 	@Autowired
 	private ThemeSchemeStore themeSchemeStore;
 
-	private Map<String, QuickViewProvider> loadedPlugins = new HashMap<>();
+	private Map<String, QuickViewProviderPlugin> loadedPlugins = new HashMap<>();
 
 	private volatile Thread currentLoadThread;
 
@@ -56,7 +56,7 @@ public class QuickViewPanel {
 	private volatile AtomicBoolean currentCancelled;
 
 	/** The provider whose content is currently displayed (null if none). */
-	private volatile QuickViewProvider activeProvider;
+	private volatile QuickViewProviderPlugin activeProvider;
 
 	/**
 	 * Monotonically increasing counter. Each call to show() increments it.
@@ -106,10 +106,11 @@ public class QuickViewPanel {
 		for (var plugin : plugins) {
 			log.info("Found provider [{}] for: {}", plugin.getClass().getName(), path);
 			applyTheme(plugin);
-			if (!loadedPlugins.containsKey(plugin.getPluginClass())) {
+			String pluginKey = plugin.getClass().getName();
+			if (!loadedPlugins.containsKey(pluginKey)) {
 				var pluginPanel = plugin.getPanel();
-				loadedPlugins.put(plugin.getPluginClass(), plugin);
-				panel.add(pluginPanel, plugin.getPluginClass());
+				loadedPlugins.put(pluginKey, plugin);
+				panel.add(pluginPanel, pluginKey);
 			}
 		}
 
@@ -127,11 +128,11 @@ public class QuickViewPanel {
 				long start = System.currentTimeMillis();
 				boolean success;
 				try {
-					success = plugin.open(item, cancelled);
-					log.info("Plugin [{}] open took {} ms", plugin.getPluginClass(),
+					success = plugin.openItem(item, cancelled);
+					log.info("Plugin [{}] open took {} ms", plugin.getClass().getName(),
 							System.currentTimeMillis() - start);
 				} catch (Exception e) {
-					log.error("Error in plugin [{}]: {}", plugin.getPluginClass(), e.getMessage(), e);
+					log.error("Error in plugin [{}]: {}", plugin.getClass().getName(), e.getMessage(), e);
 					continue;
 				}
 
@@ -143,7 +144,7 @@ public class QuickViewPanel {
 
 				if (success) {
 					activeProvider = plugin;
-					String card = plugin.getPluginClass();
+					String card = plugin.getClass().getName();
 					if (!isStale(myGen)) showCard(cards, card);
 					return;
 				}
@@ -168,7 +169,7 @@ public class QuickViewPanel {
 			t.interrupt();
 			currentLoadThread = null;
 		}
-		QuickViewProvider prev = activeProvider;
+		QuickViewProviderPlugin prev = activeProvider;
 		if (prev != null) {
 			activeProvider = null;
 			closeQuietly(prev);
@@ -182,11 +183,11 @@ public class QuickViewPanel {
 		return currentGeneration.get() != myGen || Thread.currentThread().isInterrupted();
 	}
 
-	private void closeQuietly(QuickViewProvider provider) {
+	private void closeQuietly(QuickViewProviderPlugin provider) {
 		try {
-			provider.close();
+			provider.closeItem();
 		} catch (Exception e) {
-			log.warn("Error closing provider [{}]: {}", provider.getPluginClass(), e.getMessage());
+			log.warn("Error closing provider [{}]: {}", provider.getClass().getName(), e.getMessage());
 		}
 	}
 
@@ -221,7 +222,7 @@ public class QuickViewPanel {
 		return p;
 	}
 
-	private void applyTheme(QuickViewProvider plugin) {
+	private void applyTheme(QuickViewProviderPlugin plugin) {
 		Object pluginTheme = currentPluginTheme();
 		if (pluginTheme == null) {
 			return;
@@ -234,7 +235,7 @@ public class QuickViewPanel {
 		} catch (NoSuchMethodException ignored) {
 			// Older plugins can ignore host theme settings.
 		} catch (Exception e) {
-			log.warn("Failed to apply theme to provider [{}]: {}", plugin.getPluginClass(), e.getMessage());
+			log.warn("Failed to apply theme to provider [{}]: {}", plugin.getClass().getName(), e.getMessage());
 		}
 	}
 

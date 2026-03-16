@@ -51,7 +51,7 @@ public class PluginManagementPopup {
 			listPanel.add(emptyLabel);
 		} else {
 			for (var plugin : plugins) {
-				listPanel.add(buildPluginCard(plugin.getInfo()));
+				listPanel.add(buildPluginCard(plugin.getPluginInfo()));
 				listPanel.add(Box.createVerticalStrut(8));
 			}
 		}

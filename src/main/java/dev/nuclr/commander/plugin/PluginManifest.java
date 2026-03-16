@@ -3,6 +3,8 @@ package dev.nuclr.commander.plugin;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import dev.nuclr.plugin.PluginType;
 import lombok.Data;
 
@@ -23,7 +25,8 @@ public class PluginManifest {
 	private List<String> quickViewProviders = new ArrayList<>();
 	private List<String> screenProviders = new ArrayList<>();
 
-	private List<String> filePanelProviders = new ArrayList<>();
+	@JsonAlias("filePanelProviders")
+	private List<String> panelProviders = new ArrayList<>();
 
 	private List<String> archiveMountProviders = new ArrayList<>();
 
