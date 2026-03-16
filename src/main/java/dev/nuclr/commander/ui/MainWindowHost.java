@@ -52,6 +52,7 @@ import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
+import dev.nuclr.plugin.FocusablePlugin;
 import dev.nuclr.plugin.PanelProviderPlugin;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.PluginTheme;
@@ -280,6 +281,14 @@ public class MainWindowHost {
 				return true;
 			}
 
+			if (e.getID() == KeyEvent.KEY_PRESSED
+					&& e.getKeyCode() == KeyEvent.VK_TAB
+					&& !e.isAltDown()
+					&& !e.isControlDown()
+					&& mainSplitPane.isVisible()) {
+				return transferPanelFocus();
+			}
+
 			return false;
 		};
 	}
@@ -329,6 +338,11 @@ public class MainWindowHost {
 				mainSplitPane.setRightComponent(state.component);
 			}
 
+			if (leftSide && rightPanelState.provider == null && provider instanceof FocusablePlugin focusable) {
+				focusable.onFocusGained();
+				SwingUtilities.invokeLater(state.component::requestFocusInWindow);
+			}
+
 			mainFrame.revalidate();
 			mainFrame.repaint();
 		} catch (Exception ex) {
@@ -363,6 +377,30 @@ public class MainWindowHost {
 		JLabel label = new JLabel(text, JLabel.CENTER);
 		label.setFont(label.getFont().deriveFont(Font.PLAIN, 14f));
 		return label;
+	}
+
+	private boolean transferPanelFocus() {
+		if (!(leftPanelState.provider instanceof FocusablePlugin leftFocusable)
+				|| !(rightPanelState.provider instanceof FocusablePlugin rightFocusable)
+				|| leftPanelState.component == null
+				|| rightPanelState.component == null) {
+			return false;
+		}
+
+		Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		boolean focusInRight = focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component);
+
+		if (focusInRight) {
+			rightFocusable.onFocusLost();
+			leftFocusable.onFocusGained();
+			leftPanelState.component.requestFocusInWindow();
+		} else {
+			leftFocusable.onFocusLost();
+			rightFocusable.onFocusGained();
+			rightPanelState.component.requestFocusInWindow();
+		}
+
+		return true;
 	}
 
 	@EventListener
