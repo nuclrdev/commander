@@ -340,7 +340,6 @@ public class MainWindowHost {
 
 			if (leftSide && rightPanelState.provider == null && provider instanceof FocusablePlugin focusable) {
 				focusable.onFocusGained();
-				SwingUtilities.invokeLater(state.component::requestFocusInWindow);
 			}
 
 			mainFrame.revalidate();
@@ -393,11 +392,9 @@ public class MainWindowHost {
 		if (focusInRight) {
 			rightFocusable.onFocusLost();
 			leftFocusable.onFocusGained();
-			leftPanelState.component.requestFocusInWindow();
 		} else {
 			leftFocusable.onFocusLost();
 			rightFocusable.onFocusGained();
-			rightPanelState.component.requestFocusInWindow();
 		}
 
 		return true;
