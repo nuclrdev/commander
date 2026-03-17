@@ -16,6 +16,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.event.FunctionKeyCommandEvent;
+import dev.nuclr.plugin.MenuResource;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 
@@ -45,6 +46,7 @@ public class FunctionKeyBar {
 	private final List<JButton> buttons = new ArrayList<>();
 	private final Map<Integer, String> defaultLabels = new HashMap<>();
 	private final Map<Integer, String> currentLabels = new HashMap<>();
+	private final Map<Integer, MenuResource> currentMenuResources = new HashMap<>();
 
 	@PostConstruct
 	public void init() {
@@ -63,17 +65,40 @@ public class FunctionKeyBar {
 
 	public void publish(int functionKeyNumber) {
 		String label = currentLabels.getOrDefault(functionKeyNumber, "");
+		MenuResource menuResource = currentMenuResources.get(functionKeyNumber);
 		applicationEventPublisher.publishEvent(
-				new FunctionKeyCommandEvent(this, functionKeyNumber, label));
+				new FunctionKeyCommandEvent(this, functionKeyNumber, label, menuResource));
 	}
 
 	public void setLabels(Map<Integer, String> labels) {
 		for (int key = 1; key <= ITEMS.length; key++) {
 			String label = labels.getOrDefault(key, "");
 			currentLabels.put(key, label);
+			currentMenuResources.remove(key);
 			JButton button = buttons.get(key - 1);
 			button.setText(buttonText(key, label));
 			button.setEnabled(!label.isBlank());
+		}
+	}
+
+	public void setMenuResources(List<MenuResource> resources, boolean shiftDown, boolean ctrlDown, boolean altDown) {
+		List<MenuResource> safeResources = resources != null ? resources : List.of();
+		currentMenuResources.clear();
+
+		for (int key = 1; key <= ITEMS.length; key++) {
+			final int functionKeyNumber = key;
+			MenuResource resource = safeResources.stream()
+					.filter(item -> matches(item, functionKeyNumber, shiftDown, ctrlDown, altDown))
+					.findFirst()
+					.orElse(null);
+
+			currentMenuResources.put(key, resource);
+			String label = resource != null ? resource.getName() : "";
+			currentLabels.put(key, label);
+
+			JButton button = buttons.get(key - 1);
+			button.setText(buttonText(key, label));
+			button.setEnabled(resource != null);
 		}
 	}
 
@@ -115,6 +140,48 @@ public class FunctionKeyBar {
 		return c != null ? c : fallback;
 	}
 
+	private static boolean matches(MenuResource resource, int functionKeyNumber, boolean shiftDown, boolean ctrlDown, boolean altDown) {
+		KeyBinding binding = parse(resource.getKeyStroke());
+		return binding != null
+				&& binding.functionKeyNumber() == functionKeyNumber
+				&& binding.shiftDown() == shiftDown
+				&& binding.ctrlDown() == ctrlDown
+				&& binding.altDown() == altDown;
+	}
+
+	private static KeyBinding parse(String keyStroke) {
+		if (keyStroke == null || keyStroke.isBlank()) {
+			return null;
+		}
+
+		boolean shift = false;
+		boolean ctrl = false;
+		boolean alt = false;
+		Integer functionKey = null;
+
+		for (String rawPart : keyStroke.split("\\+")) {
+			String part = rawPart.trim().toUpperCase();
+			switch (part) {
+				case "SHIFT" -> shift = true;
+				case "CTRL", "CONTROL" -> ctrl = true;
+				case "ALT" -> alt = true;
+				default -> {
+					if (part.matches("F(1[0-2]|[1-9])")) {
+						functionKey = Integer.parseInt(part.substring(1));
+					}
+				}
+			}
+		}
+
+		if (functionKey == null) {
+			return null;
+		}
+		return new KeyBinding(functionKey, shift, ctrl, alt);
+	}
+
 	private record Item(int number, String label) {
+	}
+
+	private record KeyBinding(int functionKeyNumber, boolean shiftDown, boolean ctrlDown, boolean altDown) {
 	}
 }

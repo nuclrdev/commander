@@ -53,6 +53,7 @@ import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
 import dev.nuclr.plugin.FocusablePlugin;
+import dev.nuclr.plugin.MenuResource;
 import dev.nuclr.plugin.PanelProviderPlugin;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.PluginTheme;
@@ -71,6 +72,10 @@ public class MainWindowHost {
 	private ScreenProviderPlugin activeScreenProvider;
 	private double dividerRatio = 0.5;
 	private int fontSize = LocalSettingsStore.DEFAULT_FONT_SIZE;
+	private boolean shiftDown;
+	private boolean ctrlDown;
+	private boolean altDown;
+	private PanelState focusedPanelState;
 
 	private final PanelState leftPanelState = new PanelState();
 	private final PanelState rightPanelState = new PanelState();
@@ -160,6 +165,9 @@ public class MainWindowHost {
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
 		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(buildKeyDispatcher());
+		KeyboardFocusManager
+				.getCurrentKeyboardFocusManager()
+				.addPropertyChangeListener("focusOwner", evt -> onFocusOwnerChanged((Component) evt.getNewValue()));
 		mainFrame.addComponentListener(new ComponentAdapter() {
 			@Override
 			public void componentResized(ComponentEvent e) {
@@ -220,6 +228,8 @@ public class MainWindowHost {
 			if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != mainFrame) {
 				return false;
 			}
+
+			updateModifierState(e);
 
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_O && e.isControlDown()) {
 				toggleConsole();
@@ -340,6 +350,8 @@ public class MainWindowHost {
 
 			if (leftSide && rightPanelState.provider == null && provider instanceof FocusablePlugin focusable) {
 				SwingUtilities.invokeLater(focusable::onFocusGained);
+				focusedPanelState = state;
+				rebuildFunctionBar();
 			}
 
 			mainFrame.revalidate();
@@ -366,6 +378,9 @@ public class MainWindowHost {
 		try {
 			state.provider.openItem(resource, new AtomicBoolean(false));
 			state.currentResource = resource;
+			if (state == focusedPanelState) {
+				rebuildFunctionBar();
+			}
 		} catch (Exception ex) {
 			log.error("Failed to open panel resource [{}]: {}", resource.getName(), ex.getMessage(), ex);
 			Alerts.showMessageDialog(mainFrame, "Cannot open resource:\n" + ex.getMessage(), "Navigation Error", JOptionPane.ERROR_MESSAGE);
@@ -393,11 +408,15 @@ public class MainWindowHost {
 			SwingUtilities.invokeLater(() -> {
 				rightFocusable.onFocusLost();
 				leftFocusable.onFocusGained();
+				focusedPanelState = leftPanelState;
+				rebuildFunctionBar();
 			});
 		} else {
 			SwingUtilities.invokeLater(() -> {
 				leftFocusable.onFocusLost();
 				rightFocusable.onFocusGained();
+				focusedPanelState = rightPanelState;
+				rebuildFunctionBar();
 			});
 		}
 
@@ -442,7 +461,6 @@ public class MainWindowHost {
 
 	@EventListener
 	public void onShowFilePanelsView(ShowFilePanelsViewEvent event) {
-		functionKeyBar.resetDefaultLabels();
 		if (activeScreenComponent != null) {
 			mainFrame.remove(activeScreenComponent);
 			activeScreenComponent = null;
@@ -455,12 +473,19 @@ public class MainWindowHost {
 		if (lastFocusedInSplitPane != null) {
 			lastFocusedInSplitPane.requestFocusInWindow();
 		}
+		rebuildFunctionBar();
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
 
 	@EventListener
 	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
+		MenuResource menuResource = event.getMenuResource();
+		if (menuResource != null) {
+			pluginRegistry.getPluginContext().getEventBus().emit(menuResource.getEvent());
+			return;
+		}
+
 		if (event.getFunctionKeyNumber() == 10) {
 			if (activeScreenComponent != null) {
 				applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
@@ -481,6 +506,58 @@ public class MainWindowHost {
 		} else {
 			applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
 		}
+	}
+
+	private void onFocusOwnerChanged(Component focusOwner) {
+		if (focusOwner == null || !mainSplitPane.isVisible()) {
+			return;
+		}
+
+		PanelState newFocused = null;
+		if (leftPanelState.component != null && SwingUtilities.isDescendingFrom(focusOwner, leftPanelState.component)) {
+			newFocused = leftPanelState;
+		} else if (rightPanelState.component != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component)) {
+			newFocused = rightPanelState;
+		}
+
+		if (newFocused != null && newFocused != focusedPanelState) {
+			focusedPanelState = newFocused;
+			rebuildFunctionBar();
+		}
+	}
+
+	private void updateModifierState(KeyEvent event) {
+		boolean previousShift = shiftDown;
+		boolean previousCtrl = ctrlDown;
+		boolean previousAlt = altDown;
+
+		int keyCode = event.getKeyCode();
+		if (keyCode == KeyEvent.VK_SHIFT) {
+			shiftDown = event.getID() == KeyEvent.KEY_PRESSED;
+		}
+		if (keyCode == KeyEvent.VK_CONTROL) {
+			ctrlDown = event.getID() == KeyEvent.KEY_PRESSED;
+		}
+		if (keyCode == KeyEvent.VK_ALT) {
+			altDown = event.getID() == KeyEvent.KEY_PRESSED;
+		}
+
+		if (previousShift != shiftDown || previousCtrl != ctrlDown || previousAlt != altDown) {
+			rebuildFunctionBar();
+		}
+	}
+
+	private void rebuildFunctionBar() {
+		if (!mainSplitPane.isVisible()) {
+			return;
+		}
+		if (focusedPanelState == null || focusedPanelState.provider == null) {
+			functionKeyBar.resetDefaultLabels();
+			return;
+		}
+
+		List<MenuResource> resources = focusedPanelState.provider.getMenuItems(focusedPanelState.currentResource);
+		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
 	}
 
 	private void applyFontSize(int size) {
