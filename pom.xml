@@ -124,7 +124,7 @@
 				<version>3.13.0</version>
 				<configuration>
 					<excludes>
-						<exclude>**/dev/nuclr/commander/ui/MainWindow.java</exclude>
+						<exclude>**/dev/nuclr/commander/ui/MainWindowLegacy.java</exclude>
 					</excludes>
 				</configuration>
 			</plugin>
