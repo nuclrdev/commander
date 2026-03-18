@@ -13,7 +13,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -26,12 +25,11 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.nuclr.commander.plugin.PluginManifest;
 import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.plugin.ApplicationPluginContext;
 import dev.nuclr.plugin.BasePlugin;
 import dev.nuclr.plugin.PanelProviderPlugin;
-import dev.nuclr.plugin.PluginInfo;
+import dev.nuclr.plugin.PluginManifest;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.QuickViewProviderPlugin;
 import dev.nuclr.plugin.ScreenProviderPlugin;
@@ -59,7 +57,7 @@ public final class PluginRegistry {
 	private final List<QuickViewProviderPlugin> quickViewProviders = new CopyOnWriteArrayList<>();
 	private final List<ScreenProviderPlugin> screenProviders = new CopyOnWriteArrayList<>();
 	private final List<URLClassLoader> pluginClassLoaders = new CopyOnWriteArrayList<>();
-	private final ConcurrentHashMap<ScreenProviderPlugin, PluginInfo> screenProviderInfo = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<ScreenProviderPlugin, PluginManifest> screenProviderInfo = new ConcurrentHashMap<>();
 
 	@PostConstruct
 	public void init() {
@@ -126,7 +124,7 @@ public final class PluginRegistry {
 		return List.copyOf(loadedPlugins);
 	}
 
-	public PluginInfo getPluginInfoByScreenProvider(ScreenProviderPlugin provider) {
+	public PluginManifest getPluginInfoByScreenProvider(ScreenProviderPlugin provider) {
 		return provider == null ? null : screenProviderInfo.get(provider);
 	}
 
@@ -217,7 +215,7 @@ public final class PluginRegistry {
 				plugin.load(pluginContext);
 				screenProviders.add(plugin);
 				loadedPlugins.add(plugin);
-				screenProviderInfo.put(plugin, toPluginInfo(manifest));
+				screenProviderInfo.put(plugin, manifest);
 				log.info("Loaded screen provider: [{}]", className);
 			} catch (Exception e) {
 				log.error("Failed to load screen provider [{}]: {}", className, e.getMessage(), e);
@@ -225,21 +223,6 @@ public final class PluginRegistry {
 						"Plugin Load Error", JOptionPane.ERROR_MESSAGE);
 			}
 		}
-	}
-
-	private PluginInfo toPluginInfo(PluginManifest manifest) {
-		PluginInfo info = new PluginInfo();
-		info.setName(manifest.getName());
-		info.setId(manifest.getId());
-		info.setVersion(manifest.getVersion());
-		info.setDescription(manifest.getDescription());
-		info.setAuthor(manifest.getAuthor());
-		info.setLicense(manifest.getLicense());
-		info.setWebsite(manifest.getWebsite());
-		info.setPageUrl(manifest.getPageUrl());
-		info.setDocUrl(manifest.getDocUrl());
-		info.setType(manifest.getType());
-		return info;
 	}
 
 	private void extractZip(File zipFile, Path targetDir) throws IOException {
