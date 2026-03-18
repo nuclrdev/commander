@@ -128,6 +128,7 @@ public class MainWindowHost {
 		JFrame.setDefaultLookAndFeelDecorated(true);
 		JDialog.setDefaultLookAndFeelDecorated(true);
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
+		UIManager.put("Button.font", UIManager.getFont("defaultFont"));	
 
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

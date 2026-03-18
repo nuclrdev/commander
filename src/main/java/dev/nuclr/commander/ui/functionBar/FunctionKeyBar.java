@@ -1,6 +1,13 @@
 package dev.nuclr.commander.ui.functionBar;
 
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridLayout;
+import java.awt.RenderingHints;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,8 +57,8 @@ public class FunctionKeyBar {
 
 	@PostConstruct
 	public void init() {
-		panel = new JPanel(new GridLayout(1, ITEMS.length, 2, 0));
-		panel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		panel = new JPanel(new GridLayout(1, ITEMS.length, 8, 0));
+		panel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
 
 		for (Item item : ITEMS) {
 			defaultLabels.put(item.number(), item.label());
@@ -75,8 +82,8 @@ public class FunctionKeyBar {
 			String label = labels.getOrDefault(key, "");
 			currentLabels.put(key, label);
 			currentMenuResources.remove(key);
-			JButton button = buttons.get(key - 1);
-			button.setText(buttonText(key, label));
+			FunctionKeyButton button = (FunctionKeyButton) buttons.get(key - 1);
+			button.setMenuLabel(label);
 			button.setEnabled(!label.isBlank());
 		}
 	}
@@ -96,8 +103,8 @@ public class FunctionKeyBar {
 			String label = resource != null ? resource.getName() : "";
 			currentLabels.put(key, label);
 
-			JButton button = buttons.get(key - 1);
-			button.setText(buttonText(key, label));
+			FunctionKeyButton button = (FunctionKeyButton) buttons.get(key - 1);
+			button.setMenuLabel(label);
 			button.setEnabled(resource != null);
 		}
 	}
@@ -107,37 +114,38 @@ public class FunctionKeyBar {
 	}
 
 	private JButton createButton(int number, String label) {
-		JButton button = new JButton(buttonText(number, label));
+		FunctionKeyButton button = new FunctionKeyButton(number, label);
 		button.setFocusPainted(false);
-		button.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
 		button.setOpaque(true);
-		button.setContentAreaFilled(true);
+//		button.setBorderPainted(false);
+		button.setRolloverEnabled(false);
+		button.setFocusable(false);
+		button.setContentAreaFilled(false);
+		button.setPreferredSize(new Dimension(108, 28));
 		button.addActionListener(e -> publish(number));
 		return button;
 	}
 
-	private static String buttonText(int number, String label) {
-		if (label == null || label.isBlank()) {
-			return "<html><b>" + number + "</b></html>";
-		}
-		return "<html><b>" + number + "</b> " + label + "</html>";
-	}
-
 	private void applyTheme() {
-		var barBg = uiColor("Panel.background", panel.getBackground());
-		var btnBg = uiColor("Button.background", barBg);
-		var btnFg = uiColor("Button.foreground", panel.getForeground());
+		Color barBg = Color.BLACK;
+		Color keyBg = new Color(0, 128, 128);
+		Color keyFg = Color.BLACK;
+		Color gutterBg = Color.BLACK;
+		Color gutterFg = new Color(212, 212, 212);
+		Color disabledBg = new Color(34, 79, 79);
+		Color disabledFg = new Color(130, 130, 130);
+		Font buttonFont = UIManager.getFont("Button.font");
+		if (buttonFont == null) {
+			buttonFont = panel.getFont();
+		}
 
 		panel.setBackground(barBg);
 		for (JButton button : buttons) {
-			button.setBackground(btnBg);
-			button.setForeground(btnFg);
+			FunctionKeyButton functionKeyButton = (FunctionKeyButton) button;
+			functionKeyButton.setTheme(keyBg, keyFg, gutterBg, gutterFg, disabledBg, disabledFg);
+			button.setFont(buttonFont);
+			button.setMargin(new java.awt.Insets(0, 0, 0, 0));
 		}
-	}
-
-	private static java.awt.Color uiColor(String key, java.awt.Color fallback) {
-		java.awt.Color c = UIManager.getColor(key);
-		return c != null ? c : fallback;
 	}
 
 	private static boolean matches(MenuResource resource, int functionKeyNumber, boolean shiftDown, boolean ctrlDown, boolean altDown) {
@@ -183,5 +191,82 @@ public class FunctionKeyBar {
 	}
 
 	private record KeyBinding(int functionKeyNumber, boolean shiftDown, boolean ctrlDown, boolean altDown) {
+	}
+
+	private static final class FunctionKeyButton extends JButton {
+		private static final long serialVersionUID = 1L;
+
+		private final int number;
+		private String label;
+		private Color keyBackground = new Color(0, 128, 128);
+		private Color keyForeground = Color.BLACK;
+		private Color gutterBackground = Color.BLACK;
+		private Color gutterForeground = new Color(212, 212, 212);
+		private Color disabledBackground = new Color(34, 79, 79);
+		private Color disabledForeground = new Color(130, 130, 130);
+
+		private FunctionKeyButton(int number, String label) {
+			this.number = number;
+			this.label = label != null ? label : "";
+			setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+		}
+
+		private void setMenuLabel(String label) {
+			this.label = label != null ? label : "";
+			repaint();
+		}
+
+		private void setTheme(
+				Color keyBackground,
+				Color keyForeground,
+				Color gutterBackground,
+				Color gutterForeground,
+				Color disabledBackground,
+				Color disabledForeground) {
+			this.keyBackground = keyBackground;
+			this.keyForeground = keyForeground;
+			this.gutterBackground = gutterBackground;
+			this.gutterForeground = gutterForeground;
+			this.disabledBackground = disabledBackground;
+			this.disabledForeground = disabledForeground;
+			repaint();
+		}
+
+		@Override
+		protected void paintComponent(Graphics graphics) {
+			Graphics2D g = (Graphics2D) graphics.create();
+			try {
+				g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+				g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+
+				int width = getWidth();
+				int height = getHeight();
+				int numberWidth = number >= 10 ? 20 : 12;
+				int blockX = numberWidth + 2;
+				int blockWidth = Math.max(0, width - blockX);
+
+				g.setColor(gutterBackground);
+				g.fillRect(0, 0, width, height);
+
+				Color fillColor = isEnabled() ? keyBackground : disabledBackground;
+				Color textColor = isEnabled() ? keyForeground : disabledForeground;
+				g.setColor(fillColor);
+				g.fillRect(blockX, 1, blockWidth, Math.max(0, height - 2));
+
+				g.setFont(getFont());
+				FontMetrics metrics = g.getFontMetrics();
+				int baseline = (height - metrics.getHeight()) / 2 + metrics.getAscent();
+
+				g.setColor(isEnabled() ? gutterForeground : disabledForeground);
+				g.drawString(Integer.toString(number), 0, baseline);
+
+				if (!label.isBlank()) {
+					g.setColor(textColor);
+					g.drawString(label, blockX + 4, baseline);
+				}
+			} finally {
+				g.dispose();
+			}
+		}
 	}
 }
