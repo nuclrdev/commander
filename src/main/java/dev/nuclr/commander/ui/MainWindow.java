@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -114,6 +115,11 @@ public class MainWindow {
 	}
 
 	private void initOnEdt() {
+		
+		  // Disable custom window decorations
+        JFrame.setDefaultLookAndFeelDecorated(true);
+        JDialog.setDefaultLookAndFeelDecorated(true);
+        
 		if (SystemUtils.isOsMac()) {
 			System.setProperty("apple.laf.useScreenMenuBar", "true");
 			System.setProperty("apple.awt.application.name", "Nuclr Commander");
@@ -125,8 +131,6 @@ public class MainWindow {
 
 		FlatDarculaLaf.setup();
 		applyThemeScheme();
-		JFrame.setDefaultLookAndFeelDecorated(true);
-		JDialog.setDefaultLookAndFeelDecorated(true);
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
 		UIManager.put("Button.font", UIManager.getFont("defaultFont"));	
 
