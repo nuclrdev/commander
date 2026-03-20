@@ -84,9 +84,11 @@ public class QuickViewPanel {
 		long myGen = currentGeneration.incrementAndGet();
 		stop();
 
-		if (path == null) return;
-
 		var cards = (CardLayout) panel.getLayout();
+		if (path == null) {
+			showNoProvider(null, cards);
+			return;
+		}
 
 		if (Files.isDirectory(path)) {
 			folderQuickViewPanel.show(path);

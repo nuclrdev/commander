@@ -4,10 +4,10 @@ import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.UUID;
 
 import dev.nuclr.plugin.PluginPathResource;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 
 /**
@@ -17,12 +17,12 @@ import lombok.Data;
  * receive a plain {@link InputStream} and never see the underlying path.
  */
 @Data
-@AllArgsConstructor
 public class PathQuickViewItem extends PluginPathResource {
 
 	private final Path path;
 
-	{
+	public PathQuickViewItem(Path path) {
+		this.path = path;
 		setUuid(UUID.randomUUID().toString());
 		setName(name());
 		setSizeBytes(sizeBytes());
@@ -31,11 +31,17 @@ public class PathQuickViewItem extends PluginPathResource {
 	}
 
 	public String name() {
+		if (path == null) {
+			return "";
+		}
 		var fn = path.getFileName();
 		return fn != null ? fn.toString() : path.toString();
 	}
 
 	public long sizeBytes() {
+		if (path == null) {
+			return 0L;
+		}
 		try {
 			return Files.size(path);
 		} catch (Exception e) {
@@ -45,6 +51,9 @@ public class PathQuickViewItem extends PluginPathResource {
 
 	public String extension() {
 		String n = name();
+		if (n.isEmpty()) {
+			return "";
+		}
 		int dot = n.lastIndexOf('.');
 		if (dot >= 0) {
 			return n.substring(dot + 1);
@@ -53,6 +62,9 @@ public class PathQuickViewItem extends PluginPathResource {
 	}
 
 	public String mimeType() {
+		if (path == null) {
+			return null;
+		}
 		try {
 			return Files.probeContentType(path);
 		} catch (Exception e) {
@@ -62,6 +74,7 @@ public class PathQuickViewItem extends PluginPathResource {
 
 	@Override
 	public InputStream openStream() throws Exception {
+		Objects.requireNonNull(path, "path");
 		return new BufferedInputStream(Files.newInputStream(path));
 	}
 }

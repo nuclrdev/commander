@@ -12,6 +12,9 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +56,7 @@ import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
+import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.plugin.FocusablePlugin;
 import dev.nuclr.plugin.MenuResource;
 import dev.nuclr.plugin.PanelProviderPlugin;
@@ -76,13 +80,21 @@ public class MainWindow {
 	private boolean shiftDown;
 	private boolean ctrlDown;
 	private boolean altDown;
+	private boolean quickViewActive;
+	private boolean quickViewShowingLeft;
+	private Path quickViewCurrentPath;
 	private PanelState focusedPanelState;
+	private PanelState quickViewSourceState;
+	private Component quickViewReplacedComponent;
 
 	private final PanelState leftPanelState = new PanelState();
 	private final PanelState rightPanelState = new PanelState();
 
 	@Autowired
 	private ConsolePanel consolePanel;
+
+	@Autowired
+	private QuickViewPanel quickViewPanel;
 
 	@Value("${version}")
 	private String version;
@@ -104,6 +116,8 @@ public class MainWindow {
 
 	@Autowired
 	private PluginManagementPopup pluginManagementPopup;
+
+	private Timer quickViewRefreshTimer;
 
 	@PostConstruct
 	public void init() {
@@ -189,6 +203,7 @@ public class MainWindow {
 			}
 		});
 		mainFrame.addWindowStateListener(e -> saveWindowState());
+		startQuickViewRefreshTimer();
 
 		mainFrame.setVisible(true);
 		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
@@ -238,6 +253,11 @@ public class MainWindow {
 
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_O && e.isControlDown()) {
 				toggleConsole();
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_Q && e.isControlDown() && mainSplitPane.isVisible()) {
+				toggleQuickView();
 				return true;
 			}
 
@@ -318,6 +338,11 @@ public class MainWindow {
 		timer.start();
 	}
 
+	private void startQuickViewRefreshTimer() {
+		quickViewRefreshTimer = new Timer(150, e -> refreshQuickViewPreview());
+		quickViewRefreshTimer.start();
+	}
+
 	private boolean initializePanelsIfPossible() {
 		List<PanelProviderPlugin> templates = pluginRegistry.getPanelProviders();
 		if (templates.isEmpty()) {
@@ -396,6 +421,162 @@ public class MainWindow {
 		JLabel label = new JLabel(text, JLabel.CENTER);
 		label.setFont(label.getFont().deriveFont(Font.PLAIN, 14f));
 		return label;
+	}
+
+	private void toggleQuickView() {
+		if (quickViewActive) {
+			closeQuickView();
+			return;
+		}
+
+		PanelState sourceState = focusedPanelState;
+		if (sourceState == null) {
+			return;
+		}
+
+		Path selectedPath = resolveSelectedPath(sourceState);
+		if (selectedPath == null) {
+			return;
+		}
+
+		boolean sourceIsRight = sourceState == rightPanelState;
+		quickViewShowingLeft = sourceIsRight;
+		quickViewSourceState = sourceState;
+		quickViewCurrentPath = selectedPath;
+		quickViewReplacedComponent = quickViewShowingLeft ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent();
+
+		if (quickViewShowingLeft) {
+			mainSplitPane.setLeftComponent(quickViewPanel.getPanel());
+		} else {
+			mainSplitPane.setRightComponent(quickViewPanel.getPanel());
+		}
+
+		quickViewPanel.show(selectedPath);
+		quickViewActive = true;
+		mainSplitPane.setDividerLocation(0.5);
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	private void closeQuickView() {
+		if (!quickViewActive) {
+			return;
+		}
+
+		quickViewPanel.stop();
+		if (quickViewReplacedComponent != null) {
+			if (quickViewShowingLeft) {
+				mainSplitPane.setLeftComponent(quickViewReplacedComponent);
+			} else {
+				mainSplitPane.setRightComponent(quickViewReplacedComponent);
+			}
+		}
+
+		quickViewReplacedComponent = null;
+		quickViewSourceState = null;
+		quickViewCurrentPath = null;
+		quickViewActive = false;
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	private void refreshQuickViewPreview() {
+		if (!quickViewActive || quickViewSourceState == null) {
+			return;
+		}
+
+		Path selectedPath = resolveSelectedPath(quickViewSourceState);
+		if (selectedPath == null || selectedPath.equals(quickViewCurrentPath)) {
+			return;
+		}
+
+		quickViewCurrentPath = selectedPath;
+		quickViewPanel.show(selectedPath);
+	}
+
+	private Path resolveSelectedPath(PanelState state) {
+		if (state == null || state.component == null) {
+			return null;
+		}
+
+		Path path = trySelectedPathMethod(state.component, "getSelectedPath");
+		if (path != null) {
+			return path;
+		}
+
+		PluginPathResource selectedResource = trySelectedResourceMethod(state.component, "getSelectedResource");
+		if (selectedResource != null && selectedResource.getPath() != null) {
+			return selectedResource.getPath();
+		}
+
+		Path reflectedTableSelection = tryResolveTableSelection(state.component);
+		if (reflectedTableSelection != null) {
+			return reflectedTableSelection;
+		}
+
+		return state.currentResource != null ? state.currentResource.getPath() : null;
+	}
+
+	private Path trySelectedPathMethod(Object target, String methodName) {
+		try {
+			Method method = target.getClass().getMethod(methodName);
+			Object value = method.invoke(target);
+			return value instanceof Path path ? path : null;
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private PluginPathResource trySelectedResourceMethod(Object target, String methodName) {
+		try {
+			Method method = target.getClass().getMethod(methodName);
+			Object value = method.invoke(target);
+			return value instanceof PluginPathResource resource ? resource : null;
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private Path tryResolveTableSelection(Object panel) {
+		try {
+			Field tableField = panel.getClass().getDeclaredField("table");
+			tableField.setAccessible(true);
+			Object tableObject = tableField.get(panel);
+			if (!(tableObject instanceof javax.swing.JTable table)) {
+				return null;
+			}
+
+			int selectedRow = table.getSelectedRow();
+			if (selectedRow < 0) {
+				return null;
+			}
+
+			int modelRow = table.convertRowIndexToModel(selectedRow);
+			Object model = table.getModel();
+			Method getEntryAt = model.getClass().getMethod("getEntryAt", int.class);
+			Object entry = getEntryAt.invoke(model, modelRow);
+			if (entry == null) {
+				return null;
+			}
+
+			try {
+				Method pathMethod = entry.getClass().getMethod("path");
+				Object path = pathMethod.invoke(entry);
+				if (path instanceof Path selectedPath) {
+					return selectedPath;
+				}
+			} catch (NoSuchMethodException ignored) {
+				Method getPathMethod = entry.getClass().getMethod("getPath");
+				Object path = getPathMethod.invoke(entry);
+				if (path instanceof Path selectedPath) {
+					return selectedPath;
+				}
+			}
+		} catch (Exception ignored) {
+			return null;
+		}
+
+		return null;
 	}
 
 	private boolean transferPanelFocus() {
