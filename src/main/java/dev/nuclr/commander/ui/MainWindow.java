@@ -22,8 +22,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
-import java.util.function.Predicate;
 
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
@@ -69,16 +67,18 @@ import dev.nuclr.plugin.PanelProviderPlugin;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.PluginTheme;
 import dev.nuclr.plugin.ScreenProviderPlugin;
+import dev.nuclr.plugin.event.PluginClosePanelEvent;
+import dev.nuclr.plugin.event.PluginEvent;
+import dev.nuclr.plugin.event.PluginOpenItemEvent;
+import dev.nuclr.plugin.event.bus.PluginEventListener;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
-public class MainWindow {
+public class MainWindow implements PluginEventListener {
 
 	private static final String LOCAL_FILE_PANEL_PROVIDER_CLASS = "dev.nuclr.plugin.core.panel.fs.LocalFilePanelProvider";
-	private static final String PANEL_STACK_PUSH_KEY = "commander.panelStack.pushResource";
-	private static final String PANEL_STACK_POP_KEY = "commander.panelStack.pop";
 	private static final String PANEL_STACK_PROVIDER_CLASS_METADATA = "commander.panelStack.providerClass";
 
 	private JFrame mainFrame;
@@ -215,7 +215,7 @@ public class MainWindow {
 		});
 		mainFrame.addWindowStateListener(e -> saveWindowState());
 		startQuickViewRefreshTimer();
-		registerPanelStackCallbacks();
+		pluginRegistry.getPluginContext().getEventBus().subscribe(this);
 
 		mainFrame.setVisible(true);
 		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
@@ -769,21 +769,6 @@ public class MainWindow {
 		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
 	}
 
-	private void registerPanelStackCallbacks() {
-		Map<String, Object> globalData = pluginRegistry.getPluginContext().getGlobalData();
-		globalData.put(PANEL_STACK_PUSH_KEY,
-				(BiFunction<PanelProviderPlugin, PluginPathResource, Boolean>) this::pushPanelForPlugin);
-		globalData.put(PANEL_STACK_POP_KEY, (Predicate<PanelProviderPlugin>) this::popPanelForPlugin);
-	}
-
-	private boolean pushPanelForPlugin(PanelProviderPlugin caller, PluginPathResource resource) {
-		return runOnEdt(() -> pushPanelLayer(caller, resource));
-	}
-
-	private boolean popPanelForPlugin(PanelProviderPlugin caller) {
-		return runOnEdt(() -> popPanelLayer(caller));
-	}
-
 	private boolean pushPanelLayer(PanelProviderPlugin caller, PluginPathResource resource) {
 		if (caller == null || resource == null) {
 			return false;
@@ -847,10 +832,14 @@ public class MainWindow {
 	}
 
 	private PanelLayer createStackLayer(PluginPathResource resource) {
-		for (PanelProviderPlugin template : orderedPanelTemplates(preferredPanelProviderClass(resource))) {
+		for (PanelProviderPlugin template : orderedPanelTemplates(resource)) {
 			PanelProviderPlugin provider = null;
 			try {
 				provider = pluginRegistry.createPanelProviderInstance(template);
+				if (!provider.canSupport(resource)) {
+					safeUnload(provider);
+					continue;
+				}
 				applyTheme(provider);
 				PanelLayer layer = openPanelLayer(provider, resource);
 				if (layer != null) {
@@ -867,7 +856,8 @@ public class MainWindow {
 		return null;
 	}
 
-	private List<PanelProviderPlugin> orderedPanelTemplates(String preferredProviderClassName) {
+	private List<PanelProviderPlugin> orderedPanelTemplates(PluginPathResource resource) {
+		String preferredProviderClassName = preferredPanelProviderClass(resource);
 		List<PanelProviderPlugin> templates = pluginRegistry.getPanelProviders();
 		List<PanelProviderPlugin> ordered = new ArrayList<>(templates.size());
 		for (PanelProviderPlugin template : templates) {
@@ -961,6 +951,40 @@ public class MainWindow {
 		} catch (Exception ex) {
 			log.warn("Failed to unload panel provider [{}]: {}", provider.getClass().getName(), ex.getMessage());
 		}
+	}
+
+	@Override
+	public boolean isMessageSupported(PluginEvent msg) {
+		return msg instanceof PluginOpenItemEvent || msg instanceof PluginClosePanelEvent;
+	}
+
+	@Override
+	public void handleMessage(PluginEvent event) {
+		if (event instanceof PluginOpenItemEvent openEvent) {
+			runOnEdt(() -> handlePanelOpenRequest(openEvent));
+			return;
+		}
+		if (event instanceof PluginClosePanelEvent closeEvent) {
+			runOnEdt(() -> handlePanelCloseRequest(closeEvent));
+		}
+	}
+
+	private boolean handlePanelOpenRequest(PluginOpenItemEvent event) {
+		if (event == null || event.isHandled()) {
+			return false;
+		}
+		boolean handled = pushPanelLayer(event.getSourceProvider(), event.getResource());
+		event.setHandled(handled);
+		return handled;
+	}
+
+	private boolean handlePanelCloseRequest(PluginClosePanelEvent event) {
+		if (event == null || event.isHandled()) {
+			return false;
+		}
+		boolean handled = popPanelLayer(event.getSourceProvider());
+		event.setHandled(handled);
+		return handled;
 	}
 
 	private void applyFontSize(int size) {
