@@ -70,6 +70,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class MainWindow {
 
+	private static final String LOCAL_FILE_PANEL_PROVIDER_CLASS = "dev.nuclr.plugin.core.panel.fs.LocalFilePanelProvider";
+
 	private JFrame mainFrame;
 	private JSplitPane mainSplitPane;
 	private Component lastFocusedInSplitPane;
@@ -349,13 +351,24 @@ public class MainWindow {
 			return false;
 		}
 
+		PanelProviderPlugin initialTemplate = findInitialPanelTemplate(templates);
+
 		if (leftPanelState.provider == null) {
-			configurePanel(leftPanelState, templates.get(0), true);
+			configurePanel(leftPanelState, initialTemplate, true);
 		}
 		if (rightPanelState.provider == null) {
-			configurePanel(rightPanelState, templates.size() > 1 ? templates.get(1) : templates.get(0), false);
+			configurePanel(rightPanelState, initialTemplate, false);
 		}
 		return leftPanelState.provider != null && rightPanelState.provider != null;
+	}
+
+	private PanelProviderPlugin findInitialPanelTemplate(List<PanelProviderPlugin> templates) {
+		for (PanelProviderPlugin template : templates) {
+			if (LOCAL_FILE_PANEL_PROVIDER_CLASS.equals(template.getClass().getName())) {
+				return template;
+			}
+		}
+		return templates.get(0);
 	}
 
 	private void configurePanel(PanelState state, PanelProviderPlugin template, boolean leftSide) {
