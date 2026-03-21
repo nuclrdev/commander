@@ -15,9 +15,15 @@ import java.awt.event.KeyEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
@@ -71,6 +77,9 @@ import lombok.extern.slf4j.Slf4j;
 public class MainWindow {
 
 	private static final String LOCAL_FILE_PANEL_PROVIDER_CLASS = "dev.nuclr.plugin.core.panel.fs.LocalFilePanelProvider";
+	private static final String PANEL_STACK_PUSH_KEY = "commander.panelStack.pushResource";
+	private static final String PANEL_STACK_POP_KEY = "commander.panelStack.pop";
+	private static final String PANEL_STACK_PROVIDER_CLASS_METADATA = "commander.panelStack.providerClass";
 
 	private JFrame mainFrame;
 	private JSplitPane mainSplitPane;
@@ -206,6 +215,7 @@ public class MainWindow {
 		});
 		mainFrame.addWindowStateListener(e -> saveWindowState());
 		startQuickViewRefreshTimer();
+		registerPanelStackCallbacks();
 
 		mainFrame.setVisible(true);
 		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
@@ -353,13 +363,13 @@ public class MainWindow {
 
 		PanelProviderPlugin initialTemplate = findInitialPanelTemplate(templates);
 
-		if (leftPanelState.provider == null) {
+		if (leftPanelState.isEmpty()) {
 			configurePanel(leftPanelState, initialTemplate, true);
 		}
-		if (rightPanelState.provider == null) {
+		if (rightPanelState.isEmpty()) {
 			configurePanel(rightPanelState, initialTemplate, false);
 		}
-		return leftPanelState.provider != null && rightPanelState.provider != null;
+		return !leftPanelState.isEmpty() && !rightPanelState.isEmpty();
 	}
 
 	private PanelProviderPlugin findInitialPanelTemplate(List<PanelProviderPlugin> templates) {
@@ -377,21 +387,19 @@ public class MainWindow {
 			applyTheme(provider);
 			List<PluginPathResource> roots = provider.getChangeDriveResources();
 			if (roots.isEmpty()) {
+				safeUnload(provider);
 				return;
 			}
 
-			state.provider = provider;
-			state.component = provider.getPanel();
-			state.currentResource = roots.get(0);
-			provider.openItem(state.currentResource, new AtomicBoolean(false));
-
-			if (leftSide) {
-				mainSplitPane.setLeftComponent(state.component);
-			} else {
-				mainSplitPane.setRightComponent(state.component);
+			PanelLayer layer = openPanelLayer(provider, roots.get(0));
+			if (layer == null) {
+				return;
 			}
 
-			if (leftSide && rightPanelState.provider == null && provider instanceof FocusablePlugin focusable) {
+			state.push(layer);
+			renderActivePanel(state);
+
+			if (leftSide && rightPanelState.isEmpty() && layer.provider instanceof FocusablePlugin focusable) {
 				SwingUtilities.invokeLater(focusable::onFocusGained);
 				focusedPanelState = state;
 				rebuildFunctionBar();
@@ -407,20 +415,22 @@ public class MainWindow {
 
 	private void showChangeDrive(boolean leftSide) {
 		PanelState state = leftSide ? leftPanelState : rightPanelState;
-		if (state.provider == null) {
+		if (state.provider() == null) {
 			return;
 		}
 		ChangeDrivePopup.show(
 				leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent(),
-				state.provider.getChangeDriveResources(),
-				state.currentResource,
+				state.provider().getChangeDriveResources(),
+				state.currentResource(),
 				resource -> openPanelResource(state, resource));
 	}
 
 	private void openPanelResource(PanelState state, PluginPathResource resource) {
 		try {
-			state.provider.openItem(resource, new AtomicBoolean(false));
-			state.currentResource = resource;
+			if (state.provider() == null || !state.provider().openItem(resource, new AtomicBoolean(false))) {
+				return;
+			}
+			state.setCurrentResource(resource);
 			if (state == focusedPanelState) {
 				rebuildFunctionBar();
 			}
@@ -508,26 +518,26 @@ public class MainWindow {
 	}
 
 	private Path resolveSelectedPath(PanelState state) {
-		if (state == null || state.component == null) {
+		if (state == null || state.component() == null) {
 			return null;
 		}
 
-		Path path = trySelectedPathMethod(state.component, "getSelectedPath");
+		Path path = trySelectedPathMethod(state.component(), "getSelectedPath");
 		if (path != null) {
 			return path;
 		}
 
-		PluginPathResource selectedResource = trySelectedResourceMethod(state.component, "getSelectedResource");
+		PluginPathResource selectedResource = trySelectedResourceMethod(state.component(), "getSelectedResource");
 		if (selectedResource != null && selectedResource.getPath() != null) {
 			return selectedResource.getPath();
 		}
 
-		Path reflectedTableSelection = tryResolveTableSelection(state.component);
+		Path reflectedTableSelection = tryResolveTableSelection(state.component());
 		if (reflectedTableSelection != null) {
 			return reflectedTableSelection;
 		}
 
-		return state.currentResource != null ? state.currentResource.getPath() : null;
+		return state.currentResource() != null ? state.currentResource().getPath() : null;
 	}
 
 	private Path trySelectedPathMethod(Object target, String methodName) {
@@ -593,15 +603,15 @@ public class MainWindow {
 	}
 
 	private boolean transferPanelFocus() {
-		if (!(leftPanelState.provider instanceof FocusablePlugin leftFocusable)
-				|| !(rightPanelState.provider instanceof FocusablePlugin rightFocusable)
-				|| leftPanelState.component == null
-				|| rightPanelState.component == null) {
+		if (!(leftPanelState.provider() instanceof FocusablePlugin leftFocusable)
+				|| !(rightPanelState.provider() instanceof FocusablePlugin rightFocusable)
+				|| leftPanelState.component() == null
+				|| rightPanelState.component() == null) {
 			return false;
 		}
 
 		Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-		boolean focusInRight = focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component);
+		boolean focusInRight = focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component());
 
 		if (focusInRight) {
 			SwingUtilities.invokeLater(() -> {
@@ -713,9 +723,9 @@ public class MainWindow {
 		}
 
 		PanelState newFocused = null;
-		if (leftPanelState.component != null && SwingUtilities.isDescendingFrom(focusOwner, leftPanelState.component)) {
+		if (leftPanelState.component() != null && SwingUtilities.isDescendingFrom(focusOwner, leftPanelState.component())) {
 			newFocused = leftPanelState;
-		} else if (rightPanelState.component != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component)) {
+		} else if (rightPanelState.component() != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component())) {
 			newFocused = rightPanelState;
 		}
 
@@ -750,13 +760,207 @@ public class MainWindow {
 		if (!mainSplitPane.isVisible()) {
 			return;
 		}
-		if (focusedPanelState == null || focusedPanelState.provider == null) {
+		if (focusedPanelState == null || focusedPanelState.provider() == null) {
 			functionKeyBar.resetDefaultLabels();
 			return;
 		}
 
-		List<MenuResource> resources = focusedPanelState.provider.getMenuItems(focusedPanelState.currentResource);
+		List<MenuResource> resources = focusedPanelState.provider().getMenuItems(focusedPanelState.currentResource());
 		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
+	}
+
+	private void registerPanelStackCallbacks() {
+		Map<String, Object> globalData = pluginRegistry.getPluginContext().getGlobalData();
+		globalData.put(PANEL_STACK_PUSH_KEY,
+				(BiFunction<PanelProviderPlugin, PluginPathResource, Boolean>) this::pushPanelForPlugin);
+		globalData.put(PANEL_STACK_POP_KEY, (Predicate<PanelProviderPlugin>) this::popPanelForPlugin);
+	}
+
+	private boolean pushPanelForPlugin(PanelProviderPlugin caller, PluginPathResource resource) {
+		return runOnEdt(() -> pushPanelLayer(caller, resource));
+	}
+
+	private boolean popPanelForPlugin(PanelProviderPlugin caller) {
+		return runOnEdt(() -> popPanelLayer(caller));
+	}
+
+	private boolean pushPanelLayer(PanelProviderPlugin caller, PluginPathResource resource) {
+		if (caller == null || resource == null) {
+			return false;
+		}
+
+		PanelState state = findPanelState(caller);
+		if (state == null || state.provider() != caller) {
+			return false;
+		}
+
+		PanelLayer nextLayer = createStackLayer(resource);
+		if (nextLayer == null) {
+			return false;
+		}
+
+		if (state == focusedPanelState && caller instanceof FocusablePlugin focusable) {
+			focusable.onFocusLost();
+		}
+
+		state.push(nextLayer);
+		renderActivePanel(state);
+		if (state == focusedPanelState && nextLayer.provider instanceof FocusablePlugin focusable) {
+			focusable.onFocusGained();
+			nextLayer.component.requestFocusInWindow();
+		}
+		onPanelStateChanged(state);
+		log.info("Pushed panel provider [{}] on top of [{}] stack",
+				nextLayer.provider.getClass().getName(),
+				caller.getClass().getName());
+		return true;
+	}
+
+	private boolean popPanelLayer(PanelProviderPlugin caller) {
+		if (caller == null) {
+			return false;
+		}
+
+		PanelState state = findPanelState(caller);
+		if (state == null || state.provider() != caller || state.stackSize() <= 1) {
+			return false;
+		}
+
+		if (state == focusedPanelState && caller instanceof FocusablePlugin focusable) {
+			focusable.onFocusLost();
+		}
+
+		PanelLayer removed = state.pop();
+		safeUnload(removed.provider);
+		renderActivePanel(state);
+
+		if (state == focusedPanelState && state.provider() instanceof FocusablePlugin focusable) {
+			focusable.onFocusGained();
+			if (state.component() != null) {
+				state.component().requestFocusInWindow();
+			}
+		}
+
+		onPanelStateChanged(state);
+		log.info("Popped panel provider [{}] from panel stack", caller.getClass().getName());
+		return true;
+	}
+
+	private PanelLayer createStackLayer(PluginPathResource resource) {
+		for (PanelProviderPlugin template : orderedPanelTemplates(preferredPanelProviderClass(resource))) {
+			PanelProviderPlugin provider = null;
+			try {
+				provider = pluginRegistry.createPanelProviderInstance(template);
+				applyTheme(provider);
+				PanelLayer layer = openPanelLayer(provider, resource);
+				if (layer != null) {
+					return layer;
+				}
+			} catch (Exception ex) {
+				log.warn("Failed to open resource [{}] with panel provider [{}]: {}",
+						resource.getName(),
+						template.getClass().getName(),
+						ex.getMessage());
+			}
+			safeUnload(provider);
+		}
+		return null;
+	}
+
+	private List<PanelProviderPlugin> orderedPanelTemplates(String preferredProviderClassName) {
+		List<PanelProviderPlugin> templates = pluginRegistry.getPanelProviders();
+		List<PanelProviderPlugin> ordered = new ArrayList<>(templates.size());
+		for (PanelProviderPlugin template : templates) {
+			if (Objects.equals(template.getClass().getName(), preferredProviderClassName)) {
+				ordered.add(template);
+				break;
+			}
+		}
+		for (PanelProviderPlugin template : templates) {
+			if (!ordered.contains(template)) {
+				ordered.add(template);
+			}
+		}
+		return ordered;
+	}
+
+	private String preferredPanelProviderClass(PluginPathResource resource) {
+		if (resource == null || resource.getMetadata() == null) {
+			return null;
+		}
+		String providerClassName = resource.getMetadata().get(PANEL_STACK_PROVIDER_CLASS_METADATA);
+		return providerClassName == null || providerClassName.isBlank() ? null : providerClassName;
+	}
+
+	private PanelLayer openPanelLayer(PanelProviderPlugin provider, PluginPathResource resource) {
+		JComponent component = provider.getPanel();
+		if (!provider.openItem(resource, new AtomicBoolean(false))) {
+			return null;
+		}
+		return new PanelLayer(provider, component, resource);
+	}
+
+	private void renderActivePanel(PanelState state) {
+		if (state.component() == null) {
+			return;
+		}
+		if (state == leftPanelState) {
+			mainSplitPane.setLeftComponent(state.component());
+			return;
+		}
+		if (state == rightPanelState) {
+			mainSplitPane.setRightComponent(state.component());
+		}
+	}
+
+	private void onPanelStateChanged(PanelState state) {
+		if (state == focusedPanelState) {
+			rebuildFunctionBar();
+		}
+		if (quickViewActive && quickViewSourceState == state) {
+			refreshQuickViewPreview();
+		}
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	private PanelState findPanelState(PanelProviderPlugin provider) {
+		if (provider == null) {
+			return null;
+		}
+		if (leftPanelState.contains(provider)) {
+			return leftPanelState;
+		}
+		if (rightPanelState.contains(provider)) {
+			return rightPanelState;
+		}
+		return null;
+	}
+
+	private boolean runOnEdt(BooleanSupplier action) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			return action.getAsBoolean();
+		}
+
+		AtomicReference<Boolean> result = new AtomicReference<>(false);
+		try {
+			SwingUtilities.invokeAndWait(() -> result.set(action.getAsBoolean()));
+		} catch (Exception ex) {
+			log.warn("Failed to execute panel stack action on EDT: {}", ex.getMessage(), ex);
+			return false;
+		}
+		return Boolean.TRUE.equals(result.get());
+	}
+
+	private void safeUnload(PanelProviderPlugin provider) {
+		if (provider == null) {
+			return;
+		}
+		try {
+			provider.unload();
+		} catch (Exception ex) {
+			log.warn("Failed to unload panel provider [{}]: {}", provider.getClass().getName(), ex.getMessage());
+		}
 	}
 
 	private void applyFontSize(int size) {
@@ -876,9 +1080,70 @@ public class MainWindow {
 		return new PluginTheme(scheme.name(), scheme.uiDefaults(), fontFamily, themeFontSize);
 	}
 
-	private static final class PanelState {
-		private PanelProviderPlugin provider;
-		private JComponent component;
+	@FunctionalInterface
+	private interface BooleanSupplier {
+		boolean getAsBoolean();
+	}
+
+	private static final class PanelLayer {
+		private final PanelProviderPlugin provider;
+		private final JComponent component;
 		private PluginPathResource currentResource;
+
+		private PanelLayer(PanelProviderPlugin provider, JComponent component, PluginPathResource currentResource) {
+			this.provider = provider;
+			this.component = component;
+			this.currentResource = currentResource;
+		}
+	}
+
+	private static final class PanelState {
+		private final ArrayDeque<PanelLayer> stack = new ArrayDeque<>();
+
+		private boolean isEmpty() {
+			return stack.isEmpty();
+		}
+
+		private int stackSize() {
+			return stack.size();
+		}
+
+		private void push(PanelLayer layer) {
+			stack.addLast(layer);
+		}
+
+		private PanelLayer pop() {
+			return stack.removeLast();
+		}
+
+		private boolean contains(PanelProviderPlugin provider) {
+			return stack.stream().anyMatch(layer -> layer.provider == provider);
+		}
+
+		private PanelLayer top() {
+			return stack.peekLast();
+		}
+
+		private PanelProviderPlugin provider() {
+			PanelLayer layer = top();
+			return layer != null ? layer.provider : null;
+		}
+
+		private JComponent component() {
+			PanelLayer layer = top();
+			return layer != null ? layer.component : null;
+		}
+
+		private PluginPathResource currentResource() {
+			PanelLayer layer = top();
+			return layer != null ? layer.currentResource : null;
+		}
+
+		private void setCurrentResource(PluginPathResource resource) {
+			PanelLayer layer = top();
+			if (layer != null) {
+				layer.currentResource = resource;
+			}
+		}
 	}
 }
