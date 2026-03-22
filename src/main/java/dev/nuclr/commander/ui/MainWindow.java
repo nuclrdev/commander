@@ -14,6 +14,8 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -55,8 +57,11 @@ import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.service.PanelTransferService;
+import dev.nuclr.commander.service.PanelTransferService.ConflictResolution;
+import dev.nuclr.commander.service.PanelTransferService.TransferOptions;
 import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
+import dev.nuclr.commander.ui.common.TransferConfirmationDialog;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
@@ -420,25 +425,45 @@ public class MainWindow implements PluginEventListener {
 
 	private void showChangeDrive(boolean leftSide) {
 		PanelState state = leftSide ? leftPanelState : rightPanelState;
-		if (state.provider() == null) {
+		PanelLayer base = state.bottom();
+		if (base == null) {
 			return;
 		}
 		ChangeDrivePopup.show(
 				leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent(),
-				state.provider().getChangeDriveResources(),
-				state.currentResource(),
+				base.provider.getChangeDriveResources(),
+				base.currentResource,
 				resource -> openPanelResource(state, resource));
 	}
 
 	private void openPanelResource(PanelState state, PluginPathResource resource) {
 		try {
-			if (state.provider() == null || !state.provider().openItem(resource, new AtomicBoolean(false))) {
+			// If quick view is covering this panel side, close it so the panel can be restored
+			if (quickViewActive && quickViewShowingLeft == (state == leftPanelState)) {
+				closeQuickView();
+			}
+			// Pop any stacked plugin layers (e.g. ZIP archive) back to the base provider
+			if (state.stackSize() > 1 && state == focusedPanelState
+					&& state.provider() instanceof FocusablePlugin focusable) {
+				focusable.onFocusLost();
+			}
+			while (state.stackSize() > 1) {
+				safeUnload(state.pop().provider);
+			}
+			PanelLayer base = state.bottom();
+			if (base == null || !base.provider.openItem(resource, new AtomicBoolean(false))) {
 				return;
 			}
-			state.setCurrentResource(resource);
+			base.currentResource = resource;
+			renderActivePanel(state);
 			if (state == focusedPanelState) {
+				if (base.provider instanceof FocusablePlugin focusable) {
+					focusable.onFocusGained();
+					base.component.requestFocusInWindow();
+				}
 				rebuildFunctionBar();
 			}
+			onPanelStateChanged(state);
 		} catch (Exception ex) {
 			log.error("Failed to open panel resource [{}]: {}", resource.getName(), ex.getMessage(), ex);
 			Alerts.showMessageDialog(mainFrame, "Cannot open resource:\n" + ex.getMessage(), "Navigation Error", JOptionPane.ERROR_MESSAGE);
@@ -972,6 +997,22 @@ public class MainWindow implements PluginEventListener {
 		}
 	}
 
+	private void refreshPanel(PanelState state, Path directory) {
+		if (state == null || state.component() == null || directory == null) {
+			return;
+		}
+		try {
+			Method method = state.component().getClass().getMethod("showDirectory", Path.class);
+			method.invoke(state.component(), directory);
+			onPanelStateChanged(state);
+		} catch (Exception ex) {
+			log.warn(
+					"Failed to refresh panel [{}]: {}",
+					state.provider() != null ? state.provider().getClass().getName() : "unknown",
+					ex.getMessage());
+		}
+	}
+
 	private boolean runOnEdt(BooleanSupplier action) {
 		if (SwingUtilities.isEventDispatchThread()) {
 			return action.getAsBoolean();
@@ -1070,25 +1111,158 @@ public class MainWindow implements PluginEventListener {
 		}
 
 		try {
+			TransferOptions transferOptions = prepareTransferOptions(sourceState, destinationState, sources, destinationDirectory, move);
+			if (transferOptions == null) {
+				handledCallback.accept(false);
+				return false;
+			}
+			Path effectiveDestination = transferOptions.destinationDirectory();
+			ensureDestinationDirectoryExists(effectiveDestination);
 			if (move) {
-				panelTransferService.move(sources, destinationDirectory);
+				panelTransferService.move(sources, transferOptions);
 			} else {
-				panelTransferService.copy(sources, destinationDirectory);
+				panelTransferService.copy(sources, transferOptions);
 			}
 			refreshPanel(sourceState);
-			refreshPanel(destinationState);
+			refreshPanel(destinationState, effectiveDestination);
 			handledCallback.accept(true);
 			return true;
 		} catch (Exception ex) {
 			log.error("Failed to {} items to [{}]: {}", move ? "move" : "copy", destinationDirectory, ex.getMessage(), ex);
 			Alerts.showMessageDialog(
 					mainFrame,
-					"Cannot " + (move ? "move" : "copy") + " files:\n" + ex.getMessage(),
+					"Cannot " + (move ? "move" : "copy") + " files:\n" + describeException(ex),
 					move ? "Move Error" : "Copy Error",
 					JOptionPane.ERROR_MESSAGE);
 			handledCallback.accept(false);
 			return false;
 		}
+	}
+
+	private TransferOptions prepareTransferOptions(
+			PanelState sourceState,
+			PanelState destinationState,
+			List<PluginPathResource> sources,
+			Path destinationDirectory,
+			boolean move) {
+		if (!isZipRelatedTransfer(sourceState, destinationState, sources, destinationDirectory)) {
+			return new TransferOptions(destinationDirectory, ConflictResolution.OVERWRITE, null);
+		}
+
+		boolean archiveSource = isArchiveSource(sourceState, sources);
+		boolean archiveDestination = isArchiveDestination(destinationState, destinationDirectory);
+		TransferConfirmationDialog.Result result = TransferConfirmationDialog.show(
+				mainFrame,
+				new TransferConfirmationDialog.Model(
+						transferDialogTitle(archiveSource, archiveDestination, move),
+						transferDestinationLabel(archiveSource, archiveDestination, move),
+						destinationDirectory,
+						sources));
+		if (result == null) {
+			return null;
+		}
+		return new TransferOptions(
+				result.destinationDirectory(),
+				result.conflictResolution(),
+				(sourcePath, targetPath, directory) -> showConflictResolutionDialog(sourcePath, targetPath, directory, move));
+	}
+
+	private ConflictResolution showConflictResolutionDialog(Path sourcePath, Path targetPath, boolean directory, boolean move) {
+		StringBuilder message = new StringBuilder();
+		message.append(directory ? "Folder already exists:" : "File already exists:")
+				.append('\n')
+				.append(targetPath)
+				.append('\n')
+				.append('\n')
+				.append(move ? "Move source:" : "Copy source:")
+				.append('\n')
+				.append(sourcePath);
+		Object[] options = {"Overwrite", "Skip", "Rename", "Cancel"};
+		int choice = JOptionPane.showOptionDialog(
+				mainFrame,
+				message.toString(),
+				move ? "Move Conflict" : "Copy Conflict",
+				JOptionPane.DEFAULT_OPTION,
+				JOptionPane.QUESTION_MESSAGE,
+				null,
+				options,
+				options[0]);
+		return switch (choice) {
+			case 0 -> ConflictResolution.OVERWRITE;
+			case 1 -> ConflictResolution.SKIP;
+			case 2 -> ConflictResolution.RENAME;
+			default -> ConflictResolution.SKIP;
+		};
+	}
+
+	private boolean isZipRelatedTransfer(
+			PanelState sourceState,
+			PanelState destinationState,
+			List<PluginPathResource> sources,
+			Path destinationDirectory) {
+		return isArchiveSource(sourceState, sources) || isArchiveDestination(destinationState, destinationDirectory);
+	}
+
+	private boolean isArchiveSource(PanelState sourceState, List<PluginPathResource> sources) {
+		if (sourceState != null && isZipProvider(sourceState.provider())) {
+			return true;
+		}
+		return sources.stream()
+				.filter(Objects::nonNull)
+				.map(PluginPathResource::getPath)
+				.filter(Objects::nonNull)
+				.anyMatch(path -> !path.getFileSystem().equals(FileSystems.getDefault()));
+	}
+
+	private boolean isArchiveDestination(PanelState destinationState, Path destinationDirectory) {
+		if (destinationState != null && isZipProvider(destinationState.provider())) {
+			return true;
+		}
+		return destinationDirectory != null && !destinationDirectory.getFileSystem().equals(FileSystems.getDefault());
+	}
+
+	private boolean isZipProvider(PanelProviderPlugin provider) {
+		return provider != null && provider.getClass().getName().contains(".mount.zip.");
+	}
+
+	private String transferDialogTitle(boolean archiveSource, boolean archiveDestination, boolean move) {
+		if (archiveDestination && !archiveSource) {
+			return move ? "Move Files To Archive" : "Add Files To Archive";
+		}
+		if (archiveSource && !archiveDestination) {
+			return move ? "Move Files From Archive" : "Extract Files";
+		}
+		return move ? "Move Files" : "Copy Files";
+	}
+
+	private String transferDestinationLabel(boolean archiveSource, boolean archiveDestination, boolean move) {
+		if (archiveDestination && !archiveSource) {
+			return move ? "Move files to archive directory" : "Add files to archive directory";
+		}
+		if (archiveSource && !archiveDestination) {
+			return move ? "Move files to" : "Extract files to";
+		}
+		return move ? "Move files to" : "Copy files to";
+	}
+
+	private void ensureDestinationDirectoryExists(Path destinationDirectory) throws Exception {
+		if (destinationDirectory == null) {
+			throw new IllegalArgumentException("Destination directory is not available");
+		}
+		if (Files.exists(destinationDirectory) && !Files.isDirectory(destinationDirectory)) {
+			throw new IllegalArgumentException("Destination path is not a directory: " + destinationDirectory);
+		}
+		if (!Files.exists(destinationDirectory)) {
+			Files.createDirectories(destinationDirectory);
+		}
+	}
+
+	private String describeException(Exception ex) {
+		if (ex == null) {
+			return "Unknown error";
+		}
+		String message = ex.getMessage();
+		return message != null && !message.isBlank() ? message : ex.getClass().getSimpleName();
 	}
 
 	private void applyFontSize(int size) {
@@ -1246,6 +1420,10 @@ public class MainWindow implements PluginEventListener {
 
 		private boolean contains(PanelProviderPlugin provider) {
 			return stack.stream().anyMatch(layer -> layer.provider == provider);
+		}
+
+		private PanelLayer bottom() {
+			return stack.peekFirst();
 		}
 
 		private PanelLayer top() {
