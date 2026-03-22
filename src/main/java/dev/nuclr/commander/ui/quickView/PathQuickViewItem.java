@@ -4,31 +4,44 @@ import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
+import java.util.UUID;
 
-import dev.nuclr.plugin.QuickViewItem;
-import lombok.AllArgsConstructor;
+import dev.nuclr.plugin.PluginPathResource;
 import lombok.Data;
 
 /**
- * {@link QuickViewItem} adapter for a NIO.2 {@link Path}.
+ * {@link PluginPathResource} adapter for a NIO.2 {@link Path}.
  *
  * <p>Works with any filesystem backend (local, ZIP, SFTP, etc.) — plugins
  * receive a plain {@link InputStream} and never see the underlying path.
  */
 @Data
-@AllArgsConstructor
-public class PathQuickViewItem implements QuickViewItem {
+public class PathQuickViewItem extends PluginPathResource {
 
 	private final Path path;
 
-	@Override
+	public PathQuickViewItem(Path path) {
+		this.path = path;
+		setUuid(UUID.randomUUID().toString());
+		setName(name());
+		setSizeBytes(sizeBytes());
+		setExtension(extension());
+		setMimeType(mimeType());
+	}
+
 	public String name() {
+		if (path == null) {
+			return "";
+		}
 		var fn = path.getFileName();
 		return fn != null ? fn.toString() : path.toString();
 	}
 
-	@Override
 	public long sizeBytes() {
+		if (path == null) {
+			return 0L;
+		}
 		try {
 			return Files.size(path);
 		} catch (Exception e) {
@@ -36,9 +49,11 @@ public class PathQuickViewItem implements QuickViewItem {
 		}
 	}
 
-	@Override
 	public String extension() {
 		String n = name();
+		if (n.isEmpty()) {
+			return "";
+		}
 		int dot = n.lastIndexOf('.');
 		if (dot >= 0) {
 			return n.substring(dot + 1);
@@ -46,8 +61,10 @@ public class PathQuickViewItem implements QuickViewItem {
 		return n;
 	}
 
-	@Override
 	public String mimeType() {
+		if (path == null) {
+			return null;
+		}
 		try {
 			return Files.probeContentType(path);
 		} catch (Exception e) {
@@ -57,11 +74,7 @@ public class PathQuickViewItem implements QuickViewItem {
 
 	@Override
 	public InputStream openStream() throws Exception {
+		Objects.requireNonNull(path, "path");
 		return new BufferedInputStream(Files.newInputStream(path));
-	}
-
-	@Override
-	public Path path() {
-		return path;
 	}
 }

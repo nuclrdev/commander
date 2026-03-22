@@ -33,7 +33,7 @@ public record ThemeSchemesConfig(
 		public static final String ACTIVE_SCHEME = "farBlue";
 
 		public static final Map<String, ThemeScheme> SCHEMES = Map.of(
-				"farBlue",
+				ACTIVE_SCHEME,
 				new ThemeScheme(
 						"Far Blue",
 						Map.ofEntries(

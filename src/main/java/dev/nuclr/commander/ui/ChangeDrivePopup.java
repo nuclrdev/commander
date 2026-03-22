@@ -1,7 +1,9 @@
 package dev.nuclr.commander.ui;
 
 import java.awt.Component;
-import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Consumer;
 
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -9,63 +11,40 @@ import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
 
-import dev.nuclr.commander.panel.FilePanelProviderRegistry;
-import dev.nuclr.plugin.panel.PanelRoot;
+import dev.nuclr.plugin.PluginPathResource;
 
 /**
- * Shows a popup menu listing all roots from all registered
- * {@link dev.nuclr.plugin.panel.FilePanelProvider}s so the user can switch
- * the active panel to a different drive, mount point, or remote connection.
- *
- * <p>Roots are obtained from {@link FilePanelProviderRegistry#listAllRoots()}.
+ * Shows a popup menu listing change-drive resources for the active panel plugin.
  */
 public class ChangeDrivePopup {
 
-    public static void show(FilePanel targetPanel, FilePanelProviderRegistry providerRegistry) {
-        show(targetPanel, targetPanel, providerRegistry, null);
-    }
-
-    public static void show(FilePanel targetPanel, Component anchorComponent, FilePanelProviderRegistry providerRegistry) {
-        show(targetPanel, anchorComponent, providerRegistry, null);
-    }
-
     public static void show(
-            FilePanel targetPanel,
             Component anchorComponent,
-            FilePanelProviderRegistry providerRegistry,
-            Runnable beforeNavigate) {
+            List<? extends PluginPathResource> resources,
+            PluginPathResource currentResource,
+            Consumer<PluginPathResource> onSelect) {
         JPopupMenu popup = new JPopupMenu("Change Drive");
 
-        Path currentRoot = targetPanel.getCurrentRoot();
         JMenuItem currentItem = null;
 
-        for (PanelRoot root : providerRegistry.listAllRoots()) {
-            String label = root.displayName();
+        for (PluginPathResource root : resources) {
+            String label = root.getName();
             JMenuItem item = new JMenuItem(label);
-            item.addActionListener(e -> {
-                if (beforeNavigate != null) {
-                    beforeNavigate.run();
-                }
-                targetPanel.navigateTo(root.path());
-            });
+            item.addActionListener(e -> onSelect.accept(root));
             if (!label.isEmpty()) {
                 item.setMnemonic(Character.toUpperCase(label.charAt(0)));
             }
             popup.add(item);
-            if (root.path().equals(currentRoot)) {
+            if (sameResource(root, currentResource)) {
                 currentItem = item;
             }
         }
 
-        Component anchor = anchorComponent != null ? anchorComponent : targetPanel;
-        if (!anchor.isShowing()) {
-            anchor = targetPanel.isShowing() ? targetPanel : null;
-        }
-        if (anchor == null || !anchor.isShowing()) {
+        if (anchorComponent == null || !anchorComponent.isShowing()) {
             return;
         }
 
-        popup.show(anchor, Math.max(anchor.getWidth() / 2, 0), 0);
+        popup.show(anchorComponent, Math.max(anchorComponent.getWidth() / 2, 0), 0);
 
         if (currentItem != null) {
             final JMenuItem itemToSelect = currentItem;
@@ -73,5 +52,18 @@ public class ChangeDrivePopup {
                     MenuSelectionManager.defaultManager().setSelectedPath(
                             new MenuElement[]{popup, itemToSelect}));
         }
+    }
+
+    private static boolean sameResource(PluginPathResource left, PluginPathResource right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left.getUuid() != null && right.getUuid() != null) {
+            return Objects.equals(left.getUuid(), right.getUuid());
+        }
+        return Objects.equals(left.getName(), right.getName());
     }
 }
