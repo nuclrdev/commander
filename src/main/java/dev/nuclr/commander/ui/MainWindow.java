@@ -54,6 +54,7 @@ import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
+import dev.nuclr.commander.service.PanelTransferService;
 import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
@@ -67,7 +68,9 @@ import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.PluginTheme;
 import dev.nuclr.plugin.ScreenProviderPlugin;
 import dev.nuclr.plugin.event.PluginClosePanelEvent;
+import dev.nuclr.plugin.event.PluginCopyEvent;
 import dev.nuclr.plugin.event.PluginEvent;
+import dev.nuclr.plugin.event.PluginMoveEvent;
 import dev.nuclr.plugin.event.PluginOpenItemEvent;
 import dev.nuclr.plugin.event.bus.PluginEventListener;
 import jakarta.annotation.PostConstruct;
@@ -126,6 +129,9 @@ public class MainWindow implements PluginEventListener {
 
 	@Autowired
 	private PluginManagementPopup pluginManagementPopup;
+
+	@Autowired
+	private PanelTransferService panelTransferService;
 
 	private Timer quickViewRefreshTimer;
 
@@ -913,6 +919,16 @@ public class MainWindow implements PluginEventListener {
 		mainFrame.repaint();
 	}
 
+	private PanelState oppositePanelState(PanelState state) {
+		if (state == leftPanelState) {
+			return rightPanelState;
+		}
+		if (state == rightPanelState) {
+			return leftPanelState;
+		}
+		return null;
+	}
+
 	private PanelState findPanelState(PanelProviderPlugin provider) {
 		if (provider == null) {
 			return null;
@@ -924,6 +940,36 @@ public class MainWindow implements PluginEventListener {
 			return rightPanelState;
 		}
 		return null;
+	}
+
+	private Path resolveCurrentDirectory(PanelState state) {
+		if (state == null || state.component() == null) {
+			return null;
+		}
+		try {
+			Method method = state.component().getClass().getMethod("getCurrentDirectory");
+			Object value = method.invoke(state.component());
+			return value instanceof Path path ? path : null;
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private void refreshPanel(PanelState state) {
+		Path currentDirectory = resolveCurrentDirectory(state);
+		if (state == null || state.component() == null || currentDirectory == null) {
+			return;
+		}
+		try {
+			Method method = state.component().getClass().getMethod("showDirectory", Path.class);
+			method.invoke(state.component(), currentDirectory);
+			onPanelStateChanged(state);
+		} catch (Exception ex) {
+			log.warn(
+					"Failed to refresh panel [{}]: {}",
+					state.provider() != null ? state.provider().getClass().getName() : "unknown",
+					ex.getMessage());
+		}
 	}
 
 	private boolean runOnEdt(BooleanSupplier action) {
@@ -954,7 +1000,10 @@ public class MainWindow implements PluginEventListener {
 
 	@Override
 	public boolean isMessageSupported(PluginEvent msg) {
-		return msg instanceof PluginOpenItemEvent || msg instanceof PluginClosePanelEvent;
+		return msg instanceof PluginOpenItemEvent
+				|| msg instanceof PluginClosePanelEvent
+				|| msg instanceof PluginCopyEvent
+				|| msg instanceof PluginMoveEvent;
 	}
 
 	@Override
@@ -965,6 +1014,14 @@ public class MainWindow implements PluginEventListener {
 		}
 		if (event instanceof PluginClosePanelEvent closeEvent) {
 			runOnEdt(() -> handlePanelCloseRequest(closeEvent));
+			return;
+		}
+		if (event instanceof PluginCopyEvent copyEvent) {
+			runOnEdt(() -> handleCopyRequest(copyEvent));
+			return;
+		}
+		if (event instanceof PluginMoveEvent moveEvent) {
+			runOnEdt(() -> handleMoveRequest(moveEvent));
 		}
 	}
 
@@ -984,6 +1041,54 @@ public class MainWindow implements PluginEventListener {
 		boolean handled = popPanelLayer(event.getSourceProvider());
 		event.setHandled(handled);
 		return handled;
+	}
+
+	private boolean handleCopyRequest(PluginCopyEvent event) {
+		return handleTransferRequest(event.getSourceProvider(), event.getSources(), false, event::setHandled);
+	}
+
+	private boolean handleMoveRequest(PluginMoveEvent event) {
+		return handleTransferRequest(event.getSourceProvider(), event.getSources(), true, event::setHandled);
+	}
+
+	private boolean handleTransferRequest(
+			PanelProviderPlugin sourceProvider,
+			List<PluginPathResource> sources,
+			boolean move,
+			java.util.function.Consumer<Boolean> handledCallback) {
+		if (sourceProvider == null || sources == null || sources.isEmpty()) {
+			handledCallback.accept(false);
+			return false;
+		}
+
+		PanelState sourceState = findPanelState(sourceProvider);
+		PanelState destinationState = oppositePanelState(sourceState);
+		Path destinationDirectory = resolveCurrentDirectory(destinationState);
+		if (sourceState == null || destinationState == null || destinationDirectory == null) {
+			handledCallback.accept(false);
+			return false;
+		}
+
+		try {
+			if (move) {
+				panelTransferService.move(sources, destinationDirectory);
+			} else {
+				panelTransferService.copy(sources, destinationDirectory);
+			}
+			refreshPanel(sourceState);
+			refreshPanel(destinationState);
+			handledCallback.accept(true);
+			return true;
+		} catch (Exception ex) {
+			log.error("Failed to {} items to [{}]: {}", move ? "move" : "copy", destinationDirectory, ex.getMessage(), ex);
+			Alerts.showMessageDialog(
+					mainFrame,
+					"Cannot " + (move ? "move" : "copy") + " files:\n" + ex.getMessage(),
+					move ? "Move Error" : "Copy Error",
+					JOptionPane.ERROR_MESSAGE);
+			handledCallback.accept(false);
+			return false;
+		}
 	}
 
 	private void applyFontSize(int size) {
