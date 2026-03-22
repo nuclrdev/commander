@@ -108,6 +108,14 @@ public class NoQuickViewAvailablePanel extends JPanel {
 	public void setPath(Path path) {
 		if (!uiBuilt) buildUI();
 		applyTheme();
+		if (path == null) {
+			extensionLabel.setText("No item selected");
+			fileNameLabel.setText(" ");
+			rebuildActions("", systemSettings.isDeveloperModeOn());
+			revalidate();
+			repaint();
+			return;
+		}
 
 		var fn = path.getFileName();
 		String filename = fn != null ? fn.toString() : path.toString();

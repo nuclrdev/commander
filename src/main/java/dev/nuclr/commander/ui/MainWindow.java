@@ -12,11 +12,22 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.ImageIcon;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -24,6 +35,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,51 +50,58 @@ import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.common.ThemeSchemeStore;
-import dev.nuclr.commander.event.FileSelectedEvent;
 import dev.nuclr.commander.event.FunctionKeyCommandEvent;
-import dev.nuclr.commander.event.QuickViewEvent;
 import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
-import dev.nuclr.commander.panel.FilePanelProviderRegistry;
+import dev.nuclr.commander.service.PanelTransferService;
 import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
-import dev.nuclr.commander.ui.copy.CopyCommandHandler;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
+import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
-import dev.nuclr.commander.vfs.ArchiveMountProviderRegistry;
-import dev.nuclr.commander.vfs.MountRegistry;
+import dev.nuclr.plugin.FocusablePlugin;
+import dev.nuclr.plugin.MenuResource;
+import dev.nuclr.plugin.PanelProviderPlugin;
+import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.PluginTheme;
+import dev.nuclr.plugin.ScreenProviderPlugin;
+import dev.nuclr.plugin.event.PluginClosePanelEvent;
+import dev.nuclr.plugin.event.PluginCopyEvent;
+import dev.nuclr.plugin.event.PluginEvent;
+import dev.nuclr.plugin.event.PluginMoveEvent;
+import dev.nuclr.plugin.event.PluginOpenItemEvent;
+import dev.nuclr.plugin.event.bus.PluginEventListener;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
-public class MainWindow {
+public class MainWindow implements PluginEventListener {
+
+	private static final String LOCAL_FILE_PANEL_PROVIDER_CLASS = "dev.nuclr.plugin.core.panel.fs.LocalFilePanelProvider";
+	private static final String PANEL_STACK_PROVIDER_CLASS_METADATA = "commander.panelStack.providerClass";
 
 	private JFrame mainFrame;
-
-	private JMenuBar menuBar;
-
 	private JSplitPane mainSplitPane;
-
-	private FilePanel leftFilePanel;
-	private FilePanel rightFilePanel;
-
 	private Component lastFocusedInSplitPane;
-
 	private Component activeScreenComponent;
-	private dev.nuclr.plugin.ScreenProvider activeScreenProvider;
-
+	private ScreenProviderPlugin activeScreenProvider;
+	private double dividerRatio = 0.5;
+	private int fontSize = LocalSettingsStore.DEFAULT_FONT_SIZE;
+	private boolean shiftDown;
+	private boolean ctrlDown;
+	private boolean altDown;
 	private boolean quickViewActive;
+	private boolean quickViewShowingLeft;
+	private Path quickViewCurrentPath;
+	private PanelState focusedPanelState;
+	private PanelState quickViewSourceState;
 	private Component quickViewReplacedComponent;
 
-	/** Current divider position as a fraction (0.0–1.0) of the split-pane width. */
-	private double dividerRatio = 0.5;
-
-	/** Current UI font size in points. */
-	private int fontSize = LocalSettingsStore.DEFAULT_FONT_SIZE;
+	private final PanelState leftPanelState = new PanelState();
+	private final PanelState rightPanelState = new PanelState();
 
 	@Autowired
 	private ConsolePanel consolePanel;
@@ -103,25 +122,18 @@ public class MainWindow {
 	private ThemeSchemeStore themeSchemeStore;
 
 	@Autowired
-	private MountRegistry mountRegistry;
+	private FunctionKeyBar functionKeyBar;
 
 	@Autowired
-	private ArchiveMountProviderRegistry archiveMountProviderRegistry;
-
-	@Autowired
-	private FilePanelProviderRegistry filePanelProviderRegistry;
+	private PluginRegistry pluginRegistry;
 
 	@Autowired
 	private PluginManagementPopup pluginManagementPopup;
 
 	@Autowired
-	private FunctionKeyBar functionKeyBar;
+	private PanelTransferService panelTransferService;
 
-	@Autowired
-	private CopyCommandHandler copyCommandHandler;
-
-	@Autowired
-	private PluginRegistry pluginRegistry;
+	private Timer quickViewRefreshTimer;
 
 	@PostConstruct
 	public void init() {
@@ -131,17 +143,13 @@ public class MainWindow {
 			SwingUtilities.invokeLater(this::initOnEdt);
 		}
 	}
-	
-	private JMenuItem item(String text, KeyStroke stroke, ActionListener action) {
-        var saveItem = new JMenuItem(text);
-        saveItem.setAccelerator(stroke);
-        saveItem.addActionListener(action);
-        return saveItem;
-	}
 
 	private void initOnEdt() {
-		log.info("Initializing MainWindow");
-
+		
+		  // Disable custom window decorations
+        JFrame.setDefaultLookAndFeelDecorated(true);
+        JDialog.setDefaultLookAndFeelDecorated(true);
+        
 		if (SystemUtils.isOsMac()) {
 			System.setProperty("apple.laf.useScreenMenuBar", "true");
 			System.setProperty("apple.awt.application.name", "Nuclr Commander");
@@ -149,17 +157,16 @@ public class MainWindow {
 
 		var savedSettings = settingsStore.loadOrDefault();
 		fontSize = savedSettings.fontSize();
+		dividerRatio = savedSettings.dividerRatio();
+
 		FlatDarculaLaf.setup();
 		applyThemeScheme();
-		JFrame.setDefaultLookAndFeelDecorated(true);
-		JDialog.setDefaultLookAndFeelDecorated(true);
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
-		// FlatLightLaf.setup();
-//		FlatIntelliJLaf.setup();
+		UIManager.put("Button.font", UIManager.getFont("defaultFont"));	
 
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
+		mainFrame.setLayout(new BorderLayout());
 		mainFrame.setSize(savedSettings.windowWidth(), savedSettings.windowHeight());
 		if (savedSettings.windowX() >= 0 && savedSettings.windowY() >= 0) {
 			mainFrame.setLocation(savedSettings.windowX(), savedSettings.windowY());
@@ -172,30 +179,14 @@ public class MainWindow {
 
 		var appIcon = new ImageIcon("data/images/icon-512.png").getImage();
 		mainFrame.setIconImage(appIcon);
-
-		if (SystemUtils.isOsMac()) {
-			if (Taskbar.isTaskbarSupported()) {
-				Taskbar.getTaskbar().setIconImage(appIcon);
-			}
+		if (SystemUtils.isOsMac() && Taskbar.isTaskbarSupported()) {
+			Taskbar.getTaskbar().setIconImage(appIcon);
 		}
 
-		mainFrame.setLayout(new BorderLayout());
-
-		var colors = savedSettings.colors();
-
-		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-		leftFilePanel = new FilePanel(
-				applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors);
-		rightFilePanel = new FilePanel(
-				applicationEventPublisher, mountRegistry, archiveMountProviderRegistry, filePanelProviderRegistry, colors);
-		mainSplitPane.setLeftComponent(leftFilePanel);
-		mainSplitPane.setRightComponent(rightFilePanel);
-
-		dividerRatio = savedSettings.dividerRatio();
-
-		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
-		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
-
+		mainSplitPane = new JSplitPane(
+				JSplitPane.HORIZONTAL_SPLIT,
+				placeholder("Loading plugins..."),
+				placeholder("Loading plugins..."));
 		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
 			int loc = (int) evt.getNewValue();
 			int paneWidth = mainSplitPane.getWidth();
@@ -205,420 +196,446 @@ public class MainWindow {
 			}
 		});
 
-		// ── Menu bar ─────────────────────────────────────────────────────────
-		menuBar = new JMenuBar();
-		mainFrame.setJMenuBar(menuBar);
-		
-
-		{
-			JMenu menu = new JMenu("Left");
-			menu.setMnemonic(KeyEvent.VK_L);
-			menuBar.add(menu);
-			menu.add("Brief");
-			menu.add("Medium");
-			menu.add("Full");
-			menu.add("Wide");
-			menu.add("Detailed");
-			menu.addSeparator();
-			menu.add("Info panel");
-			menu.add("Quick view");
-			menu.addSeparator();
-			menu.add("Sort modes");
-			menu.add("Show long names");
-			menu.add("Panel on/off");
-			menu.add("Re-read");
-			menu.add("Change drive");
-		}
-		
-		{
-			JMenu menu = new JMenu("Files");
-			menu.setMnemonic(KeyEvent.VK_F);
-			menuBar.add(menu);
-			
-			menu.add(item("View", KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), (e)->{}));
-			menu.add(item("Edit", KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0), (e)->{}));
-			menu.add(item("Copy", KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), (e)->{}));
-			menu.add(item("Rename or move", KeyStroke.getKeyStroke(KeyEvent.VK_F6, 0), (e)->{}));
-			menu.add(item("Make a folder", KeyStroke.getKeyStroke(KeyEvent.VK_F7, 0), (e)->{}));
-			menu.add(item("Delete", KeyStroke.getKeyStroke(KeyEvent.VK_F8, 0), (e)->{}));
-			
-			menu.addSeparator();
-			
-			menu.add(item("Select files by wildcard", KeyStroke.getKeyStroke(KeyEvent.VK_ADD, 0), (e)->{}));
-			menu.add(item("Unselect files by wildcard", KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, 0), (e)->{}));
-			menu.add(item("Invert selection", KeyStroke.getKeyStroke(KeyEvent.VK_MULTIPLY, 0), (e)->{}));
-			
-		/*
-  View               F3
-  Edit               F4
-  Copy               F5
-  Rename or move     F6
-  Link               Alt+F6
-  Make folder        F7
-  Delete             F8
-  Wipe               Alt+Del
-──────────────────────────────
-  Add to archive     Shift+F1
-  Extract files      Shift+F2
-  Archive commands   Shift+F3
-──────────────────────────────
-  File attributes    Ctrl+A
-  Apply command      Ctrl+G
-  Describe files     Ctrl+Z
-──────────────────────────────
-  Select group       Gray +
-  Unselect group     Gray -
-  Invert selection   Gray *
-  Restore selection  Ctrl+M		 
-		 
-		 */
-			
-		}
-		
-		{
-			JMenu menu = new JMenu("Commands");
-			menu.setMnemonic(KeyEvent.VK_C);
-			menuBar.add(menu);
-			
-			menu.add(item("Find file", KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK), (e)->{}));
-			menu.add(item("History", KeyStroke.getKeyStroke(KeyEvent.VK_F8, InputEvent.ALT_DOWN_MASK), (e)->{}));
-			menu.add(item("Video mode", KeyStroke.getKeyStroke(KeyEvent.VK_F9, InputEvent.ALT_DOWN_MASK), (e)->{}));
-			menu.add(item("File view history", KeyStroke.getKeyStroke(KeyEvent.VK_F11, InputEvent.ALT_DOWN_MASK), (e)->{}));
-			menu.add(item("Folders history", KeyStroke.getKeyStroke(KeyEvent.VK_F12, InputEvent.ALT_DOWN_MASK), (e)->{}));
-			
-			menu.addSeparator();
-			
-			menu.add(item("Swap panels", KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK), (e)->{}));
-			menu.add(item("Panels On/Off", KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK), (e)->{}));
-			menu.add(item("Compare folders", null, (e)->{}));
-			
-			menu.addSeparator();
-			
-			menu.add(item("Edit user menu", null, (e)->{}));
-			menu.add(item("File associations", null, (e)->{}));
-			menu.add(item("Folder shortcuts", null, (e)->{}));
-			menu.add(item("File panel filter", KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_DOWN_MASK), (e)->{}));
-			
-			menu.addSeparator();
-			
-			menu.add(item("Plugin commands", KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0), (e)->{}));
-			menu.add(item("Screens list", KeyStroke.getKeyStroke(KeyEvent.VK_F12, 0), (e)->{}));
-			menu.add(item("Task list", KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK), (e)->{}));
-			menu.add(item("Hotplug devices list", null, (e)->{}));
-			
-			
-			
-			/*
-			 
-			 
-Find file             Alt+F7
-History               Alt+F8
-Video mode            Alt+F9
-File view history     Alt+F11
-Folders history       Alt+F12
-──────────────────────────────
-Swap panels           Ctrl+U
-Panels On/Off         Ctrl+O
-Compare folders
-──────────────────────────────
-Edit user menu
-File associations
-Folder shortcuts
-File panel filter     Ctrl+I
-──────────────────────────────
-Plugin commands       F11
-Screens list          F12
-Task list             Ctrl+W
-Hotplug devices list			 
-
-
-			 */
-			
-		}
-		
-		{
-			
-			JMenu menu = new JMenu("Options");
-			menu.setMnemonic(KeyEvent.VK_O);
-			menuBar.add(menu);
-			
-			menu.add("System settings");
-			menu.add("Panel settings");
-			menu.add("Interface settings");
-			menu.add("Languages");
-			menu.add("Plugins configuration");
-			menu.add("Plugins manager settings");
-			menu.add("Dialog settings");
-			menu.add("Menu settings");
-			menu.add("Command line settings");
-			menu.add("AutoComplete settings");
-			menu.add("InfoPanel settings");
-			menu.add("Groups of file masks");
-			
-			
-			
-			/*
-			 
-System settings
-Panel settings
-Interface settings
-Languages
-Plugins configuration
-Plugins manager settings
-Dialog settings
-Menu settings
-Command line settings
-AutoComplete settings
-InfoPanel settings
-Groups of file masks
-─────────────────────────────────────────────
-Confirmations
-File panel modes
-File descriptions
-Folder description files
-─────────────────────────────────────────────
-Viewer settings
-Editor settings
-Code pages
-─────────────────────────────────────────────
-Colors
-Files highlighting and sort groups
-─────────────────────────────────────────────
-Save setup                          Shift+F9			 
-			 
-			 */
-			
-		}
-		
-		{
-			JMenu menu = new JMenu("Right");
-			menu.setMnemonic(KeyEvent.VK_R);
-			menuBar.add(menu);
-			menu.add("Brief");
-			menu.add("Medium");
-			menu.add("Full");
-			menu.add("Wide");
-			menu.add("Detailed");
-			menu.addSeparator();
-			menu.add("Info panel");
-			menu.add("Quick view");
-			menu.addSeparator();
-			menu.add("Sort modes");
-			menu.add("Show long names");
-			menu.add("Panel on/off");
-			menu.add("Re-read");
-			menu.add("Change drive");
-		}
-		
-
-		
-
-		// ── Global keyboard shortcuts ─────────────────────────────────────────
-		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
-			@Override
-			public boolean dispatchKeyEvent(KeyEvent e) {
-
-				// Never intercept events when a dialog (e.g. a confirmation popup) is active.
-				// Returning false lets the dialog's own focus manager handle Tab, Enter, Escape, etc.
-				if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != mainFrame) {
-					return false;
-				}
-
-				// Ctrl+O — toggle console
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_O
-						&& e.isControlDown()) {
-					if (mainSplitPane.isVisible()) {
-						applicationEventPublisher.publishEvent(new ShowConsoleScreenEvent(this));
-					} else {
-						applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
-					}
-					return true;
-				}
-
-				// Ctrl+Q — toggle quick view on the opposite panel
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_Q
-						&& e.isControlDown()
-						&& mainSplitPane.isVisible()) {
-					if (quickViewActive) {
-						applicationEventPublisher.publishEvent(new QuickViewEvent(this, null));
-					} else {
-						var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-						var leftComponent = mainSplitPane.getLeftComponent();
-						var rightComponent = mainSplitPane.getRightComponent();
-						FilePanel activePanel;
-						if (rightComponent instanceof FilePanel fp
-								&& focusOwner != null
-								&& SwingUtilities.isDescendingFrom(focusOwner, fp)) {
-							activePanel = fp;
-						} else if (leftComponent instanceof FilePanel fp) {
-							activePanel = fp;
-						} else {
-							return true;
-						}
-						var selectedPath = activePanel.getSelectedPath();
-						if (selectedPath != null) {
-							applicationEventPublisher.publishEvent(new QuickViewEvent(this, selectedPath));
-						}
-					}
-					return true;
-				}
-
-				// Alt+F1 — change drive on left panel
-					if (e.getID() == KeyEvent.KEY_PRESSED
-							&& e.getKeyCode() == KeyEvent.VK_F1
-							&& e.isAltDown()
-							&& mainSplitPane.isVisible()) {
-						ChangeDrivePopup.show(
-								leftFilePanel,
-								mainSplitPane.getLeftComponent(),
-								filePanelProviderRegistry,
-								() -> ensureFilePanelVisible(true));
-						return true;
-					}
-
-				// Alt+F2 — change drive on right panel
-					if (e.getID() == KeyEvent.KEY_PRESSED
-							&& e.getKeyCode() == KeyEvent.VK_F2
-							&& e.isAltDown()
-							&& mainSplitPane.isVisible()) {
-						ChangeDrivePopup.show(
-								rightFilePanel,
-								mainSplitPane.getRightComponent(),
-								filePanelProviderRegistry,
-								() -> ensureFilePanelVisible(false));
-						return true;
-					}
-
-				// Alt+F4 — exit
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_F4
-						&& e.isAltDown()) {
-					Nuclr.exit();
-					return true;
-				}
-
-				// Alt+Enter — fullscreen
-					if (e.getID() == KeyEvent.KEY_PRESSED
-							&& !e.isAltDown()
-							&& !e.isControlDown()
-							&& e.getKeyCode() >= KeyEvent.VK_F1
-							&& e.getKeyCode() <= KeyEvent.VK_F12) {
-						int functionKeyNumber = e.getKeyCode() - KeyEvent.VK_F1 + 1;
-						functionKeyBar.publish(functionKeyNumber);
-						return false;
-					}
-
-					if (e.getID() == KeyEvent.KEY_PRESSED
-							&& e.getKeyCode() == KeyEvent.VK_ENTER
-							&& e.isAltDown()) {
-						toggleFullscreen();
-						return true;
-					}
-
-				// Escape — close editor / console
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_ESCAPE
-						&& activeScreenComponent != null) {
-					tryCloseActiveScreen();
-					return true;
-				}
-
-				// Ctrl+Left / Ctrl+Right — resize split pane
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.isControlDown()
-						&& mainSplitPane.isVisible()
-						&& (e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_RIGHT)) {
-					int step = 10;
-					int loc = mainSplitPane.getDividerLocation();
-					if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-						mainSplitPane.setDividerLocation(Math.max(loc - step, mainSplitPane.getMinimumDividerLocation()));
-					} else {
-						mainSplitPane.setDividerLocation(Math.min(loc + step, mainSplitPane.getMaximumDividerLocation()));
-					}
-					return true;
-				}
-
-				// Ctrl+= or Ctrl+numpad+ — increase font size
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.isControlDown()
-						&& !e.isAltDown()
-						&& (e.getKeyCode() == KeyEvent.VK_EQUALS
-								|| e.getKeyCode() == KeyEvent.VK_PLUS
-								|| e.getKeyCode() == KeyEvent.VK_ADD)) {
-					applyFontSize(Math.min(fontSize + 1, 32));
-					return true;
-				}
-
-				// Ctrl+- or Ctrl+numpad- — decrease font size
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.isControlDown()
-						&& !e.isAltDown()
-						&& (e.getKeyCode() == KeyEvent.VK_MINUS
-								|| e.getKeyCode() == KeyEvent.VK_SUBTRACT)) {
-					applyFontSize(Math.max(fontSize - 1, 8));
-					return true;
-				}
-
-				// Ctrl+0 — reset font size to default
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.isControlDown()
-						&& !e.isAltDown()
-						&& e.getKeyCode() == KeyEvent.VK_0) {
-					applyFontSize(LocalSettingsStore.DEFAULT_FONT_SIZE);
-					return true;
-				}
-
-				// Tab — switch focus between left and right panels
-				if (e.getID() == KeyEvent.KEY_PRESSED
-						&& e.getKeyCode() == KeyEvent.VK_TAB
-						&& !e.isControlDown()
-						&& mainSplitPane.isVisible()) {
-					Component left  = mainSplitPane.getLeftComponent();
-					Component right = mainSplitPane.getRightComponent();
-					if (!(left instanceof FilePanel) || !(right instanceof FilePanel)) {
-						return false; // one side is quickview — let default Tab handling proceed
-					}
-					var leftPanel  = (FilePanel) left;
-					var rightPanel = (FilePanel) right;
-					var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-					if (focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanel)) {
-						leftPanel.focusFileTable();
-					} else {
-						rightPanel.focusFileTable();
-					}
-					return true;
-				}
-
-				return false;
-			}
-		});
-
-		// ── Window state listeners ────────────────────────────────────────────
+		mainFrame.setJMenuBar(buildMenuBar());
+		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
+		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
+		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(buildKeyDispatcher());
+		KeyboardFocusManager
+				.getCurrentKeyboardFocusManager()
+				.addPropertyChangeListener("focusOwner", evt -> onFocusOwnerChanged((Component) evt.getNewValue()));
 		mainFrame.addComponentListener(new ComponentAdapter() {
 			@Override
 			public void componentResized(ComponentEvent e) {
-				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) saveWindowState();
+				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) {
+					saveWindowState();
+				}
 			}
+
 			@Override
 			public void componentMoved(ComponentEvent e) {
-				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) saveWindowState();
+				if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == 0) {
+					saveWindowState();
+				}
 			}
 		});
 		mainFrame.addWindowStateListener(e -> saveWindowState());
+		startQuickViewRefreshTimer();
+		pluginRegistry.getPluginContext().getEventBus().subscribe(this);
 
 		mainFrame.setVisible(true);
-
-		SwingUtilities.invokeLater(() -> {
-			mainSplitPane.setDividerLocation(dividerRatio);
-			if (mainSplitPane.getLeftComponent() instanceof FilePanel fp) {
-				fp.focusFileTable();
-			}
-		});
+		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
+		startPanelInitializationPoll();
 	}
 
-	// ── Event listeners ───────────────────────────────────────────────────────
+	private JMenuBar buildMenuBar() {
+		JMenuBar menuBar = new JMenuBar();
+
+		JMenu leftMenu = new JMenu("Left");
+		leftMenu.setMnemonic(KeyEvent.VK_L);
+		leftMenu.add(item("Change drive", KeyStroke.getKeyStroke(KeyEvent.VK_F1, InputEvent.ALT_DOWN_MASK), e -> showChangeDrive(true)));
+		menuBar.add(leftMenu);
+
+		JMenu commandsMenu = new JMenu("Commands");
+		commandsMenu.setMnemonic(KeyEvent.VK_C);
+		commandsMenu.add(item("Plugin commands", KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0), e -> pluginManagementPopup.show(mainFrame)));
+		menuBar.add(commandsMenu);
+
+		JMenu optionsMenu = new JMenu("Options");
+		optionsMenu.setMnemonic(KeyEvent.VK_O);
+		optionsMenu.add(item("Toggle console", KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK), e -> toggleConsole()));
+		menuBar.add(optionsMenu);
+
+		JMenu rightMenu = new JMenu("Right");
+		rightMenu.setMnemonic(KeyEvent.VK_R);
+		rightMenu.add(item("Change drive", KeyStroke.getKeyStroke(KeyEvent.VK_F2, InputEvent.ALT_DOWN_MASK), e -> showChangeDrive(false)));
+		menuBar.add(rightMenu);
+
+		return menuBar;
+	}
+
+	private JMenuItem item(String text, KeyStroke stroke, ActionListener action) {
+		JMenuItem item = new JMenuItem(text);
+		item.setAccelerator(stroke);
+		item.addActionListener(action);
+		return item;
+	}
+
+	private KeyEventDispatcher buildKeyDispatcher() {
+		return e -> {
+			if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != mainFrame) {
+				return false;
+			}
+
+			updateModifierState(e);
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_O && e.isControlDown()) {
+				toggleConsole();
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_Q && e.isControlDown() && mainSplitPane.isVisible()) {
+				toggleQuickView();
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F1 && e.isAltDown() && mainSplitPane.isVisible()) {
+				showChangeDrive(true);
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F2 && e.isAltDown() && mainSplitPane.isVisible()) {
+				showChangeDrive(false);
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED
+					&& !e.isAltDown()
+					&& !e.isControlDown()
+					&& e.getKeyCode() >= KeyEvent.VK_F1
+					&& e.getKeyCode() <= KeyEvent.VK_F12) {
+				functionKeyBar.publish(e.getKeyCode() - KeyEvent.VK_F1 + 1);
+				return false;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F4 && e.isAltDown()) {
+				Nuclr.exit();
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_ENTER && e.isAltDown()) {
+				toggleFullscreen();
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED
+					&& e.isControlDown()
+					&& !e.isAltDown()
+					&& (e.getKeyCode() == KeyEvent.VK_EQUALS || e.getKeyCode() == KeyEvent.VK_PLUS || e.getKeyCode() == KeyEvent.VK_ADD)) {
+				applyFontSize(Math.min(fontSize + 1, 32));
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED
+					&& e.isControlDown()
+					&& !e.isAltDown()
+					&& (e.getKeyCode() == KeyEvent.VK_MINUS || e.getKeyCode() == KeyEvent.VK_SUBTRACT)) {
+				applyFontSize(Math.max(fontSize - 1, 8));
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown() && !e.isAltDown() && e.getKeyCode() == KeyEvent.VK_0) {
+				applyFontSize(LocalSettingsStore.DEFAULT_FONT_SIZE);
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_ESCAPE && activeScreenComponent != null) {
+				applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED
+					&& e.getKeyCode() == KeyEvent.VK_TAB
+					&& !e.isAltDown()
+					&& !e.isControlDown()
+					&& mainSplitPane.isVisible()) {
+				return transferPanelFocus();
+			}
+
+			return false;
+		};
+	}
+
+	private void startPanelInitializationPoll() {
+		Timer timer = new Timer(500, e -> {
+			if (initializePanelsIfPossible()) {
+				((Timer) e.getSource()).stop();
+			}
+		});
+		timer.setInitialDelay(0);
+		timer.start();
+	}
+
+	private void startQuickViewRefreshTimer() {
+		quickViewRefreshTimer = new Timer(150, e -> refreshQuickViewPreview());
+		quickViewRefreshTimer.start();
+	}
+
+	private boolean initializePanelsIfPossible() {
+		List<PanelProviderPlugin> templates = pluginRegistry.getPanelProviders();
+		if (templates.isEmpty()) {
+			return false;
+		}
+
+		PanelProviderPlugin initialTemplate = findInitialPanelTemplate(templates);
+
+		if (leftPanelState.isEmpty()) {
+			configurePanel(leftPanelState, initialTemplate, true);
+		}
+		if (rightPanelState.isEmpty()) {
+			configurePanel(rightPanelState, initialTemplate, false);
+		}
+		return !leftPanelState.isEmpty() && !rightPanelState.isEmpty();
+	}
+
+	private PanelProviderPlugin findInitialPanelTemplate(List<PanelProviderPlugin> templates) {
+		for (PanelProviderPlugin template : templates) {
+			if (LOCAL_FILE_PANEL_PROVIDER_CLASS.equals(template.getClass().getName())) {
+				return template;
+			}
+		}
+		return templates.get(0);
+	}
+
+	private void configurePanel(PanelState state, PanelProviderPlugin template, boolean leftSide) {
+		try {
+			PanelProviderPlugin provider = pluginRegistry.createPanelProviderInstance(template);
+			applyTheme(provider);
+			List<PluginPathResource> roots = provider.getChangeDriveResources();
+			if (roots.isEmpty()) {
+				safeUnload(provider);
+				return;
+			}
+
+			PanelLayer layer = openPanelLayer(provider, roots.get(0));
+			if (layer == null) {
+				return;
+			}
+
+			state.push(layer);
+			renderActivePanel(state);
+
+			if (leftSide && rightPanelState.isEmpty() && layer.provider instanceof FocusablePlugin focusable) {
+				SwingUtilities.invokeLater(focusable::onFocusGained);
+				focusedPanelState = state;
+				rebuildFunctionBar();
+			}
+
+			mainFrame.revalidate();
+			mainFrame.repaint();
+		} catch (Exception ex) {
+			log.error("Failed to initialize panel provider [{}]: {}", template.getClass().getName(), ex.getMessage(), ex);
+			Alerts.showMessageDialog(mainFrame, "Cannot initialize panel plugin:\n" + ex.getMessage(), "Plugin Error", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void showChangeDrive(boolean leftSide) {
+		PanelState state = leftSide ? leftPanelState : rightPanelState;
+		if (state.provider() == null) {
+			return;
+		}
+		ChangeDrivePopup.show(
+				leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent(),
+				state.provider().getChangeDriveResources(),
+				state.currentResource(),
+				resource -> openPanelResource(state, resource));
+	}
+
+	private void openPanelResource(PanelState state, PluginPathResource resource) {
+		try {
+			if (state.provider() == null || !state.provider().openItem(resource, new AtomicBoolean(false))) {
+				return;
+			}
+			state.setCurrentResource(resource);
+			if (state == focusedPanelState) {
+				rebuildFunctionBar();
+			}
+		} catch (Exception ex) {
+			log.error("Failed to open panel resource [{}]: {}", resource.getName(), ex.getMessage(), ex);
+			Alerts.showMessageDialog(mainFrame, "Cannot open resource:\n" + ex.getMessage(), "Navigation Error", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private JLabel placeholder(String text) {
+		JLabel label = new JLabel(text, JLabel.CENTER);
+		label.setFont(label.getFont().deriveFont(Font.PLAIN, 14f));
+		return label;
+	}
+
+	private void toggleQuickView() {
+		if (quickViewActive) {
+			closeQuickView();
+			return;
+		}
+
+		PanelState sourceState = focusedPanelState;
+		if (sourceState == null) {
+			return;
+		}
+
+		Path selectedPath = resolveSelectedPath(sourceState);
+		if (selectedPath == null) {
+			return;
+		}
+
+		boolean sourceIsRight = sourceState == rightPanelState;
+		quickViewShowingLeft = sourceIsRight;
+		quickViewSourceState = sourceState;
+		quickViewCurrentPath = selectedPath;
+		quickViewReplacedComponent = quickViewShowingLeft ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent();
+
+		if (quickViewShowingLeft) {
+			mainSplitPane.setLeftComponent(quickViewPanel.getPanel());
+		} else {
+			mainSplitPane.setRightComponent(quickViewPanel.getPanel());
+		}
+
+		quickViewPanel.show(selectedPath);
+		quickViewActive = true;
+		mainSplitPane.setDividerLocation(0.5);
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	private void closeQuickView() {
+		if (!quickViewActive) {
+			return;
+		}
+
+		quickViewPanel.stop();
+		if (quickViewReplacedComponent != null) {
+			if (quickViewShowingLeft) {
+				mainSplitPane.setLeftComponent(quickViewReplacedComponent);
+			} else {
+				mainSplitPane.setRightComponent(quickViewReplacedComponent);
+			}
+		}
+
+		quickViewReplacedComponent = null;
+		quickViewSourceState = null;
+		quickViewCurrentPath = null;
+		quickViewActive = false;
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	private void refreshQuickViewPreview() {
+		if (!quickViewActive || quickViewSourceState == null) {
+			return;
+		}
+
+		Path selectedPath = resolveSelectedPath(quickViewSourceState);
+		if (selectedPath == null || selectedPath.equals(quickViewCurrentPath)) {
+			return;
+		}
+
+		quickViewCurrentPath = selectedPath;
+		quickViewPanel.show(selectedPath);
+	}
+
+	private Path resolveSelectedPath(PanelState state) {
+		if (state == null || state.component() == null) {
+			return null;
+		}
+
+		Path path = trySelectedPathMethod(state.component(), "getSelectedPath");
+		if (path != null) {
+			return path;
+		}
+
+		PluginPathResource selectedResource = trySelectedResourceMethod(state.component(), "getSelectedResource");
+		if (selectedResource != null && selectedResource.getPath() != null) {
+			return selectedResource.getPath();
+		}
+
+		Path reflectedTableSelection = tryResolveTableSelection(state.component());
+		if (reflectedTableSelection != null) {
+			return reflectedTableSelection;
+		}
+
+		return state.currentResource() != null ? state.currentResource().getPath() : null;
+	}
+
+	private Path trySelectedPathMethod(Object target, String methodName) {
+		try {
+			Method method = target.getClass().getMethod(methodName);
+			Object value = method.invoke(target);
+			return value instanceof Path path ? path : null;
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private PluginPathResource trySelectedResourceMethod(Object target, String methodName) {
+		try {
+			Method method = target.getClass().getMethod(methodName);
+			Object value = method.invoke(target);
+			return value instanceof PluginPathResource resource ? resource : null;
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private Path tryResolveTableSelection(Object panel) {
+		try {
+			Field tableField = panel.getClass().getDeclaredField("table");
+			tableField.setAccessible(true);
+			Object tableObject = tableField.get(panel);
+			if (!(tableObject instanceof javax.swing.JTable table)) {
+				return null;
+			}
+
+			int selectedRow = table.getSelectedRow();
+			if (selectedRow < 0) {
+				return null;
+			}
+
+			int modelRow = table.convertRowIndexToModel(selectedRow);
+			Object model = table.getModel();
+			Method getEntryAt = model.getClass().getMethod("getEntryAt", int.class);
+			Object entry = getEntryAt.invoke(model, modelRow);
+			if (entry == null) {
+				return null;
+			}
+
+			try {
+				Method pathMethod = entry.getClass().getMethod("path");
+				Object path = pathMethod.invoke(entry);
+				if (path instanceof Path selectedPath) {
+					return selectedPath;
+				}
+			} catch (NoSuchMethodException ignored) {
+				Method getPathMethod = entry.getClass().getMethod("getPath");
+				Object path = getPathMethod.invoke(entry);
+				if (path instanceof Path selectedPath) {
+					return selectedPath;
+				}
+			}
+		} catch (Exception ignored) {
+			return null;
+		}
+
+		return null;
+	}
+
+	private boolean transferPanelFocus() {
+		if (!(leftPanelState.provider() instanceof FocusablePlugin leftFocusable)
+				|| !(rightPanelState.provider() instanceof FocusablePlugin rightFocusable)
+				|| leftPanelState.component() == null
+				|| rightPanelState.component() == null) {
+			return false;
+		}
+
+		Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+		boolean focusInRight = focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component());
+
+		if (focusInRight) {
+			SwingUtilities.invokeLater(() -> {
+				rightFocusable.onFocusLost();
+				leftFocusable.onFocusGained();
+				focusedPanelState = leftPanelState;
+				rebuildFunctionBar();
+			});
+		} else {
+			SwingUtilities.invokeLater(() -> {
+				leftFocusable.onFocusLost();
+				rightFocusable.onFocusGained();
+				focusedPanelState = rightPanelState;
+				rebuildFunctionBar();
+			});
+		}
+
+		return true;
+	}
 
 	@EventListener
 	public void onShowConsoleScreen(ShowConsoleScreenEvent event) {
@@ -636,95 +653,30 @@ Save setup                          Shift+F9
 	@EventListener
 	public void onShowEditorScreen(ShowEditorScreenEvent event) {
 		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-		var provider = pluginRegistry.getScreenProviderByPath(event.getPath());
+		PluginPathResource resource = new PathQuickViewItem(event.getPath());
+		ScreenProviderPlugin provider = pluginRegistry.getScreenProviderByPath(resource);
 		if (provider == null) {
-			log.warn("No screen provider found for {}", event.getPath());
-			Alerts.showMessageDialog(mainFrame, "No screen plugin can open:\n" + event.getPath(), "No Screen Provider", javax.swing.JOptionPane.WARNING_MESSAGE);
+			Alerts.showMessageDialog(mainFrame, "No screen plugin can open:\n" + event.getPath().getFileName(), "No Screen Provider", JOptionPane.WARNING_MESSAGE);
 			return;
 		}
-		Component panel;
-		try {
-			provider.applyTheme(currentPluginTheme());
-			panel = provider.open(event.getPath());
-		} catch (Exception ex) {
-			log.error("Cannot open screen provider [{}] for {}: {}", provider.getPluginClass(), event.getPath(), ex.getMessage(), ex);
-			return;
-		}
+
+		applyTheme(provider);
 		activeScreenProvider = provider;
-		activeScreenComponent = panel;
-		functionKeyBar.setLabels(Map.of(
-				1, "Help",
-				2, "Save",
-				10, "Exit"));
+		activeScreenComponent = provider.getPanel();
 		mainFrame.remove(mainSplitPane);
 		mainSplitPane.setVisible(false);
 		mainFrame.add(activeScreenComponent, BorderLayout.CENTER);
 		activeScreenComponent.setVisible(true);
-		SwingUtilities.invokeLater(() -> {
-			if (activeScreenProvider != null) {
-				activeScreenProvider.focus();
-			} else {
-				activeScreenComponent.requestFocusInWindow();
-			}
-		});
-		mainFrame.revalidate();
-		mainFrame.repaint();
-	}
-
-	@EventListener
-	public void onFileSelectedEvent(FileSelectedEvent event) {
-		if (quickViewActive) {
-			quickViewPanel.show(event.getPath());
-		}
-	}
-
-	@EventListener
-	public void onQuickView(QuickViewEvent event) {
-		if (quickViewActive) {
-			quickViewPanel.stop();
-			if (quickViewReplacedComponent != null) {
-				var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-				boolean focusInLeft = focusOwner != null
-						&& SwingUtilities.isDescendingFrom(focusOwner, mainSplitPane.getLeftComponent());
-				if (focusInLeft) {
-					mainSplitPane.setRightComponent(quickViewReplacedComponent);
-				} else {
-					mainSplitPane.setLeftComponent(quickViewReplacedComponent);
-				}
-			}
-			quickViewReplacedComponent = null;
-			quickViewActive = false;
-		} else {
-			var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-			boolean focusInRight = focusOwner != null
-					&& SwingUtilities.isDescendingFrom(focusOwner, mainSplitPane.getRightComponent());
-			if (focusInRight) {
-				quickViewReplacedComponent = mainSplitPane.getLeftComponent();
-				mainSplitPane.setLeftComponent(quickViewPanel.getPanel());
-			} else {
-				quickViewReplacedComponent = mainSplitPane.getRightComponent();
-				mainSplitPane.setRightComponent(quickViewPanel.getPanel());
-			}
-			quickViewPanel.show(event.getPath());
-			quickViewActive = true;
-		}
-		mainSplitPane.setDividerLocation(0.5);
+		activeScreenComponent.requestFocusInWindow();
+		functionKeyBar.setLabels(Map.of(1, "Help", 10, "Exit"));
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
 
 	@EventListener
 	public void onShowFilePanelsView(ShowFilePanelsViewEvent event) {
-		functionKeyBar.resetDefaultLabels();
 		if (activeScreenComponent != null) {
 			mainFrame.remove(activeScreenComponent);
-			if (activeScreenProvider != null) {
-				try {
-					activeScreenProvider.close();
-				} catch (Exception ex) {
-					log.warn("Error while closing screen provider [{}]: {}", activeScreenProvider.getPluginClass(), ex.getMessage());
-				}
-			}
 			activeScreenComponent = null;
 			activeScreenProvider = null;
 		}
@@ -735,32 +687,25 @@ Save setup                          Shift+F9
 		if (lastFocusedInSplitPane != null) {
 			lastFocusedInSplitPane.requestFocusInWindow();
 		}
+		rebuildFunctionBar();
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
 
 	@EventListener
 	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
-		if (activeScreenProvider != null) {
-			if (event.getFunctionKeyNumber() == 2) {
-				saveActiveScreen();
-				return;
-			}
-			if (event.getFunctionKeyNumber() == 10) {
-				tryCloseActiveScreen();
-				return;
-			}
-		}
-
-		if (event.getFunctionKeyNumber() == 10) {
-			confirmAndExitApplication();
+		MenuResource menuResource = event.getMenuResource();
+		if (menuResource != null) {
+			pluginRegistry.getPluginContext().getEventBus().emit(menuResource.getEvent());
 			return;
 		}
 
-		if (event.getFunctionKeyNumber() == 5) {
-			FilePanel sourcePanel = getFocusedVisibleFilePanel();
-			FilePanel targetPanel = getOppositeVisibleFilePanel(sourcePanel);
-			copyCommandHandler.copyBetween(sourcePanel, targetPanel, mainFrame);
+		if (event.getFunctionKeyNumber() == 10) {
+			if (activeScreenComponent != null) {
+				applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
+			} else {
+				confirmAndExitApplication();
+			}
 			return;
 		}
 
@@ -769,7 +714,382 @@ Save setup                          Shift+F9
 		}
 	}
 
-	// ── Helpers ───────────────────────────────────────────────────────────────
+	private void toggleConsole() {
+		if (mainSplitPane.isVisible()) {
+			applicationEventPublisher.publishEvent(new ShowConsoleScreenEvent(this));
+		} else {
+			applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
+		}
+	}
+
+	private void onFocusOwnerChanged(Component focusOwner) {
+		if (focusOwner == null || !mainSplitPane.isVisible()) {
+			return;
+		}
+
+		PanelState newFocused = null;
+		if (leftPanelState.component() != null && SwingUtilities.isDescendingFrom(focusOwner, leftPanelState.component())) {
+			newFocused = leftPanelState;
+		} else if (rightPanelState.component() != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component())) {
+			newFocused = rightPanelState;
+		}
+
+		if (newFocused != null && newFocused != focusedPanelState) {
+			focusedPanelState = newFocused;
+			rebuildFunctionBar();
+		}
+	}
+
+	private void updateModifierState(KeyEvent event) {
+		boolean previousShift = shiftDown;
+		boolean previousCtrl = ctrlDown;
+		boolean previousAlt = altDown;
+
+		int keyCode = event.getKeyCode();
+		if (keyCode == KeyEvent.VK_SHIFT) {
+			shiftDown = event.getID() == KeyEvent.KEY_PRESSED;
+		}
+		if (keyCode == KeyEvent.VK_CONTROL) {
+			ctrlDown = event.getID() == KeyEvent.KEY_PRESSED;
+		}
+		if (keyCode == KeyEvent.VK_ALT) {
+			altDown = event.getID() == KeyEvent.KEY_PRESSED;
+		}
+
+		if (previousShift != shiftDown || previousCtrl != ctrlDown || previousAlt != altDown) {
+			rebuildFunctionBar();
+		}
+	}
+
+	private void rebuildFunctionBar() {
+		if (!mainSplitPane.isVisible()) {
+			return;
+		}
+		if (focusedPanelState == null || focusedPanelState.provider() == null) {
+			functionKeyBar.resetDefaultLabels();
+			return;
+		}
+
+		List<MenuResource> resources = focusedPanelState.provider().getMenuItems(focusedPanelState.currentResource());
+		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
+	}
+
+	private boolean pushPanelLayer(PanelProviderPlugin caller, PluginPathResource resource) {
+		if (caller == null || resource == null) {
+			return false;
+		}
+
+		PanelState state = findPanelState(caller);
+		if (state == null || state.provider() != caller) {
+			return false;
+		}
+
+		PanelLayer nextLayer = createStackLayer(resource);
+		if (nextLayer == null) {
+			return false;
+		}
+
+		if (state == focusedPanelState && caller instanceof FocusablePlugin focusable) {
+			focusable.onFocusLost();
+		}
+
+		state.push(nextLayer);
+		renderActivePanel(state);
+		if (state == focusedPanelState && nextLayer.provider instanceof FocusablePlugin focusable) {
+			focusable.onFocusGained();
+			nextLayer.component.requestFocusInWindow();
+		}
+		onPanelStateChanged(state);
+		log.info("Pushed panel provider [{}] on top of [{}] stack",
+				nextLayer.provider.getClass().getName(),
+				caller.getClass().getName());
+		return true;
+	}
+
+	private boolean popPanelLayer(PanelProviderPlugin caller) {
+		if (caller == null) {
+			return false;
+		}
+
+		PanelState state = findPanelState(caller);
+		if (state == null || state.provider() != caller || state.stackSize() <= 1) {
+			return false;
+		}
+
+		if (state == focusedPanelState && caller instanceof FocusablePlugin focusable) {
+			focusable.onFocusLost();
+		}
+
+		PanelLayer removed = state.pop();
+		safeUnload(removed.provider);
+		renderActivePanel(state);
+
+		if (state == focusedPanelState && state.provider() instanceof FocusablePlugin focusable) {
+			focusable.onFocusGained();
+			if (state.component() != null) {
+				state.component().requestFocusInWindow();
+			}
+		}
+
+		onPanelStateChanged(state);
+		log.info("Popped panel provider [{}] from panel stack", caller.getClass().getName());
+		return true;
+	}
+
+	private PanelLayer createStackLayer(PluginPathResource resource) {
+		for (PanelProviderPlugin template : orderedPanelTemplates(resource)) {
+			PanelProviderPlugin provider = null;
+			try {
+				provider = pluginRegistry.createPanelProviderInstance(template);
+				if (!provider.canSupport(resource)) {
+					safeUnload(provider);
+					continue;
+				}
+				applyTheme(provider);
+				PanelLayer layer = openPanelLayer(provider, resource);
+				if (layer != null) {
+					return layer;
+				}
+			} catch (Exception ex) {
+				log.warn("Failed to open resource [{}] with panel provider [{}]: {}",
+						resource.getName(),
+						template.getClass().getName(),
+						ex.getMessage());
+			}
+			safeUnload(provider);
+		}
+		return null;
+	}
+
+	private List<PanelProviderPlugin> orderedPanelTemplates(PluginPathResource resource) {
+		String preferredProviderClassName = preferredPanelProviderClass(resource);
+		List<PanelProviderPlugin> templates = pluginRegistry.getPanelProviders();
+		List<PanelProviderPlugin> ordered = new ArrayList<>(templates.size());
+		for (PanelProviderPlugin template : templates) {
+			if (Objects.equals(template.getClass().getName(), preferredProviderClassName)) {
+				ordered.add(template);
+				break;
+			}
+		}
+		for (PanelProviderPlugin template : templates) {
+			if (!ordered.contains(template)) {
+				ordered.add(template);
+			}
+		}
+		return ordered;
+	}
+
+	private String preferredPanelProviderClass(PluginPathResource resource) {
+		if (resource == null || resource.getMetadata() == null) {
+			return null;
+		}
+		String providerClassName = resource.getMetadata().get(PANEL_STACK_PROVIDER_CLASS_METADATA);
+		return providerClassName == null || providerClassName.isBlank() ? null : providerClassName;
+	}
+
+	private PanelLayer openPanelLayer(PanelProviderPlugin provider, PluginPathResource resource) {
+		JComponent component = provider.getPanel();
+		if (!provider.openItem(resource, new AtomicBoolean(false))) {
+			return null;
+		}
+		return new PanelLayer(provider, component, resource);
+	}
+
+	private void renderActivePanel(PanelState state) {
+		if (state.component() == null) {
+			return;
+		}
+		if (state == leftPanelState) {
+			mainSplitPane.setLeftComponent(state.component());
+			return;
+		}
+		if (state == rightPanelState) {
+			mainSplitPane.setRightComponent(state.component());
+		}
+	}
+
+	private void onPanelStateChanged(PanelState state) {
+		if (state == focusedPanelState) {
+			rebuildFunctionBar();
+		}
+		if (quickViewActive && quickViewSourceState == state) {
+			refreshQuickViewPreview();
+		}
+		mainFrame.revalidate();
+		mainFrame.repaint();
+	}
+
+	private PanelState oppositePanelState(PanelState state) {
+		if (state == leftPanelState) {
+			return rightPanelState;
+		}
+		if (state == rightPanelState) {
+			return leftPanelState;
+		}
+		return null;
+	}
+
+	private PanelState findPanelState(PanelProviderPlugin provider) {
+		if (provider == null) {
+			return null;
+		}
+		if (leftPanelState.contains(provider)) {
+			return leftPanelState;
+		}
+		if (rightPanelState.contains(provider)) {
+			return rightPanelState;
+		}
+		return null;
+	}
+
+	private Path resolveCurrentDirectory(PanelState state) {
+		if (state == null || state.component() == null) {
+			return null;
+		}
+		try {
+			Method method = state.component().getClass().getMethod("getCurrentDirectory");
+			Object value = method.invoke(state.component());
+			return value instanceof Path path ? path : null;
+		} catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private void refreshPanel(PanelState state) {
+		Path currentDirectory = resolveCurrentDirectory(state);
+		if (state == null || state.component() == null || currentDirectory == null) {
+			return;
+		}
+		try {
+			Method method = state.component().getClass().getMethod("showDirectory", Path.class);
+			method.invoke(state.component(), currentDirectory);
+			onPanelStateChanged(state);
+		} catch (Exception ex) {
+			log.warn(
+					"Failed to refresh panel [{}]: {}",
+					state.provider() != null ? state.provider().getClass().getName() : "unknown",
+					ex.getMessage());
+		}
+	}
+
+	private boolean runOnEdt(BooleanSupplier action) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			return action.getAsBoolean();
+		}
+
+		AtomicReference<Boolean> result = new AtomicReference<>(false);
+		try {
+			SwingUtilities.invokeAndWait(() -> result.set(action.getAsBoolean()));
+		} catch (Exception ex) {
+			log.warn("Failed to execute panel stack action on EDT: {}", ex.getMessage(), ex);
+			return false;
+		}
+		return Boolean.TRUE.equals(result.get());
+	}
+
+	private void safeUnload(PanelProviderPlugin provider) {
+		if (provider == null) {
+			return;
+		}
+		try {
+			provider.unload();
+		} catch (Exception ex) {
+			log.warn("Failed to unload panel provider [{}]: {}", provider.getClass().getName(), ex.getMessage());
+		}
+	}
+
+	@Override
+	public boolean isMessageSupported(PluginEvent msg) {
+		return msg instanceof PluginOpenItemEvent
+				|| msg instanceof PluginClosePanelEvent
+				|| msg instanceof PluginCopyEvent
+				|| msg instanceof PluginMoveEvent;
+	}
+
+	@Override
+	public void handleMessage(PluginEvent event) {
+		if (event instanceof PluginOpenItemEvent openEvent) {
+			runOnEdt(() -> handlePanelOpenRequest(openEvent));
+			return;
+		}
+		if (event instanceof PluginClosePanelEvent closeEvent) {
+			runOnEdt(() -> handlePanelCloseRequest(closeEvent));
+			return;
+		}
+		if (event instanceof PluginCopyEvent copyEvent) {
+			runOnEdt(() -> handleCopyRequest(copyEvent));
+			return;
+		}
+		if (event instanceof PluginMoveEvent moveEvent) {
+			runOnEdt(() -> handleMoveRequest(moveEvent));
+		}
+	}
+
+	private boolean handlePanelOpenRequest(PluginOpenItemEvent event) {
+		if (event == null || event.isHandled()) {
+			return false;
+		}
+		boolean handled = pushPanelLayer(event.getSourceProvider(), event.getResource());
+		event.setHandled(handled);
+		return handled;
+	}
+
+	private boolean handlePanelCloseRequest(PluginClosePanelEvent event) {
+		if (event == null || event.isHandled()) {
+			return false;
+		}
+		boolean handled = popPanelLayer(event.getSourceProvider());
+		event.setHandled(handled);
+		return handled;
+	}
+
+	private boolean handleCopyRequest(PluginCopyEvent event) {
+		return handleTransferRequest(event.getSourceProvider(), event.getSources(), false, event::setHandled);
+	}
+
+	private boolean handleMoveRequest(PluginMoveEvent event) {
+		return handleTransferRequest(event.getSourceProvider(), event.getSources(), true, event::setHandled);
+	}
+
+	private boolean handleTransferRequest(
+			PanelProviderPlugin sourceProvider,
+			List<PluginPathResource> sources,
+			boolean move,
+			java.util.function.Consumer<Boolean> handledCallback) {
+		if (sourceProvider == null || sources == null || sources.isEmpty()) {
+			handledCallback.accept(false);
+			return false;
+		}
+
+		PanelState sourceState = findPanelState(sourceProvider);
+		PanelState destinationState = oppositePanelState(sourceState);
+		Path destinationDirectory = resolveCurrentDirectory(destinationState);
+		if (sourceState == null || destinationState == null || destinationDirectory == null) {
+			handledCallback.accept(false);
+			return false;
+		}
+
+		try {
+			if (move) {
+				panelTransferService.move(sources, destinationDirectory);
+			} else {
+				panelTransferService.copy(sources, destinationDirectory);
+			}
+			refreshPanel(sourceState);
+			refreshPanel(destinationState);
+			handledCallback.accept(true);
+			return true;
+		} catch (Exception ex) {
+			log.error("Failed to {} items to [{}]: {}", move ? "move" : "copy", destinationDirectory, ex.getMessage(), ex);
+			Alerts.showMessageDialog(
+					mainFrame,
+					"Cannot " + (move ? "move" : "copy") + " files:\n" + ex.getMessage(),
+					move ? "Move Error" : "Copy Error",
+					JOptionPane.ERROR_MESSAGE);
+			handledCallback.accept(false);
+			return false;
+		}
+	}
 
 	private void applyFontSize(int size) {
 		fontSize = size;
@@ -778,168 +1098,13 @@ Save setup                          Shift+F9
 		saveFontSize(fontSize);
 	}
 
-	private void saveWindowState() {
-		var settings = settingsStore.loadOrDefault();
-		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
-		int width  = isMaximized ? settings.windowWidth()  : mainFrame.getWidth();
-		int height = isMaximized ? settings.windowHeight() : mainFrame.getHeight();
-		int x      = isMaximized ? settings.windowX()      : mainFrame.getX();
-		int y      = isMaximized ? settings.windowY()      : mainFrame.getY();
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(), width, height, x, y, isMaximized,
-				settings.lastOpenedPath(), settings.autosaveInterval(),
-				dividerRatio, settings.colors(), fontSize));
-	}
-
-	private void saveDividerRatio(double ratio) {
-		var settings = settingsStore.loadOrDefault();
-		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(), settings.windowWidth(), settings.windowHeight(),
-				settings.windowX(), settings.windowY(), isMaximized,
-				settings.lastOpenedPath(), settings.autosaveInterval(),
-				ratio, settings.colors(), fontSize));
-	}
-
-	private void saveFontSize(int size) {
-		var settings = settingsStore.loadOrDefault();
-		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(), settings.windowWidth(), settings.windowHeight(),
-				settings.windowX(), settings.windowY(), isMaximized,
-				settings.lastOpenedPath(), settings.autosaveInterval(),
-				dividerRatio, settings.colors(), size));
-	}
-
-	private FilePanel getFocusedVisibleFilePanel() {
-		var focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-		FilePanel leftVisible = getVisibleFilePanel(true);
-		FilePanel rightVisible = getVisibleFilePanel(false);
-
-		if (rightVisible != null
-				&& focusOwner != null
-				&& SwingUtilities.isDescendingFrom(focusOwner, rightVisible)) {
-			return rightVisible;
-		}
-		if (leftVisible != null
-				&& focusOwner != null
-				&& SwingUtilities.isDescendingFrom(focusOwner, leftVisible)) {
-			return leftVisible;
-		}
-		if (leftVisible != null) {
-			return leftVisible;
-		}
-		return rightVisible;
-	}
-
-	private FilePanel getOppositeVisibleFilePanel(FilePanel sourcePanel) {
-		FilePanel leftVisible = getVisibleFilePanel(true);
-		FilePanel rightVisible = getVisibleFilePanel(false);
-		if (sourcePanel == null) {
-			return null;
-		}
-		if (sourcePanel == leftVisible) {
-			return rightVisible;
-		}
-		if (sourcePanel == rightVisible) {
-			return leftVisible;
-		}
-		return null;
-	}
-
-	private FilePanel getVisibleFilePanel(boolean leftSide) {
-		Component current = leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent();
-		return current instanceof FilePanel fp ? fp : null;
-	}
-
-	private void ensureFilePanelVisible(boolean leftSide) {
-		Component current = leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent();
-		FilePanel target = leftSide ? leftFilePanel : rightFilePanel;
-		if (current == target) {
-			return;
-		}
-
-		boolean replacingQuickView = current == quickViewPanel.getPanel();
-		if (leftSide) {
-			mainSplitPane.setLeftComponent(target);
-		} else {
-			mainSplitPane.setRightComponent(target);
-		}
-
-		if (replacingQuickView) {
-			quickViewPanel.stop();
-			quickViewActive = false;
-			quickViewReplacedComponent = null;
-		}
-
-		mainFrame.revalidate();
-		mainFrame.repaint();
-	}
-
 	private void toggleFullscreen() {
 		if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0) {
 			mainFrame.setExtendedState(JFrame.NORMAL);
 		} else {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		}
-		// Reapply the relative divider position once layout settles after the state change.
 		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
-	}
-
-	private void saveActiveScreen() {
-		if (activeScreenProvider == null) {
-			return;
-		}
-		try {
-			boolean saved = activeScreenProvider.save();
-			if (!saved) {
-				Alerts.showMessageDialog(
-						mainFrame,
-						"Nothing to save or screen is read-only.",
-						"Save",
-						JOptionPane.INFORMATION_MESSAGE);
-			}
-		} catch (Exception ex) {
-			log.error("Failed to save screen provider [{}]: {}", activeScreenProvider.getPluginClass(), ex.getMessage(), ex);
-			Alerts.showMessageDialog(
-					mainFrame,
-					"Save failed:\n" + ex.getMessage(),
-					"Save Error",
-					JOptionPane.ERROR_MESSAGE);
-		}
-	}
-
-	private void tryCloseActiveScreen() {
-		if (activeScreenProvider != null && activeScreenProvider.isDirty()) {
-			Object[] options = {"Save", "Discard", "Cancel"};
-			int choice = JOptionPane.showOptionDialog(
-					mainFrame,
-					"File has unsaved changes.\nWhat do you want to do?",
-					"Unsaved Changes",
-					JOptionPane.DEFAULT_OPTION,
-					JOptionPane.WARNING_MESSAGE,
-					null,
-					options,
-					options[0]);
-
-			if (choice == 0) {
-				try {
-					boolean saved = activeScreenProvider.save();
-					if (!saved) {
-						Alerts.showMessageDialog(mainFrame, "Cannot save this screen.", "Save", JOptionPane.WARNING_MESSAGE);
-						return;
-					}
-				} catch (Exception ex) {
-					Alerts.showMessageDialog(mainFrame, "Save failed:\n" + ex.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE);
-					return;
-				}
-			} else if (choice == 1) {
-				// discard and continue closing
-			} else {
-				return;
-			}
-		}
-		applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
 	}
 
 	private void confirmAndExitApplication() {
@@ -958,6 +1123,61 @@ Save setup                          Shift+F9
 		}
 	}
 
+	private void saveWindowState() {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		int width = isMaximized ? settings.windowWidth() : mainFrame.getWidth();
+		int height = isMaximized ? settings.windowHeight() : mainFrame.getHeight();
+		int x = isMaximized ? settings.windowX() : mainFrame.getX();
+		int y = isMaximized ? settings.windowY() : mainFrame.getY();
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(),
+				width,
+				height,
+				x,
+				y,
+				isMaximized,
+				settings.lastOpenedPath(),
+				settings.autosaveInterval(),
+				dividerRatio,
+				settings.colors(),
+				fontSize));
+	}
+
+	private void saveDividerRatio(double ratio) {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(),
+				settings.windowWidth(),
+				settings.windowHeight(),
+				settings.windowX(),
+				settings.windowY(),
+				isMaximized,
+				settings.lastOpenedPath(),
+				settings.autosaveInterval(),
+				ratio,
+				settings.colors(),
+				fontSize));
+	}
+
+	private void saveFontSize(int size) {
+		var settings = settingsStore.loadOrDefault();
+		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		settingsStore.save(new LocalSettingsStore.AppSettings(
+				settings.theme(),
+				settings.windowWidth(),
+				settings.windowHeight(),
+				settings.windowX(),
+				settings.windowY(),
+				isMaximized,
+				settings.lastOpenedPath(),
+				settings.autosaveInterval(),
+				dividerRatio,
+				settings.colors(),
+				size));
+	}
+
 	private void applyThemeScheme() {
 		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
 		for (var entry : scheme.uiDefaults().entrySet()) {
@@ -969,15 +1189,89 @@ Save setup                          Shift+F9
 		}
 	}
 
+	private void applyTheme(Object plugin) {
+		PluginTheme theme = currentPluginTheme();
+		try {
+			plugin.getClass().getMethod("applyTheme", PluginTheme.class).invoke(plugin, theme);
+		} catch (NoSuchMethodException ignored) {
+			// Theme support is optional.
+		} catch (Exception ex) {
+			log.warn("Failed to apply theme to plugin [{}]: {}", plugin.getClass().getName(), ex.getMessage());
+		}
+	}
+
 	private PluginTheme currentPluginTheme() {
 		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
 		Font defaultFont = UIManager.getFont("defaultFont");
 		String fontFamily = defaultFont != null ? defaultFont.getFamily() : Font.MONOSPACED;
 		int themeFontSize = defaultFont != null ? defaultFont.getSize() : 12;
-		return new PluginTheme(
-				scheme.name(),
-				scheme.uiDefaults(),
-				fontFamily,
-				themeFontSize);
+		return new PluginTheme(scheme.name(), scheme.uiDefaults(), fontFamily, themeFontSize);
+	}
+
+	@FunctionalInterface
+	private interface BooleanSupplier {
+		boolean getAsBoolean();
+	}
+
+	private static final class PanelLayer {
+		private final PanelProviderPlugin provider;
+		private final JComponent component;
+		private PluginPathResource currentResource;
+
+		private PanelLayer(PanelProviderPlugin provider, JComponent component, PluginPathResource currentResource) {
+			this.provider = provider;
+			this.component = component;
+			this.currentResource = currentResource;
+		}
+	}
+
+	private static final class PanelState {
+		private final ArrayDeque<PanelLayer> stack = new ArrayDeque<>();
+
+		private boolean isEmpty() {
+			return stack.isEmpty();
+		}
+
+		private int stackSize() {
+			return stack.size();
+		}
+
+		private void push(PanelLayer layer) {
+			stack.addLast(layer);
+		}
+
+		private PanelLayer pop() {
+			return stack.removeLast();
+		}
+
+		private boolean contains(PanelProviderPlugin provider) {
+			return stack.stream().anyMatch(layer -> layer.provider == provider);
+		}
+
+		private PanelLayer top() {
+			return stack.peekLast();
+		}
+
+		private PanelProviderPlugin provider() {
+			PanelLayer layer = top();
+			return layer != null ? layer.provider : null;
+		}
+
+		private JComponent component() {
+			PanelLayer layer = top();
+			return layer != null ? layer.component : null;
+		}
+
+		private PluginPathResource currentResource() {
+			PanelLayer layer = top();
+			return layer != null ? layer.currentResource : null;
+		}
+
+		private void setCurrentResource(PluginPathResource resource) {
+			PanelLayer layer = top();
+			if (layer != null) {
+				layer.currentResource = resource;
+			}
+		}
 	}
 }

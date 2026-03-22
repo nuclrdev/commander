@@ -24,7 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import dev.nuclr.commander.service.PluginRegistry;
-import dev.nuclr.plugin.PluginInfo;
+import dev.nuclr.plugin.PluginManifest;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -51,7 +51,7 @@ public class PluginManagementPopup {
 			listPanel.add(emptyLabel);
 		} else {
 			for (var plugin : plugins) {
-				listPanel.add(buildPluginCard(plugin.getInfo()));
+				listPanel.add(buildPluginCard(plugin.getPluginInfo()));
 				listPanel.add(Box.createVerticalStrut(8));
 			}
 		}
@@ -75,7 +75,7 @@ public class PluginManagementPopup {
 		dialog.setVisible(true);
 	}
 
-	private JPanel buildPluginCard(PluginInfo info) {
+	private JPanel buildPluginCard(PluginManifest info) {
 		String name = info != null && info.getName() != null ? info.getName() : "Unnamed Plugin";
 		String version = info != null && info.getVersion() != null ? info.getVersion() : "unknown";
 		String author = info != null && info.getAuthor() != null ? info.getAuthor() : "Unknown author";
