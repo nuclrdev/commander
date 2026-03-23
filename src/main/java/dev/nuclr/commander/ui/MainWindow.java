@@ -848,6 +848,7 @@ public class MainWindow implements PluginEventListener {
 		PanelLayer removed = state.pop();
 		safeUnload(removed.provider);
 		renderActivePanel(state);
+		restoreSelectionAfterPop(state, removed);
 
 		if (state == focusedPanelState && state.provider() instanceof FocusablePlugin focusable) {
 			focusable.onFocusGained();
@@ -859,6 +860,25 @@ public class MainWindow implements PluginEventListener {
 		onPanelStateChanged(state);
 		log.info("Popped panel provider [{}] from panel stack", caller.getClass().getName());
 		return true;
+	}
+
+	private void restoreSelectionAfterPop(PanelState state, PanelLayer removed) {
+		if (state == null || removed == null || removed.currentResource == null || removed.currentResource.getPath() == null) {
+			return;
+		}
+		Path selectedPath = removed.currentResource.getPath();
+		Path parentPath = selectedPath.getParent();
+		if (parentPath == null || state.component() == null) {
+			return;
+		}
+		try {
+			Method method = state.component().getClass().getMethod("showDirectory", Path.class, Path.class);
+			method.invoke(state.component(), parentPath, selectedPath);
+		} catch (NoSuchMethodException ignored) {
+			// Panel does not support restoring selection by path.
+		} catch (Exception ex) {
+			log.debug("Could not restore selection [{}] after popping panel layer", selectedPath, ex);
+		}
 	}
 
 	private PanelLayer createStackLayer(PluginPathResource resource) {
