@@ -1,19 +1,28 @@
-# Nuclr Commander
+# Nuclr Commander 🚀
 
-**Nuclr Commander** is a cross-platform, keyboard-first desktop file manager for developers. It follows the classic dual-pane commander model, embeds a terminal, and pushes most format- and workflow-specific behavior into signed runtime plugins.
+**Nuclr Commander** is a cross-platform, keyboard-first desktop file manager for developers. It follows the classic dual-pane commander model, embeds a terminal, and pushes most format- and workflow-specific behavior into signed runtime plugins. ⚡
 
 The `commander` repository contains the core Java application. In a typical local workspace it works together with sibling repositories for the plugin SDK, core plugins, and launcher.
 
-## Highlights
+## 📸 Screenshots
 
-- Dual-pane commander UI for fast navigation and copy/move workflows
-- Keyboard-centric interaction with function-key actions and quick-view support
-- Embedded terminal console using PTY4J and JediTerm
-- Signed plugin loading from the local `plugins/` directory
-- Theme-aware Swing UI built on FlatLaf
-- Plugin extension points for file panels, quick viewers, and full-screen screens
+![Nuclr Commander screenshot 1](images/screenshot-1.jpg)
+![Nuclr Commander screenshot 2](images/screenshot-2.jpg)
+![Nuclr Commander screenshot 3](images/screenshot-3.jpg)
+![Nuclr Commander screenshot 4](images/screenshot-4.jpg)
+![Nuclr Commander screenshot 5](images/screenshot-5.jpg)
+![Nuclr Commander screenshot 6](images/screenshot-6.jpg)
 
-## Repository Layout
+## ✨ Highlights
+
+- 🗂️ Dual-pane commander UI for fast navigation and copy/move workflows
+- ⌨️ Keyboard-centric interaction with function-key actions and quick-view support
+- 🖥️ Embedded terminal console using PTY4J and JediTerm
+- 🔐 Signed plugin loading from the local `plugins/` directory
+- 🎨 Theme-aware Swing UI built on FlatLaf
+- 🧩 Plugin extension points for file panels, quick viewers, and full-screen screens
+
+## 🗃️ Repository Layout
 
 - `src/main/java/dev/nuclr/commander` - application entrypoint, UI, services, events, plugin loading
 - `src/main/resources/dev/nuclr/commander` - app configuration and bundled resources
@@ -26,30 +35,30 @@ Related sibling repositories used by this workspace:
 - `../plugins` - source for official/core plugins
 - `../launcher` - native launcher and packaging work
 
-## Technology Stack
+## 🧱 Technology Stack
 
-- Java 21
-- Maven 3.9+
-- Swing
-- Spring Context
-- FlatLaf
-- PTY4J + JediTerm
-- Jackson
-- RSyntaxTextArea
-- SLF4J + Logback
-- Caffeine
+- ☕ Java 21
+- 🛠️ Maven 3.9+
+- 🪟 Swing
+- 🌱 Spring Context
+- 🎨 FlatLaf
+- 🖲️ PTY4J + JediTerm
+- 🧾 Jackson
+- 📝 RSyntaxTextArea
+- 📜 SLF4J + Logback
+- ⚡ Caffeine
 
-## Plugin Model
+## 🔌 Plugin Model
 
 Nuclr currently supports three plugin categories:
 
-- `FilePanelProvider` plugins for left/right commander panes
-- `QuickViewProvider` plugins for inline previews
-- `ScreenProvider` plugins for full-screen tools
+- 📁 `FilePanelProvider` plugins for left/right commander panes
+- 👀 `QuickViewProvider` plugins for inline previews
+- 🪟 `ScreenProvider` plugins for full-screen tools
 
 Plugins are loaded from the folder configured by [`src/main/resources/dev/nuclr/commander/app.properties`](C:\nuclr\sources\commander\src\main\resources\dev\nuclr\commander\app.properties), which currently points at `plugins/`. Each plugin is packaged as a ZIP plus a detached `.sig` file. Commander verifies the signature before activating the plugin.
 
-## Bundled Runtime Plugins
+## 📦 Bundled Runtime Plugins
 
 The current `plugins/` directory in this repository includes these signed plugins:
 
@@ -68,33 +77,33 @@ The current `plugins/` directory in this repository includes these signed plugin
 | `quick-view-torrent` | Quick view | Torrent metadata, trackers, info hash, and magnet link preview |
 | `quick-view-sdl2-music` | Quick view | Audio playback and waveform preview through SDL2/SDL2_mixer |
 
-## Additional Core Plugins In The Workspace
+## 🌌 Additional Core Plugins In The Workspace
 
 The sibling repository at `C:\nuclr\sources\plugins\core` also contains plugin sources and READMEs for additional capabilities that are not currently present in this repo's `plugins/` folder:
 
-- `filepanel-net` - SFTP/SCP remote panel support
-- `filepanel-github` - read-only GitHub repository browsing through `gh`
-- `screenpanel-text-editor` - full-screen syntax-highlighted text editor screen
+- 🌐 `filepanel-net` - SFTP/SCP remote panel support
+- 🐙 `filepanel-github` - read-only GitHub repository browsing through `gh`
+- ✍️ `screenpanel-text-editor` - full-screen syntax-highlighted text editor screen
 
 Those plugin READMEs are the authoritative source for their build/runtime details.
 
-## Current Capabilities
+## 🎯 Current Capabilities
 
 With the current bundled plugin set, Commander is already positioned for workflows such as:
 
-- Browsing local disks and entering supported archive files directly from the panel
-- Previewing text, source code, PDFs, images, JVM classes, executables, torrents, archives, audio, and 3D assets
-- Extending image support through a locally installed ImageMagick
-- Running quick inspections without leaving the file manager
-- Loading extra capabilities as signed plugins instead of baking everything into the core app
+- 💽 Browsing local disks and entering supported archive files directly from the panel
+- 🔎 Previewing text, source code, PDFs, images, JVM classes, executables, torrents, archives, audio, and 3D assets
+- 🖼️ Extending image support through a locally installed ImageMagick
+- ⚡ Running quick inspections without leaving the file manager
+- 🧩 Loading extra capabilities as signed plugins instead of baking everything into the core app
 
-## Requirements
+## 📋 Requirements
 
 - Java 21+
 - Maven 3.9+
 - UTF-8 capable environment
 
-## Build
+## 🔨 Build
 
 The `commander` module depends on the locally installed `dev.nuclr:plugins-sdk:1.0.0` artifact.
 
@@ -114,7 +123,7 @@ mvn clean package
 
 This produces a shaded desktop application JAR in `target/`.
 
-## Run
+## ▶️ Run
 
 Start the application with:
 
@@ -128,23 +137,23 @@ Example with explicit heap settings:
 java -Xms64m -Xmx512m -jar target/commander-0.0.1-SNAPSHOT.jar
 ```
 
-## Working With Plugins During Development
+## 🧪 Working With Plugins During Development
 
 Commander loads plugins from `plugins/` at startup. For a normal local run you usually need:
 
-- the core app built successfully
-- plugin ZIPs present in `plugins/`
-- matching `.sig` files beside each ZIP
+- ✅ the core app built successfully
+- 📦 plugin ZIPs present in `plugins/`
+- 🔏 matching `.sig` files beside each ZIP
 
 If you are building plugin sources from `../plugins/core`, follow the individual plugin README for signing and deployment steps, then copy or deploy the generated ZIP and `.sig` into this repository's `plugins/` directory.
 
-## Development Notes
+## 🛠️ Development Notes
 
 - Entrypoint: `dev.nuclr.commander.Nuclr`
 - Main desktop shell: `dev.nuclr.commander.ui.MainWindow`
 - Plugin loading: `dev.nuclr.commander.service.PluginLoader`
 - Runtime registration/events: `dev.nuclr.commander.service.PluginRegistry`
 
-## License
+## 📄 License
 
 Apache 2.0. See [LICENSE](LICENSE).
