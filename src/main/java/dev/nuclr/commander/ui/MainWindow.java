@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -36,6 +37,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
+import javax.swing.SwingWorker;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -58,10 +60,12 @@ import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.service.PanelTransferService;
 import dev.nuclr.commander.service.PanelTransferService.ConflictResolution;
+import dev.nuclr.commander.service.PanelTransferService.TransferProgress;
 import dev.nuclr.commander.service.PanelTransferService.TransferOptions;
 import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.common.TransferConfirmationDialog;
+import dev.nuclr.commander.ui.common.TransferProgressDialog;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
@@ -852,9 +856,6 @@ public class MainWindow implements PluginEventListener {
 
 		if (state == focusedPanelState && state.provider() instanceof FocusablePlugin focusable) {
 			focusable.onFocusGained();
-			if (state.component() != null) {
-				state.component().requestFocusInWindow();
-			}
 		}
 
 		onPanelStateChanged(state);
@@ -1138,14 +1139,7 @@ public class MainWindow implements PluginEventListener {
 			}
 			Path effectiveDestination = transferOptions.destinationDirectory();
 			ensureDestinationDirectoryExists(effectiveDestination);
-			if (move) {
-				panelTransferService.move(sources, transferOptions);
-			} else {
-				panelTransferService.copy(sources, transferOptions);
-			}
-			refreshPanel(sourceState);
-			refreshPanel(destinationState, effectiveDestination);
-			handledCallback.accept(true);
+			startTransferWorker(sourceState, destinationState, sources, transferOptions, move, handledCallback);
 			return true;
 		} catch (Exception ex) {
 			log.error("Failed to {} items to [{}]: {}", move ? "move" : "copy", destinationDirectory, ex.getMessage(), ex);
@@ -1165,19 +1159,17 @@ public class MainWindow implements PluginEventListener {
 			List<PluginPathResource> sources,
 			Path destinationDirectory,
 			boolean move) {
-		if (!isZipRelatedTransfer(sourceState, destinationState, sources, destinationDirectory)) {
-			return new TransferOptions(destinationDirectory, ConflictResolution.OVERWRITE, null);
-		}
-
 		boolean archiveSource = isArchiveSource(sourceState, sources);
 		boolean archiveDestination = isArchiveDestination(destinationState, destinationDirectory);
 		TransferConfirmationDialog.Result result = TransferConfirmationDialog.show(
 				mainFrame,
 				new TransferConfirmationDialog.Model(
-						transferDialogTitle(archiveSource, archiveDestination, move),
-						transferDestinationLabel(archiveSource, archiveDestination, move),
+						transferDialogTitle(archiveSource, archiveDestination, move, sources.size()),
+						transferDestinationLabel(archiveSource, archiveDestination, move, sources.size()),
 						destinationDirectory,
-						sources));
+						sources,
+						defaultConflictResolution(archiveSource, archiveDestination),
+						move ? "Move" : "Copy"));
 		if (result == null) {
 			return null;
 		}
@@ -1187,7 +1179,82 @@ public class MainWindow implements PluginEventListener {
 				(sourcePath, targetPath, directory) -> showConflictResolutionDialog(sourcePath, targetPath, directory, move));
 	}
 
+	private void startTransferWorker(
+			PanelState sourceState,
+			PanelState destinationState,
+			List<PluginPathResource> sources,
+			TransferOptions transferOptions,
+			boolean move,
+			java.util.function.Consumer<Boolean> handledCallback) {
+		TransferProgressDialog progressDialog = new TransferProgressDialog(mainFrame, move);
+		AtomicBoolean transferStarted = new AtomicBoolean(false);
+		TransferOptions workerOptions = new TransferOptions(
+				transferOptions.destinationDirectory(),
+				transferOptions.conflictResolution(),
+				transferOptions.conflictResolver(),
+				progressDialog::updateProgress,
+				progressDialog::isCancelRequested);
+
+		SwingWorker<Void, TransferProgress> worker = new SwingWorker<>() {
+			@Override
+			protected Void doInBackground() throws Exception {
+				transferStarted.set(true);
+				if (move) {
+					panelTransferService.move(sources, workerOptions);
+				} else {
+					panelTransferService.copy(sources, workerOptions);
+				}
+				return null;
+			}
+
+			@Override
+			protected void done() {
+				progressDialog.closeDialog();
+				try {
+					get();
+					refreshPanel(sourceState);
+					refreshPanel(destinationState, workerOptions.destinationDirectory());
+				} catch (ExecutionException ex) {
+					Throwable cause = ex.getCause();
+					if (cause instanceof Exception exception && "Transfer cancelled".equals(exception.getMessage())) {
+						handledCallback.accept(false);
+						return;
+					}
+					Exception exception = cause instanceof Exception known ? known : new Exception(cause);
+					log.error(
+							"Failed to {} items to [{}]: {}",
+							move ? "move" : "copy",
+							workerOptions.destinationDirectory(),
+							exception.getMessage(),
+							exception);
+					Alerts.showMessageDialog(
+							mainFrame,
+							"Cannot " + (move ? "move" : "copy") + " files:\n" + describeException(exception),
+							move ? "Move Error" : "Copy Error",
+							JOptionPane.ERROR_MESSAGE);
+					handledCallback.accept(false);
+				} catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+					handledCallback.accept(false);
+				}
+			}
+		};
+
+		worker.execute();
+		progressDialog.showDialog();
+		handledCallback.accept(transferStarted.get() || !sources.isEmpty());
+	}
+
 	private ConflictResolution showConflictResolutionDialog(Path sourcePath, Path targetPath, boolean directory, boolean move) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			AtomicReference<ConflictResolution> result = new AtomicReference<>(ConflictResolution.SKIP);
+			try {
+				SwingUtilities.invokeAndWait(() -> result.set(showConflictResolutionDialog(sourcePath, targetPath, directory, move)));
+			} catch (Exception ex) {
+				log.warn("Failed to show transfer conflict dialog: {}", ex.getMessage(), ex);
+			}
+			return result.get();
+		}
 		StringBuilder message = new StringBuilder();
 		message.append(directory ? "Folder already exists:" : "File already exists:")
 				.append('\n')
@@ -1246,23 +1313,43 @@ public class MainWindow implements PluginEventListener {
 	}
 
 	private String transferDialogTitle(boolean archiveSource, boolean archiveDestination, boolean move) {
+		return transferDialogTitle(archiveSource, archiveDestination, move, 0);
+	}
+
+	private String transferDialogTitle(boolean archiveSource, boolean archiveDestination, boolean move, int sourceCount) {
 		if (archiveDestination && !archiveSource) {
-			return move ? "Move Files To Archive" : "Add Files To Archive";
+			return move ? "Move To Archive" : "Copy To Archive";
 		}
 		if (archiveSource && !archiveDestination) {
-			return move ? "Move Files From Archive" : "Extract Files";
+			return move ? "Move From Archive" : "Extract Files";
 		}
-		return move ? "Move Files" : "Copy Files";
+		String base = move ? "Move" : "Copy";
+		return sourceCount > 0 ? base + " " + sourceCount + (sourceCount == 1 ? " item" : " items") : base;
 	}
 
 	private String transferDestinationLabel(boolean archiveSource, boolean archiveDestination, boolean move) {
+		return transferDestinationLabel(archiveSource, archiveDestination, move, 0);
+	}
+
+	private String transferDestinationLabel(boolean archiveSource, boolean archiveDestination, boolean move, int sourceCount) {
 		if (archiveDestination && !archiveSource) {
-			return move ? "Move files to archive directory" : "Add files to archive directory";
+			return (move ? "Move " : "Copy ") + itemCountLabel(sourceCount) + " to archive:";
 		}
 		if (archiveSource && !archiveDestination) {
-			return move ? "Move files to" : "Extract files to";
+			return (move ? "Move " : "Extract ") + itemCountLabel(sourceCount) + " to:";
 		}
-		return move ? "Move files to" : "Copy files to";
+		return (move ? "Move " : "Copy ") + itemCountLabel(sourceCount) + " to:";
+	}
+
+	private ConflictResolution defaultConflictResolution(boolean archiveSource, boolean archiveDestination) {
+		return ConflictResolution.ASK;
+	}
+
+	private String itemCountLabel(int sourceCount) {
+		if (sourceCount <= 0) {
+			return "items";
+		}
+		return sourceCount == 1 ? "1 item" : sourceCount + " items";
 	}
 
 	private void ensureDestinationDirectoryExists(Path destinationDirectory) throws Exception {
