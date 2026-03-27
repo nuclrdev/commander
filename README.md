@@ -77,16 +77,6 @@ The current `plugins/` directory in this repository includes these signed plugin
 | `quick-view-torrent` | Quick view | Torrent metadata, trackers, info hash, and magnet link preview |
 | `quick-view-sdl2-music` | Quick view | Audio playback and waveform preview through SDL2/SDL2_mixer |
 
-## 🌌 Additional Core Plugins In The Workspace
-
-The sibling repository at `C:\nuclr\sources\plugins\core` also contains plugin sources and READMEs for additional capabilities that are not currently present in this repo's `plugins/` folder:
-
-- 🌐 `filepanel-net` - SFTP/SCP remote panel support
-- 🐙 `filepanel-github` - read-only GitHub repository browsing through `gh`
-- ✍️ `screenpanel-text-editor` - full-screen syntax-highlighted text editor screen
-
-Those plugin READMEs are the authoritative source for their build/runtime details.
-
 ## 🎯 Current Capabilities
 
 With the current bundled plugin set, Commander is already positioned for workflows such as:
@@ -134,7 +124,26 @@ java -jar target/commander-0.0.1-SNAPSHOT.jar
 Example with explicit heap settings:
 
 ```bash
-java -Xms64m -Xmx512m -jar target/commander-0.0.1-SNAPSHOT.jar
+java 
+	-XX:CICompilerCount=4
+	-Xms64m
+	-Xmx512m
+	-XX:MaxMetaspaceSize=192m
+	-XX:+UseZGC
+	-XX:+ZGenerational
+	-Dsun.java2d.d3d=false
+	-Dsun.java2d.opengl=true
+	-Dawt.useSystemAAFontSettings=on
+	-Dswing.aatext=true
+	-Dfile.encoding=UTF-8
+	-XX:+UseStringDeduplication
+	-Xss512k
+	--add-opens java.desktop/sun.awt=ALL-UNNAMED
+	--add-opens java.desktop/sun.swing=ALL-UNNAMED
+	-XX:+ExitOnOutOfMemoryError
+	-XX:+HeapDumpOnOutOfMemoryError
+	-Dsun.java2d.uiScale.enabled=true
+ -jar target/commander-0.0.1-SNAPSHOT.jar
 ```
 
 ## 🧪 Working With Plugins During Development
