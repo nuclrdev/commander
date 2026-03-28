@@ -59,6 +59,7 @@ import dev.nuclr.commander.event.ShowConsoleScreenEvent;
 import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.service.PanelTransferService;
+import dev.nuclr.commander.service.PanelTransferService.AccessPolicy;
 import dev.nuclr.commander.service.PanelTransferService.ConflictResolution;
 import dev.nuclr.commander.service.PanelTransferService.TransferProgress;
 import dev.nuclr.commander.service.PanelTransferService.TransferOptions;
@@ -1134,6 +1135,7 @@ public class MainWindow implements PluginEventListener {
 		try {
 			TransferOptions transferOptions = prepareTransferOptions(sourceState, destinationState, sources, destinationDirectory, move);
 			if (transferOptions == null) {
+				restorePanelFocus(sourceState);
 				handledCallback.accept(false);
 				return false;
 			}
@@ -1148,6 +1150,7 @@ public class MainWindow implements PluginEventListener {
 					"Cannot " + (move ? "move" : "copy") + " files:\n" + describeException(ex),
 					move ? "Move Error" : "Copy Error",
 					JOptionPane.ERROR_MESSAGE);
+			restorePanelFocus(sourceState);
 			handledCallback.accept(false);
 			return false;
 		}
@@ -1169,14 +1172,27 @@ public class MainWindow implements PluginEventListener {
 						destinationDirectory,
 						sources,
 						defaultConflictResolution(archiveSource, archiveDestination),
-						move ? "Move" : "Copy"));
+						move ? "Move" : "Copy",
+						AccessPolicy.DEFAULT,
+						false,
+						false,
+						false,
+						null));
 		if (result == null) {
 			return null;
 		}
 		return new TransferOptions(
-				result.destinationDirectory(),
+				result.destinationDirectories().isEmpty() ? destinationDirectory : result.destinationDirectories().get(0),
+				result.destinationDirectories(),
 				result.conflictResolution(),
-				(sourcePath, targetPath, directory) -> showConflictResolutionDialog(sourcePath, targetPath, directory, move));
+				(sourcePath, targetPath, directory) -> showConflictResolutionDialog(sourcePath, targetPath, directory, move),
+				null,
+				null,
+				result.accessPolicy(),
+				result.preserveTimestamps(),
+				result.followSymbolicLinks(),
+				result.filterExpression(),
+				null);
 	}
 
 	private void startTransferWorker(
@@ -1190,10 +1206,16 @@ public class MainWindow implements PluginEventListener {
 		AtomicBoolean transferStarted = new AtomicBoolean(false);
 		TransferOptions workerOptions = new TransferOptions(
 				transferOptions.destinationDirectory(),
+				transferOptions.destinationDirectories(),
 				transferOptions.conflictResolution(),
 				transferOptions.conflictResolver(),
 				progressDialog::updateProgress,
-				progressDialog::isCancelRequested);
+				progressDialog::isCancelRequested,
+				transferOptions.accessPolicy(),
+				transferOptions.preserveTimestamps(),
+				transferOptions.followSymbolicLinks(),
+				transferOptions.filterExpression(),
+				transferOptions.filterMatchers());
 
 		SwingWorker<Void, TransferProgress> worker = new SwingWorker<>() {
 			@Override
@@ -1217,6 +1239,7 @@ public class MainWindow implements PluginEventListener {
 				} catch (ExecutionException ex) {
 					Throwable cause = ex.getCause();
 					if (cause instanceof Exception exception && "Transfer cancelled".equals(exception.getMessage())) {
+						restorePanelFocus(sourceState);
 						handledCallback.accept(false);
 						return;
 					}
@@ -1232,17 +1255,34 @@ public class MainWindow implements PluginEventListener {
 							"Cannot " + (move ? "move" : "copy") + " files:\n" + describeException(exception),
 							move ? "Move Error" : "Copy Error",
 							JOptionPane.ERROR_MESSAGE);
+					restorePanelFocus(sourceState);
 					handledCallback.accept(false);
 				} catch (InterruptedException ex) {
 					Thread.currentThread().interrupt();
+					restorePanelFocus(sourceState);
 					handledCallback.accept(false);
+					return;
 				}
+				restorePanelFocus(sourceState);
 			}
 		};
 
 		worker.execute();
 		progressDialog.showDialog();
 		handledCallback.accept(transferStarted.get() || !sources.isEmpty());
+	}
+
+	private void restorePanelFocus(PanelState state) {
+		if (state == null || state.component() == null || !mainSplitPane.isVisible()) {
+			return;
+		}
+		focusedPanelState = state;
+		rebuildFunctionBar();
+		SwingUtilities.invokeLater(() -> {
+			if (state.component() != null) {
+				state.component().requestFocusInWindow();
+			}
+		});
 	}
 
 	private ConflictResolution showConflictResolutionDialog(Path sourcePath, Path targetPath, boolean directory, boolean move) {

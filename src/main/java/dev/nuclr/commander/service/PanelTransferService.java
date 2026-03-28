@@ -4,14 +4,23 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.PathMatcher;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.DosFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
 
@@ -42,38 +51,43 @@ public class PanelTransferService {
 		if (sources == null || sources.isEmpty()) {
 			return;
 		}
-		Path destinationDirectory = options != null ? options.destinationDirectory() : null;
-		if (destinationDirectory == null || !Files.isDirectory(destinationDirectory)) {
-			throw new IOException("Destination directory is not available");
+		List<Path> destinationDirectories = destinationDirectories(options);
+		for (Path destinationDirectory : destinationDirectories) {
+			if (destinationDirectory == null || !Files.isDirectory(destinationDirectory)) {
+				throw new IOException("Destination directory is not available");
+			}
 		}
 
-		ProgressTracker tracker = new ProgressTracker(options, countFiles(sources), countBytes(sources));
-		tracker.report(null, destinationDirectory);
+		ProgressTracker tracker = new ProgressTracker(options, countFiles(sources, options), countBytes(sources, options));
+		tracker.report(null, destinationDirectories.get(0));
 
-		for (PluginPathResource source : sources) {
-			if (source == null || source.getPath() == null) {
-				continue;
-			}
-			checkCancelled(options);
+		for (int destinationIndex = 0; destinationIndex < destinationDirectories.size(); destinationIndex++) {
+			Path destinationDirectory = destinationDirectories.get(destinationIndex);
+			for (PluginPathResource source : sources) {
+				if (source == null || source.getPath() == null) {
+					continue;
+				}
+				checkCancelled(options);
 
-			Path sourcePath = source.getPath();
-			Path targetPath = destinationDirectory.resolve(targetName(sourcePath));
-			if (isSamePath(sourcePath, targetPath)) {
-				tracker.skipPath(sourcePath, targetPath);
-				continue;
-			}
-			if (Files.isDirectory(sourcePath) && isNestedWithin(sourcePath, targetPath)) {
-				throw new IOException("Cannot copy or move a directory into itself: " + sourcePath);
-			}
+				Path sourcePath = source.getPath();
+				Path targetPath = destinationDirectory.resolve(targetName(sourcePath));
+				if (isSamePath(sourcePath, targetPath)) {
+					tracker.skipPath(sourcePath, targetPath, options);
+					continue;
+				}
+				if (Files.isDirectory(sourcePath) && isNestedWithin(sourcePath, targetPath)) {
+					throw new IOException("Cannot copy or move a directory into itself: " + sourcePath);
+				}
 
-			Path resolvedTargetPath = resolveRootTargetPath(sourcePath, targetPath, options);
-			if (resolvedTargetPath == null) {
-				tracker.skipPath(sourcePath, targetPath);
-				continue;
-			}
-			boolean copied = copyPath(source, sourcePath, resolvedTargetPath, options, tracker);
-			if (deleteSource && copied) {
-				deleteRecursively(sourcePath);
+				Path resolvedTargetPath = resolveRootTargetPath(sourcePath, targetPath, options);
+				if (resolvedTargetPath == null) {
+					tracker.skipPath(sourcePath, targetPath, options);
+					continue;
+				}
+				boolean copied = copyPath(source, sourcePath, resolvedTargetPath, options, tracker);
+				if (deleteSource && copied && destinationIndex == destinationDirectories.size() - 1) {
+					deleteRecursively(sourcePath);
+				}
 			}
 		}
 	}
@@ -87,6 +101,10 @@ public class PanelTransferService {
 		if (Files.isDirectory(sourcePath)) {
 			return copyDirectory(sourcePath, targetPath, options, tracker);
 		}
+		if (Files.isSymbolicLink(sourcePath) && !followSymbolicLinks(options)) {
+			copySymbolicLink(sourcePath, targetPath, options, tracker);
+			return true;
+		}
 		if (Files.exists(targetPath) && Files.isDirectory(targetPath)) {
 			throw new IOException("Cannot overwrite directory with file: " + targetPath);
 		}
@@ -95,7 +113,7 @@ public class PanelTransferService {
 		if (parent != null) {
 			Files.createDirectories(parent);
 		}
-		try (InputStream input = source.openStream()) {
+		try (InputStream input = Files.newInputStream(sourcePath)) {
 			copyStream(input, targetPath, sourcePath, options, tracker);
 			return true;
 		} catch (Exception ex) {
@@ -105,28 +123,43 @@ public class PanelTransferService {
 
 	private boolean copyDirectory(Path sourceDirectory, Path targetDirectory, TransferOptions options, ProgressTracker tracker) throws IOException {
 		AtomicBoolean copiedEverything = new AtomicBoolean(true);
-		Files.walkFileTree(sourceDirectory, new SimpleFileVisitor<>() {
+		Set<FileVisitOption> visitOptions = followSymbolicLinks(options) ? Set.of(FileVisitOption.FOLLOW_LINKS) : Set.of();
+		Files.walkFileTree(sourceDirectory, visitOptions, Integer.MAX_VALUE, new SimpleFileVisitor<>() {
 			@Override
 			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 				checkCancelled(options);
+				if (!shouldIncludeDirectory(sourceDirectory, dir, options)) {
+					return FileVisitResult.SKIP_SUBTREE;
+				}
 				Path relative = sourceDirectory.relativize(dir);
 				Path resolvedDirectory = resolveInTargetFileSystem(targetDirectory, relative);
 				if (Files.exists(resolvedDirectory) && !Files.isDirectory(resolvedDirectory)) {
 					throw new IOException("Cannot overwrite file with directory: " + resolvedDirectory);
 				}
 				Files.createDirectories(resolvedDirectory);
+				if (preserveTimestamps(options) || accessPolicy(options) == AccessPolicy.COPY) {
+					applyAttributes(dir, resolvedDirectory, options);
+				}
 				return FileVisitResult.CONTINUE;
 			}
 
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				checkCancelled(options);
+				if (!shouldInclude(sourceDirectory, file, options)) {
+					tracker.skipFile(file, targetDirectory.resolve(sourceDirectory.relativize(file)), options);
+					return FileVisitResult.CONTINUE;
+				}
 				Path relative = sourceDirectory.relativize(file);
 				Path targetFile = resolveInTargetFileSystem(targetDirectory, relative);
 				Path resolvedTargetFile = resolveFileTargetPath(file, targetFile, options);
 				if (resolvedTargetFile == null) {
 					copiedEverything.set(false);
-					tracker.skipFile(file, targetFile);
+					tracker.skipFile(file, targetFile, options);
+					return FileVisitResult.CONTINUE;
+				}
+				if (Files.isSymbolicLink(file) && !followSymbolicLinks(options)) {
+					copySymbolicLink(file, resolvedTargetFile, options, tracker);
 					return FileVisitResult.CONTINUE;
 				}
 				try (InputStream input = Files.newInputStream(file)) {
@@ -158,7 +191,34 @@ public class PanelTransferService {
 				tracker.bytesTransferred(read, sourcePath, targetPath);
 			}
 		}
+		applyAttributes(sourcePath, targetPath, options);
 		tracker.fileCompleted(sourcePath, targetPath);
+	}
+
+	private void copySymbolicLink(
+			Path sourcePath,
+			Path targetPath,
+			TransferOptions options,
+			ProgressTracker tracker) throws IOException {
+		Path parent = targetPath.getParent();
+		if (parent != null) {
+			Files.createDirectories(parent);
+		}
+		tracker.report(sourcePath, targetPath);
+		try {
+			Files.deleteIfExists(targetPath);
+			Files.createSymbolicLink(targetPath, Files.readSymbolicLink(sourcePath));
+			applyAttributes(sourcePath, targetPath, options);
+			tracker.fileCompleted(sourcePath, targetPath);
+		} catch (UnsupportedOperationException | IOException ex) {
+			if (Files.isDirectory(sourcePath)) {
+				copyDirectory(sourcePath, targetPath, options.withFollowSymbolicLinks(true), tracker);
+			} else {
+				try (InputStream input = Files.newInputStream(sourcePath)) {
+					copyStream(input, targetPath, sourcePath, options.withFollowSymbolicLinks(true), tracker);
+				}
+			}
+		}
 	}
 
 	private Path resolveInTargetFileSystem(Path targetDirectory, Path relativePath) {
@@ -277,6 +337,10 @@ public class PanelTransferService {
 	}
 
 	private long countFiles(List<PluginPathResource> sources) throws IOException {
+		return countFiles(sources, null);
+	}
+
+	private long countFiles(List<PluginPathResource> sources, TransferOptions options) throws IOException {
 		long total = 0L;
 		for (PluginPathResource source : sources) {
 			if (source == null || source.getPath() == null) {
@@ -284,17 +348,26 @@ public class PanelTransferService {
 			}
 			Path path = source.getPath();
 			if (Files.isDirectory(path)) {
-				try (var stream = Files.walk(path)) {
-					total += stream.filter(Files::isRegularFile).count();
+				try (var stream = walk(path, options)) {
+					total += stream
+							.filter(file -> !Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS))
+							.filter(file -> shouldInclude(path, file, options))
+							.count();
 				}
 			} else {
-				total++;
+				if (shouldInclude(path.getParent(), path, options)) {
+					total++;
+				}
 			}
 		}
-		return total;
+		return total * destinationDirectories(options).size();
 	}
 
 	private long countBytes(List<PluginPathResource> sources) throws IOException {
+		return countBytes(sources, null);
+	}
+
+	private long countBytes(List<PluginPathResource> sources, TransferOptions options) throws IOException {
 		long total = 0L;
 		for (PluginPathResource source : sources) {
 			if (source == null || source.getPath() == null) {
@@ -302,17 +375,20 @@ public class PanelTransferService {
 			}
 			Path path = source.getPath();
 			if (Files.isDirectory(path)) {
-				try (var stream = Files.walk(path)) {
+				try (var stream = walk(path, options)) {
 					total += stream
-							.filter(Files::isRegularFile)
+							.filter(file -> !Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS))
+							.filter(file -> shouldInclude(path, file, options))
 							.mapToLong(this::safeSize)
 							.sum();
 				}
 				continue;
 			}
-			total += safeSize(path, source.getSizeBytes());
+			if (shouldInclude(path.getParent(), path, options)) {
+				total += safeSize(path, source.getSizeBytes());
+			}
 		}
-		return total;
+		return total * destinationDirectories(options).size();
 	}
 
 	private long safeSize(Path path) {
@@ -333,6 +409,106 @@ public class PanelTransferService {
 		}
 	}
 
+	private boolean preserveTimestamps(TransferOptions options) {
+		return options != null && options.preserveTimestamps();
+	}
+
+	private boolean followSymbolicLinks(TransferOptions options) {
+		return options != null && options.followSymbolicLinks();
+	}
+
+	private AccessPolicy accessPolicy(TransferOptions options) {
+		return options != null && options.accessPolicy() != null ? options.accessPolicy() : AccessPolicy.DEFAULT;
+	}
+
+	private List<Path> destinationDirectories(TransferOptions options) {
+		if (options == null) {
+			return List.of();
+		}
+		if (options.destinationDirectories() != null && !options.destinationDirectories().isEmpty()) {
+			return options.destinationDirectories();
+		}
+		return options.destinationDirectory() != null ? List.of(options.destinationDirectory()) : List.of();
+	}
+
+	private boolean shouldIncludeDirectory(Path root, Path directory, TransferOptions options) {
+		if (root == null || directory == null) {
+			return true;
+		}
+		if (root.equals(directory)) {
+			return true;
+		}
+		return shouldInclude(root, directory, options)
+				|| hasIncludedDescendants(root, directory, options);
+	}
+
+	private boolean hasIncludedDescendants(Path root, Path directory, TransferOptions options) {
+		if (options == null || options.filterMatchers().isEmpty()) {
+			return true;
+		}
+		try (var stream = Files.walk(directory, 1)) {
+			return stream
+					.filter(path -> !directory.equals(path))
+					.anyMatch(path -> shouldInclude(root, path, options)
+							|| (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) && hasIncludedDescendants(root, path, options)));
+		} catch (IOException ex) {
+			return false;
+		}
+	}
+
+	private boolean shouldInclude(Path root, Path path, TransferOptions options) {
+		if (options == null || options.filterMatchers().isEmpty() || path == null) {
+			return true;
+		}
+		Path relative = root != null && path.normalize().startsWith(root.normalize()) ? root.normalize().relativize(path.normalize()) : path.getFileName();
+		String unix = relative != null ? relative.toString().replace('\\', '/') : "";
+		String fileName = path.getFileName() != null ? path.getFileName().toString() : unix;
+		return options.filterMatchers().stream().anyMatch(matcher -> matcher.matches(Path.of(unix)) || matcher.matches(Path.of(fileName)));
+	}
+
+	private void applyAttributes(Path sourcePath, Path targetPath, TransferOptions options) {
+		try {
+			if (preserveTimestamps(options)) {
+				BasicFileAttributes attrs = Files.readAttributes(sourcePath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+				BasicFileAttributeView targetView = Files.getFileAttributeView(targetPath, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+				if (targetView != null) {
+					targetView.setTimes(attrs.lastModifiedTime(), attrs.lastAccessTime(), attrs.creationTime());
+				}
+			}
+
+			if (accessPolicy(options) == AccessPolicy.COPY) {
+				copyAccessRights(sourcePath, targetPath);
+			}
+		} catch (Exception ignored) {
+			// best effort
+		}
+	}
+
+	private void copyAccessRights(Path sourcePath, Path targetPath) throws IOException {
+		PosixFileAttributeView sourcePosix = Files.getFileAttributeView(sourcePath, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		PosixFileAttributeView targetPosix = Files.getFileAttributeView(targetPath, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		if (sourcePosix != null && targetPosix != null) {
+			targetPosix.setPermissions(sourcePosix.readAttributes().permissions());
+			return;
+		}
+
+		DosFileAttributeView sourceDos = Files.getFileAttributeView(sourcePath, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		DosFileAttributeView targetDos = Files.getFileAttributeView(targetPath, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		if (sourceDos != null && targetDos != null) {
+			var attrs = sourceDos.readAttributes();
+			targetDos.setArchive(attrs.isArchive());
+			targetDos.setHidden(attrs.isHidden());
+			targetDos.setReadOnly(attrs.isReadOnly());
+			targetDos.setSystem(attrs.isSystem());
+		}
+	}
+
+	private Stream<Path> walk(Path path, TransferOptions options) throws IOException {
+		return followSymbolicLinks(options)
+				? Files.walk(path, FileVisitOption.FOLLOW_LINKS)
+				: Files.walk(path);
+	}
+
 	public enum ConflictResolution {
 		ASK,
 		OVERWRITE,
@@ -340,15 +516,51 @@ public class PanelTransferService {
 		RENAME
 	}
 
+	public enum AccessPolicy {
+		DEFAULT,
+		COPY,
+		INHERIT
+	}
+
 	public record TransferOptions(
 			Path destinationDirectory,
+			List<Path> destinationDirectories,
 			ConflictResolution conflictResolution,
 			ConflictResolver conflictResolver,
 			ProgressListener progressListener,
-			CancellationToken cancellationToken) {
+			CancellationToken cancellationToken,
+			AccessPolicy accessPolicy,
+			boolean preserveTimestamps,
+			boolean followSymbolicLinks,
+			String filterExpression,
+			List<PathMatcher> filterMatchers) {
 
 		public TransferOptions(Path destinationDirectory, ConflictResolution conflictResolution, ConflictResolver conflictResolver) {
-			this(destinationDirectory, conflictResolution, conflictResolver, null, null);
+			this(destinationDirectory, List.of(destinationDirectory), conflictResolution, conflictResolver, null, null, AccessPolicy.DEFAULT, false, false, null, List.of());
+		}
+
+		public TransferOptions {
+			destinationDirectories = destinationDirectories != null && !destinationDirectories.isEmpty()
+					? List.copyOf(destinationDirectories)
+					: destinationDirectory != null ? List.of(destinationDirectory) : List.of();
+			accessPolicy = accessPolicy != null ? accessPolicy : AccessPolicy.DEFAULT;
+			filterExpression = filterExpression != null && !filterExpression.isBlank() ? filterExpression.trim() : null;
+			filterMatchers = filterMatchers != null ? List.copyOf(filterMatchers) : compileFilterMatchers(filterExpression);
+		}
+
+		public TransferOptions withFollowSymbolicLinks(boolean value) {
+			return new TransferOptions(
+					destinationDirectory,
+					destinationDirectories,
+					conflictResolution,
+					conflictResolver,
+					progressListener,
+					cancellationToken,
+					accessPolicy,
+					preserveTimestamps,
+					value,
+					filterExpression,
+					filterMatchers);
 		}
 	}
 
@@ -376,7 +588,7 @@ public class PanelTransferService {
 			Path currentTarget) {
 	}
 
-	private static final class ProgressTracker {
+	private final class ProgressTracker {
 		private final TransferOptions options;
 		private final long totalFiles;
 		private final long totalBytes;
@@ -399,15 +611,19 @@ public class PanelTransferService {
 			report(currentSource, currentTarget);
 		}
 
-		private void skipPath(Path sourcePath, Path targetPath) throws IOException {
+		private void skipPath(Path sourcePath, Path targetPath, TransferOptions options) throws IOException {
 			if (sourcePath != null && Files.isDirectory(sourcePath)) {
-				try (var stream = Files.walk(sourcePath)) {
-					long skippedFiles = stream.filter(Files::isRegularFile).count();
+				try (var stream = walk(sourcePath, options)) {
+					long skippedFiles = stream
+							.filter(file -> !Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS))
+							.filter(file -> shouldInclude(sourcePath, file, options))
+							.count();
 					completedFiles += skippedFiles;
 				}
-				try (var stream = Files.walk(sourcePath)) {
+				try (var stream = walk(sourcePath, options)) {
 					transferredBytes += stream
-							.filter(Files::isRegularFile)
+							.filter(file -> !Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS))
+							.filter(file -> shouldInclude(sourcePath, file, options))
 							.mapToLong(ProgressTracker::safeStaticSize)
 							.sum();
 				}
@@ -418,7 +634,10 @@ public class PanelTransferService {
 			report(sourcePath, targetPath);
 		}
 
-		private void skipFile(Path sourcePath, Path targetPath) {
+		private void skipFile(Path sourcePath, Path targetPath, TransferOptions options) {
+			if (!shouldInclude(sourcePath != null ? sourcePath.getParent() : null, sourcePath, options)) {
+				return;
+			}
 			completedFiles++;
 			transferredBytes += Math.max(0L, safeStaticSize(sourcePath));
 			report(sourcePath, targetPath);
@@ -447,5 +666,17 @@ public class PanelTransferService {
 				return 0L;
 			}
 		}
+	}
+
+	private static List<PathMatcher> compileFilterMatchers(String expression) {
+		if (expression == null || expression.isBlank()) {
+			return List.of();
+		}
+		return List.of(expression.split("[;\\r\\n]+")).stream()
+				.map(String::trim)
+				.filter(token -> !token.isBlank())
+				.map(token -> "glob:" + token.replace('\\', '/'))
+				.map(syntax -> Path.of(".").getFileSystem().getPathMatcher(syntax))
+				.collect(Collectors.toList());
 	}
 }

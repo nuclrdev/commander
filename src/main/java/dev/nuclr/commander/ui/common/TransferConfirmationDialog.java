@@ -13,7 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -56,20 +58,46 @@ public final class TransferConfirmationDialog {
 		accessGroup.add(accessDefault);
 		accessGroup.add(accessCopy);
 		accessGroup.add(accessInherit);
-		accessDefault.setEnabled(false);
-		accessCopy.setEnabled(false);
-		accessInherit.setEnabled(false);
+		selectAccessPolicy(model.initialAccessPolicy(), accessDefault, accessCopy, accessInherit);
 
 		JCheckBox timestampsCheckBox = new JCheckBox("Preserve all timestamps");
 		JCheckBox linksCheckBox = new JCheckBox("Copy contents of symbolic links");
 		JCheckBox destinationsCheckBox = new JCheckBox("Process multiple destinations");
 		JCheckBox filterCheckBox = new JCheckBox("Use filter");
-		timestampsCheckBox.setEnabled(false);
-		linksCheckBox.setEnabled(false);
-		destinationsCheckBox.setEnabled(false);
-		filterCheckBox.setEnabled(false);
+		timestampsCheckBox.setSelected(model.preserveTimestamps());
+		linksCheckBox.setSelected(model.followSymbolicLinks());
+		destinationsCheckBox.setSelected(model.multipleDestinations());
+		filterCheckBox.setSelected(model.filterExpression() != null && !model.filterExpression().isBlank());
 		JButton filterButton = new JButton("Filter");
-		filterButton.setEnabled(false);
+		JLabel filterSummaryLabel = new JLabel(filterSummary(model.filterExpression()));
+		filterButton.setEnabled(filterCheckBox.isSelected());
+		filterSummaryLabel.setVisible(filterCheckBox.isSelected());
+
+		final String[] filterExpressionHolder = {model.filterExpression()};
+		filterCheckBox.addActionListener(e -> {
+			boolean enabled = filterCheckBox.isSelected();
+			filterButton.setEnabled(enabled);
+			filterSummaryLabel.setVisible(enabled);
+			if (!enabled) {
+				filterSummaryLabel.setText(filterSummary(null));
+			} else {
+				filterSummaryLabel.setText(filterSummary(filterExpressionHolder[0]));
+			}
+		});
+		filterButton.addActionListener(e -> {
+			String current = filterExpressionHolder[0] != null ? filterExpressionHolder[0] : "";
+			String value = JOptionPane.showInputDialog(
+					parent,
+					"Enter glob patterns separated by ';' or new lines.\nExamples: *.txt;docs/**;*.md",
+					current);
+			if (value != null) {
+				filterExpressionHolder[0] = value.trim();
+				filterSummaryLabel.setText(filterSummary(filterExpressionHolder[0]));
+				filterCheckBox.setSelected(!filterExpressionHolder[0].isBlank());
+				filterButton.setEnabled(filterCheckBox.isSelected());
+				filterSummaryLabel.setVisible(filterCheckBox.isSelected());
+			}
+		});
 
 		Color dialogBackground = uiColor("OptionPane.background", uiColor("control", new Color(60, 63, 65)));
 		Color foreground = uiColor("Label.foreground", Color.WHITE);
@@ -88,7 +116,8 @@ public final class TransferConfirmationDialog {
 				linksCheckBox,
 				destinationsCheckBox,
 				filterCheckBox,
-				filterButton), BorderLayout.CENTER);
+				filterButton,
+				filterSummaryLabel), BorderLayout.CENTER);
 		content.add(buildSummaryPanel(model.sources()), BorderLayout.SOUTH);
 		styleDialog(
 				content,
@@ -102,6 +131,7 @@ public final class TransferConfirmationDialog {
 				accessCopy,
 				accessInherit,
 				filterButton,
+				filterSummaryLabel,
 				dialogBackground,
 				foreground,
 				fieldBackground,
@@ -134,8 +164,18 @@ public final class TransferConfirmationDialog {
 			}
 
 			try {
-				Path destinationDirectory = parseDestination(destinationField.getText(), model.initialDestination());
-				return new Result(destinationDirectory, ((ConflictChoice) conflictChoice.getSelectedItem()).resolution);
+				List<Path> destinations = parseDestinations(
+						destinationField.getText(),
+						model.initialDestination(),
+						destinationsCheckBox.isSelected());
+				return new Result(
+						destinations,
+						((ConflictChoice) conflictChoice.getSelectedItem()).resolution,
+						selectedAccessPolicy(accessDefault, accessCopy, accessInherit),
+						timestampsCheckBox.isSelected(),
+						linksCheckBox.isSelected(),
+						destinationsCheckBox.isSelected(),
+						filterCheckBox.isSelected() ? blankToNull(filterExpressionHolder[0]) : null);
 			} catch (InvalidPathException ex) {
 				String message = ex.getInput() == null || ex.getInput().isBlank() ? "Destination path cannot be blank." : "Invalid destination path:\n" + ex.getInput();
 				Alerts.showMessageDialog(parent, message, "Invalid Destination", JOptionPane.ERROR_MESSAGE);
@@ -176,7 +216,8 @@ public final class TransferConfirmationDialog {
 			JCheckBox linksCheckBox,
 			JCheckBox destinationsCheckBox,
 			JCheckBox filterCheckBox,
-			JButton filterButton) {
+			JButton filterButton,
+			JLabel filterSummaryLabel) {
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 
@@ -210,6 +251,8 @@ public final class TransferConfirmationDialog {
 		filterPanel.add(filterCheckBox);
 		filterPanel.add(Box.createHorizontalStrut(8));
 		filterPanel.add(filterButton);
+		filterPanel.add(Box.createHorizontalStrut(12));
+		filterPanel.add(filterSummaryLabel);
 		panel.add(filterPanel);
 		return panel;
 	}
@@ -234,15 +277,25 @@ public final class TransferConfirmationDialog {
 		return path == null ? "" : path.toString();
 	}
 
-	private static Path parseDestination(String rawPath, Path basePath) {
+	private static List<Path> parseDestinations(String rawPath, Path basePath, boolean multipleDestinations) {
 		String trimmed = rawPath == null ? "" : rawPath.trim();
 		if (trimmed.isEmpty()) {
 			throw new InvalidPathException(trimmed, "Destination path cannot be blank");
 		}
-		if (basePath != null && !basePath.getFileSystem().equals(FileSystems.getDefault())) {
-			return basePath.getFileSystem().getPath(trimmed).normalize();
+		List<String> segments = multipleDestinations
+				? Arrays.stream(trimmed.split("[;\\r\\n]+")).map(String::trim).filter(s -> !s.isBlank()).toList()
+				: List.of(trimmed);
+		if (segments.isEmpty()) {
+			throw new InvalidPathException(trimmed, "Destination path cannot be blank");
 		}
-		return Path.of(trimmed).normalize();
+		return segments.stream().map(segment -> parseDestination(segment, basePath)).toList();
+	}
+
+	private static Path parseDestination(String rawPath, Path basePath) {
+		if (basePath != null && !basePath.getFileSystem().equals(FileSystems.getDefault())) {
+			return basePath.getFileSystem().getPath(rawPath).normalize();
+		}
+		return Path.of(rawPath).normalize();
 	}
 
 	public record Model(
@@ -251,12 +304,22 @@ public final class TransferConfirmationDialog {
 			Path initialDestination,
 			List<PluginPathResource> sources,
 			PanelTransferService.ConflictResolution initialConflictResolution,
-			String confirmButtonLabel) {
+			String confirmButtonLabel,
+			PanelTransferService.AccessPolicy initialAccessPolicy,
+			boolean preserveTimestamps,
+			boolean followSymbolicLinks,
+			boolean multipleDestinations,
+			String filterExpression) {
 	}
 
 	public record Result(
-			Path destinationDirectory,
-			PanelTransferService.ConflictResolution conflictResolution) {
+			List<Path> destinationDirectories,
+			PanelTransferService.ConflictResolution conflictResolution,
+			PanelTransferService.AccessPolicy accessPolicy,
+			boolean preserveTimestamps,
+			boolean followSymbolicLinks,
+			boolean multipleDestinations,
+			String filterExpression) {
 	}
 
 	private enum ConflictChoice {
@@ -303,6 +366,7 @@ public final class TransferConfirmationDialog {
 			JRadioButton accessCopy,
 			JRadioButton accessInherit,
 			JButton filterButton,
+			JLabel filterSummaryLabel,
 			Color dialogBackground,
 			Color foreground,
 			Color fieldBackground,
@@ -339,6 +403,8 @@ public final class TransferConfirmationDialog {
 		filterButton.setBackground(uiColor("Button.background", fieldBackground));
 		filterButton.setForeground(uiColor("Button.foreground", fieldForeground));
 		filterButton.setBorder(BorderFactory.createLineBorder(borderColor));
+		filterSummaryLabel.setBackground(dialogBackground);
+		filterSummaryLabel.setForeground(foreground);
 	}
 
 	private static void applyContainerColors(Container container, Color background, Color foreground) {
@@ -368,5 +434,42 @@ public final class TransferConfirmationDialog {
 	private static Color uiColor(String key, Color fallback) {
 		Color color = UIManager.getColor(key);
 		return color != null ? color : fallback;
+	}
+
+	private static void selectAccessPolicy(
+			PanelTransferService.AccessPolicy policy,
+			JRadioButton accessDefault,
+			JRadioButton accessCopy,
+			JRadioButton accessInherit) {
+		switch (policy != null ? policy : PanelTransferService.AccessPolicy.DEFAULT) {
+			case COPY -> accessCopy.setSelected(true);
+			case INHERIT -> accessInherit.setSelected(true);
+			default -> accessDefault.setSelected(true);
+		}
+	}
+
+	private static PanelTransferService.AccessPolicy selectedAccessPolicy(
+			JRadioButton accessDefault,
+			JRadioButton accessCopy,
+			JRadioButton accessInherit) {
+		if (accessCopy.isSelected()) {
+			return PanelTransferService.AccessPolicy.COPY;
+		}
+		if (accessInherit.isSelected()) {
+			return PanelTransferService.AccessPolicy.INHERIT;
+		}
+		return PanelTransferService.AccessPolicy.DEFAULT;
+	}
+
+	private static String filterSummary(String expression) {
+		String value = blankToNull(expression);
+		return value == null ? "No filter" : "Filter: " + Arrays.stream(value.split("[;\\r\\n]+"))
+				.map(String::trim)
+				.filter(s -> !s.isBlank())
+				.collect(Collectors.joining(", "));
+	}
+
+	private static String blankToNull(String value) {
+		return value == null || value.isBlank() ? null : value.trim();
 	}
 }
