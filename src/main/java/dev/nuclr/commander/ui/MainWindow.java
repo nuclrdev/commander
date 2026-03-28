@@ -92,6 +92,7 @@ public class MainWindow implements PluginEventListener {
 
 	private static final String LOCAL_FILE_PANEL_PROVIDER_CLASS = "dev.nuclr.plugin.core.panel.fs.LocalFilePanelProvider";
 	private static final String PANEL_STACK_PROVIDER_CLASS_METADATA = "commander.panelStack.providerClass";
+	private static final int MAIN_DIVIDER_STEP_PIXELS = 30;
 
 	private JFrame mainFrame;
 	private JSplitPane mainSplitPane;
@@ -233,7 +234,7 @@ public class MainWindow implements PluginEventListener {
 		pluginRegistry.getPluginContext().getEventBus().subscribe(this);
 
 		mainFrame.setVisible(true);
-		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
+		restoreMainDividerLocation();
 		startPanelInitializationPoll();
 	}
 
@@ -288,6 +289,15 @@ public class MainWindow implements PluginEventListener {
 				return true;
 			}
 
+			if (e.getID() == KeyEvent.KEY_PRESSED
+					&& e.isControlDown()
+					&& !e.isAltDown()
+					&& mainSplitPane.isVisible()
+					&& (e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_RIGHT)) {
+				moveMainDivider(e.getKeyCode() == KeyEvent.VK_LEFT ? -MAIN_DIVIDER_STEP_PIXELS : MAIN_DIVIDER_STEP_PIXELS);
+				return true;
+			}
+
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F1 && e.isAltDown() && mainSplitPane.isVisible()) {
 				showChangeDrive(true);
 				return true;
@@ -295,6 +305,11 @@ public class MainWindow implements PluginEventListener {
 
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F2 && e.isAltDown() && mainSplitPane.isVisible()) {
 				showChangeDrive(false);
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && !e.isAltDown() && !e.isControlDown() && e.getKeyCode() == KeyEvent.VK_F10) {
+				confirmAndExitApplication();
 				return true;
 			}
 
@@ -534,6 +549,7 @@ public class MainWindow implements PluginEventListener {
 		quickViewSourceState = null;
 		quickViewCurrentPath = null;
 		quickViewActive = false;
+		restoreMainDividerLocation();
 		mainFrame.revalidate();
 		mainFrame.repaint();
 	}
@@ -948,11 +964,10 @@ public class MainWindow implements PluginEventListener {
 		}
 		if (state == leftPanelState) {
 			mainSplitPane.setLeftComponent(state.component());
-			return;
-		}
-		if (state == rightPanelState) {
+		} else if (state == rightPanelState) {
 			mainSplitPane.setRightComponent(state.component());
 		}
+		restoreMainDividerLocation();
 	}
 
 	private void onPanelStateChanged(PanelState state) {
@@ -1425,7 +1440,26 @@ public class MainWindow implements PluginEventListener {
 		} else {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		}
-		SwingUtilities.invokeLater(() -> mainSplitPane.setDividerLocation(dividerRatio));
+		restoreMainDividerLocation();
+	}
+
+	private void moveMainDivider(int deltaPixels) {
+		int currentLocation = mainSplitPane.getDividerLocation();
+		int minimumLocation = mainSplitPane.getMinimumDividerLocation();
+		int maximumLocation = mainSplitPane.getMaximumDividerLocation();
+		int targetLocation = Math.max(minimumLocation, Math.min(maximumLocation, currentLocation + deltaPixels));
+		if (targetLocation != currentLocation) {
+			mainSplitPane.setDividerLocation(targetLocation);
+		}
+	}
+
+	private void restoreMainDividerLocation() {
+		SwingUtilities.invokeLater(() -> {
+			if (mainSplitPane.getLeftComponent() == null || mainSplitPane.getRightComponent() == null) {
+				return;
+			}
+			mainSplitPane.setDividerLocation(dividerRatio);
+		});
 	}
 
 	private void confirmAndExitApplication() {
