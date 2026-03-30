@@ -63,6 +63,7 @@ import dev.nuclr.commander.service.PanelTransferService.AccessPolicy;
 import dev.nuclr.commander.service.PanelTransferService.ConflictResolution;
 import dev.nuclr.commander.service.PanelTransferService.TransferProgress;
 import dev.nuclr.commander.service.PanelTransferService.TransferOptions;
+import dev.nuclr.commander.service.PluginRegistry.DelegateAwarePanelProvider;
 import dev.nuclr.commander.service.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.common.TransferConfirmationDialog;
@@ -92,6 +93,9 @@ public class MainWindow implements PluginEventListener {
 
 	private static final String LOCAL_FILE_PANEL_PROVIDER_CLASS = "dev.nuclr.plugin.core.panel.fs.LocalFilePanelProvider";
 	private static final String PANEL_STACK_PROVIDER_CLASS_METADATA = "commander.panelStack.providerClass";
+	private static final String OPEN_RESOURCE_EVENT_TYPE = "dev.nuclr.platform.resource.open";
+	private static final String COPY_RESOURCES_EVENT_TYPE = "dev.nuclr.platform.resources.copy";
+	private static final String MOVE_RESOURCES_EVENT_TYPE = "dev.nuclr.platform.resources.move";
 	private static final int MAIN_DIVIDER_STEP_PIXELS = 30;
 
 	private JFrame mainFrame;
@@ -742,7 +746,14 @@ public class MainWindow implements PluginEventListener {
 	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
 		MenuResource menuResource = event.getMenuResource();
 		if (menuResource != null) {
-			pluginRegistry.getPluginContext().getEventBus().emit(menuResource.getEvent());
+			Map<String, Object> payload = new java.util.HashMap<>();
+			payload.put("functionKeyNumber", event.getFunctionKeyNumber());
+			payload.put("label", event.getLabel());
+			if (focusedPanelState != null) {
+				payload.put("sourceProvider", focusedPanelState.provider());
+				payload.put("resource", focusedPanelState.currentResource());
+			}
+			pluginRegistry.getPluginContext().getEventBus().emit(menuResource.getEventType(), payload);
 			return;
 		}
 
@@ -951,11 +962,19 @@ public class MainWindow implements PluginEventListener {
 	}
 
 	private PanelLayer openPanelLayer(PanelProviderPlugin provider, PluginPathResource resource) {
-		JComponent component = provider.getPanel();
-		if (!provider.openItem(resource, new AtomicBoolean(false))) {
+		try {
+			JComponent component = provider.getPanel();
+			if (!provider.openItem(resource, new AtomicBoolean(false))) {
+				return null;
+			}
+			return new PanelLayer(provider, component, resource);
+		} catch (Exception ex) {
+			log.warn("Failed to open resource [{}] with panel provider [{}]: {}",
+					resource != null ? resource.getName() : null,
+					provider != null ? provider.getClass().getName() : null,
+					ex.getMessage());
 			return null;
 		}
-		return new PanelLayer(provider, component, resource);
 	}
 
 	private void renderActivePanel(PanelState state) {
@@ -1169,6 +1188,74 @@ public class MainWindow implements PluginEventListener {
 			handledCallback.accept(false);
 			return false;
 		}
+	}
+
+	@Override
+	public boolean isMessageSupported(String type) {
+		return OPEN_RESOURCE_EVENT_TYPE.equals(type)
+				|| COPY_RESOURCES_EVENT_TYPE.equals(type)
+				|| MOVE_RESOURCES_EVENT_TYPE.equals(type);
+	}
+
+	@Override
+	public void handleMessage(String type, Map<String, Object> event) {
+		if (OPEN_RESOURCE_EVENT_TYPE.equals(type)) {
+			PanelProviderPlugin provider = resolvePanelProviderReference(event != null ? event.get("sourceProvider") : null);
+			PluginPathResource resource = event != null && event.get("resource") instanceof PluginPathResource pathResource
+					? pathResource
+					: null;
+			if (provider != null && resource != null) {
+				runOnEdt(() -> pushPanelLayer(provider, resource));
+			}
+			return;
+		}
+		if (COPY_RESOURCES_EVENT_TYPE.equals(type) || MOVE_RESOURCES_EVENT_TYPE.equals(type)) {
+			PanelProviderPlugin provider = resolvePanelProviderReference(event != null ? event.get("sourceProvider") : null);
+			List<PluginPathResource> resources = toPluginResources(event != null ? event.get("resources") : null);
+			boolean move = MOVE_RESOURCES_EVENT_TYPE.equals(type);
+			if (provider != null && !resources.isEmpty()) {
+				runOnEdt(() -> handleTransferRequest(provider, resources, move, handled -> {
+				}));
+			}
+		}
+	}
+
+	private List<PluginPathResource> toPluginResources(Object payload) {
+		if (!(payload instanceof List<?> list)) {
+			return List.of();
+		}
+		return list.stream()
+				.filter(PluginPathResource.class::isInstance)
+				.map(PluginPathResource.class::cast)
+				.toList();
+	}
+
+	private PanelProviderPlugin resolvePanelProviderReference(Object providerRef) {
+		if (providerRef instanceof PanelProviderPlugin pluginProvider) {
+			return pluginProvider;
+		}
+		return resolvePanelProviderInState(leftPanelState, providerRef, rightPanelState);
+	}
+
+	private PanelProviderPlugin resolvePanelProviderInState(PanelState primary, Object providerRef, PanelState secondary) {
+		PanelProviderPlugin resolved = findWrappedProvider(primary, providerRef);
+		return resolved != null ? resolved : findWrappedProvider(secondary, providerRef);
+	}
+
+	private PanelProviderPlugin findWrappedProvider(PanelState state, Object providerRef) {
+		if (state == null || providerRef == null) {
+			return null;
+		}
+		for (PanelLayer layer : state.stack) {
+			if (layer.provider == providerRef) {
+				return layer.provider;
+			}
+			if (layer.provider instanceof DelegateAwarePanelProvider delegateAware
+					&& delegateAware.wrapsDelegate(providerRef)) {
+				return layer.provider;
+			}
+		}
+		return null;
 	}
 
 	private TransferOptions prepareTransferOptions(

@@ -13,25 +13,33 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.zip.ZipFile;
 
 import javax.swing.JOptionPane;
+import javax.swing.JComponent;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import dev.nuclr.commander.plugin.PluginDescriptor;
 import dev.nuclr.commander.ui.common.Alerts;
+import dev.nuclr.platform.Settings;
+import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.plugin.ApplicationPluginContext;
 import dev.nuclr.plugin.BasePlugin;
+import dev.nuclr.plugin.FocusablePlugin;
+import dev.nuclr.plugin.MenuResource;
 import dev.nuclr.plugin.PanelProviderPlugin;
 import dev.nuclr.plugin.PluginManifest;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.QuickViewProviderPlugin;
+import dev.nuclr.plugin.ResourceContentPlugin;
 import dev.nuclr.plugin.ScreenProviderPlugin;
 import dev.nuclr.plugin.event.PluginEvent;
 import dev.nuclr.plugin.event.bus.PluginEventBus;
@@ -57,7 +65,7 @@ public final class PluginRegistry {
 	private final List<QuickViewProviderPlugin> quickViewProviders = new CopyOnWriteArrayList<>();
 	private final List<ScreenProviderPlugin> screenProviders = new CopyOnWriteArrayList<>();
 	private final List<URLClassLoader> pluginClassLoaders = new CopyOnWriteArrayList<>();
-	private final ConcurrentHashMap<ScreenProviderPlugin, PluginManifest> screenProviderInfo = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<ScreenProviderPlugin, PluginDescriptor> screenProviderInfo = new ConcurrentHashMap<>();
 
 	@PostConstruct
 	public void init() {
@@ -83,6 +91,9 @@ public final class PluginRegistry {
 
 	public PanelProviderPlugin createPanelProviderInstance(PanelProviderPlugin template) {
 		try {
+			if (template instanceof ResourceContentPanelProviderAdapter adapterTemplate) {
+				return adapterTemplate.newInstance();
+			}
 			@SuppressWarnings("unchecked")
 			Class<? extends PanelProviderPlugin> type = (Class<? extends PanelProviderPlugin>) template.getClass();
 			PanelProviderPlugin plugin = type.getDeclaredConstructor().newInstance();
@@ -124,7 +135,7 @@ public final class PluginRegistry {
 		return List.copyOf(loadedPlugins);
 	}
 
-	public PluginManifest getPluginInfoByScreenProvider(ScreenProviderPlugin provider) {
+	public PluginDescriptor getPluginInfoByScreenProvider(ScreenProviderPlugin provider) {
 		return provider == null ? null : screenProviderInfo.get(provider);
 	}
 
@@ -145,7 +156,7 @@ public final class PluginRegistry {
 				return;
 			}
 
-			PluginManifest manifest = objectMapper.readValue(manifestFile.toFile(), PluginManifest.class);
+			PluginDescriptor manifest = objectMapper.readValue(manifestFile.toFile(), PluginDescriptor.class);
 			log.info("Plugin manifest: id=[{}], name=[{}], version=[{}]", manifest.getId(), manifest.getName(),
 					manifest.getVersion());
 
@@ -170,13 +181,23 @@ public final class PluginRegistry {
 		for (String className : classNames) {
 			try {
 				Class<?> clazz = classLoader.loadClass(className);
-				@SuppressWarnings("unchecked")
-				Class<? extends PanelProviderPlugin> type = (Class<? extends PanelProviderPlugin>) clazz
-						.asSubclass(PanelProviderPlugin.class);
-				PanelProviderPlugin plugin = type.getDeclaredConstructor().newInstance();
-				plugin.load(pluginContext);
+				PanelProviderPlugin plugin = null;
+				if (PanelProviderPlugin.class.isAssignableFrom(clazz)) {
+					@SuppressWarnings("unchecked")
+					Class<? extends PanelProviderPlugin> type = (Class<? extends PanelProviderPlugin>) clazz
+							.asSubclass(PanelProviderPlugin.class);
+					plugin = type.getDeclaredConstructor().newInstance();
+					panelProviderTypes.add(type);
+				} else if (ResourceContentPlugin.class.isAssignableFrom(clazz)) {
+					@SuppressWarnings("unchecked")
+					Class<? extends ResourceContentPlugin> type = (Class<? extends ResourceContentPlugin>) clazz
+							.asSubclass(ResourceContentPlugin.class);
+					plugin = new ResourceContentPanelProviderAdapter(type, pluginContext);
+				}
+				if (plugin == null) {
+					throw new IllegalStateException("Unsupported panel provider contract: " + clazz.getName());
+				}
 				panelProviders.add(plugin);
-				panelProviderTypes.add(type);
 				loadedPlugins.add(plugin);
 				log.info("Loaded panel provider: [{}]", className);
 			} catch (Exception e) {
@@ -206,7 +227,7 @@ public final class PluginRegistry {
 		}
 	}
 
-	private void loadScreenProviders(List<String> classNames, ClassLoader classLoader, PluginManifest manifest) {
+	private void loadScreenProviders(List<String> classNames, ClassLoader classLoader, PluginDescriptor manifest) {
 		for (String className : classNames) {
 			try {
 				Class<?> clazz = classLoader.loadClass(className);
@@ -313,12 +334,15 @@ public final class PluginRegistry {
 	private static final class DefaultApplicationPluginContext implements ApplicationPluginContext {
 		private final PluginEventBus eventBus = new DefaultPluginEventBus();
 		private final ConcurrentHashMap<String, Object> globalData = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<String, Object> theme = new ConcurrentHashMap<>();
+		private final Settings settings = new InMemorySettings();
 		private ObjectMapper objectMapper = new ObjectMapper();
 	}
 
 	private static final class DefaultPluginEventBus implements PluginEventBus {
 
 		private final List<PluginEventListener> listeners = new CopyOnWriteArrayList<>();
+		private final List<NuclrEventListener> nuclrListeners = new CopyOnWriteArrayList<>();
 
 		@Override
 		public void emit(PluginEvent event) {
@@ -332,11 +356,203 @@ public final class PluginRegistry {
 		@Override
 		public void subscribe(PluginEventListener listener) {
 			listeners.add(listener);
+			nuclrListeners.add(listener);
 		}
 
 		@Override
 		public void unsubscribe(PluginEventListener listener) {
 			listeners.remove(listener);
+			nuclrListeners.remove(listener);
+		}
+
+		@Override
+		public void emit(String type, java.util.Map<String, Object> event) {
+			for (NuclrEventListener listener : nuclrListeners) {
+				if (listener.isMessageSupported(type)) {
+					listener.handleMessage(type, event);
+				}
+			}
+		}
+
+		@Override
+		public void subscribe(NuclrEventListener listener) {
+			nuclrListeners.add(listener);
+			if (listener instanceof PluginEventListener pluginListener && !listeners.contains(pluginListener)) {
+				listeners.add(pluginListener);
+			}
+		}
+
+		@Override
+		public void unsubscribe(NuclrEventListener listener) {
+			nuclrListeners.remove(listener);
+			if (listener instanceof PluginEventListener pluginListener) {
+				listeners.remove(pluginListener);
+			}
+		}
+	}
+
+	private static final class InMemorySettings implements Settings {
+
+		private final ConcurrentHashMap<String, ConcurrentHashMap<String, Object>> namespaces = new ConcurrentHashMap<>();
+
+		@Override
+		public void set(String namespace, String key, Object value) {
+			namespaces.computeIfAbsent(namespace, unused -> new ConcurrentHashMap<>()).put(key, value);
+		}
+
+		@Override
+		@SuppressWarnings("unchecked")
+		public <T> T get(String namespace, String key) {
+			return (T) namespaces.getOrDefault(namespace, new ConcurrentHashMap<>()).get(key);
+		}
+
+		@Override
+		public <T> T getOrDefault(String namespace, String key, T defaultValue) {
+			T value = get(namespace, key);
+			return value != null ? value : defaultValue;
+		}
+	}
+
+	public interface DelegateAwarePanelProvider {
+
+		boolean wrapsDelegate(Object candidate);
+	}
+
+	private static final class ResourceContentPanelProviderAdapter
+			implements PanelProviderPlugin, FocusablePlugin, DelegateAwarePanelProvider {
+
+		private final Class<? extends ResourceContentPlugin> delegateType;
+		private final ApplicationPluginContext pluginContext;
+		private final ResourceContentPlugin delegate;
+
+		private ResourceContentPanelProviderAdapter(
+				Class<? extends ResourceContentPlugin> delegateType,
+				ApplicationPluginContext pluginContext) throws Exception {
+			this(delegateType, pluginContext, delegateType.getDeclaredConstructor().newInstance());
+		}
+
+		private ResourceContentPanelProviderAdapter(
+				Class<? extends ResourceContentPlugin> delegateType,
+				ApplicationPluginContext pluginContext,
+				ResourceContentPlugin delegate) throws Exception {
+			this.delegateType = delegateType;
+			this.pluginContext = pluginContext;
+			this.delegate = delegate;
+			this.delegate.load(pluginContext);
+		}
+
+		private ResourceContentPanelProviderAdapter newInstance() throws Exception {
+			return new ResourceContentPanelProviderAdapter(delegateType, pluginContext);
+		}
+
+		@Override
+		public PluginDescriptor getPluginInfo() {
+			return toPluginDescriptor(delegate.manifest());
+		}
+
+		@Override
+		public JComponent getPanel() {
+			return delegate.panel();
+		}
+
+		@Override
+		public List<PluginPathResource> getChangeDriveResources() {
+			List<PluginPathResource> resources = delegate.getChangeDriveResources();
+			return resources != null ? resources : List.of();
+		}
+
+		@Override
+		public boolean openItem(PluginPathResource resource, java.util.concurrent.atomic.AtomicBoolean cancelled)
+				throws Exception {
+			return delegate.openResource(resource, cancelled);
+		}
+
+		@Override
+		public boolean canSupport(PluginPathResource resource) {
+			return delegate.supports(resource);
+		}
+
+		@Override
+		public List<MenuResource> getMenuItems(PluginPathResource currentResource) {
+			List<MenuResource> items = delegate.menuItems(currentResource);
+			return items != null ? items : List.of();
+		}
+
+		@Override
+		public void unload() throws Exception {
+			delegate.closeResource();
+			delegate.unload();
+		}
+
+		@Override
+		public void onFocusGained() {
+			invokeNoArg("onFocusGained");
+		}
+
+		@Override
+		public void onFocusLost() {
+			invokeNoArg("onFocusLost");
+		}
+
+		@Override
+		public boolean wrapsDelegate(Object candidate) {
+			return delegate == candidate;
+		}
+
+		private void invokeNoArg(String methodName) {
+			try {
+				delegate.getClass().getMethod(methodName).invoke(delegate);
+			} catch (NoSuchMethodException ignored) {
+				// Optional lifecycle hook.
+			} catch (Exception ex) {
+				log.debug("Failed to invoke [{}] on [{}]: {}", methodName, delegate.getClass().getName(),
+						ex.getMessage());
+			}
+		}
+	}
+
+	private static PluginDescriptor toPluginDescriptor(PluginManifest manifest) {
+		if (manifest == null) {
+			return null;
+		}
+		PluginDescriptor descriptor = new PluginDescriptor();
+		descriptor.setSchemaVersion(manifest.getSchemaVersion());
+		descriptor.setName(manifest.getName());
+		descriptor.setId(manifest.getId());
+		descriptor.setVersion(manifest.getVersion());
+		descriptor.setDescription(manifest.getDescription());
+		descriptor.setAuthor(manifest.getAuthor());
+		descriptor.setLicense(manifest.getLicense());
+		descriptor.setWebsite(manifest.getWebsite());
+		descriptor.setPageUrl(manifest.getPageUrl());
+		descriptor.setDocUrl(manifest.getDocUrl());
+		Object type = readField(manifest, "type");
+		if (type instanceof String text) {
+			descriptor.setType(text);
+		}
+		for (String field : List.of("panelProviders", "quickViewProviders", "screenProviders")) {
+			Object value = readField(manifest, field);
+			if (value instanceof List<?> list) {
+				List<String> strings = list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
+				switch (field) {
+					case "panelProviders" -> descriptor.setPanelProviders(strings);
+					case "quickViewProviders" -> descriptor.setQuickViewProviders(strings);
+					case "screenProviders" -> descriptor.setScreenProviders(strings);
+					default -> {
+					}
+				}
+			}
+		}
+		return descriptor;
+	}
+
+	private static Object readField(Object target, String fieldName) {
+		try {
+			var field = target.getClass().getDeclaredField(fieldName);
+			field.setAccessible(true);
+			return field.get(target);
+		} catch (Exception ignored) {
+			return null;
 		}
 	}
 }

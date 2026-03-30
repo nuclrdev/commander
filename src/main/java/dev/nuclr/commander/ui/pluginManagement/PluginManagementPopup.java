@@ -23,8 +23,8 @@ import javax.swing.JScrollPane;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import dev.nuclr.commander.plugin.PluginDescriptor;
 import dev.nuclr.commander.service.PluginRegistry;
-import dev.nuclr.plugin.PluginManifest;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -75,11 +75,11 @@ public class PluginManagementPopup {
 		dialog.setVisible(true);
 	}
 
-	private JPanel buildPluginCard(PluginManifest info) {
+	private JPanel buildPluginCard(PluginDescriptor info) {
 		String name = info != null && info.getName() != null ? info.getName() : "Unnamed Plugin";
 		String version = info != null && info.getVersion() != null ? info.getVersion() : "unknown";
 		String author = info != null && info.getAuthor() != null ? info.getAuthor() : "Unknown author";
-		String type = info != null && info.getType() != null ? info.getType().toString() : "Unknown type";
+		String type = info != null && info.getType() != null ? info.getType() : "Unknown type";
 		String license = info != null && info.getLicense() != null ? info.getLicense() : "Unknown license";
 		String url = info != null && info.getPageUrl() != null && !info.getPageUrl().isBlank()
 				? info.getPageUrl()
