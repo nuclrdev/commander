@@ -3,6 +3,7 @@ package dev.nuclr.commander.service;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -12,38 +13,32 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.ZipFile;
 
-import javax.swing.JOptionPane;
 import javax.swing.JComponent;
+import javax.swing.JOptionPane;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.nuclr.commander.plugin.PluginDescriptor;
-import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.platform.Settings;
 import dev.nuclr.platform.events.NuclrEventListener;
-import dev.nuclr.plugin.ApplicationPluginContext;
-import dev.nuclr.plugin.BasePlugin;
-import dev.nuclr.plugin.FocusablePlugin;
 import dev.nuclr.plugin.MenuResource;
-import dev.nuclr.plugin.PanelProviderPlugin;
-import dev.nuclr.plugin.PluginManifest;
 import dev.nuclr.plugin.PluginPathResource;
-import dev.nuclr.plugin.QuickViewProviderPlugin;
 import dev.nuclr.plugin.ResourceContentPlugin;
-import dev.nuclr.plugin.ScreenProviderPlugin;
-import dev.nuclr.plugin.event.PluginEvent;
-import dev.nuclr.plugin.event.bus.PluginEventBus;
-import dev.nuclr.plugin.event.bus.PluginEventListener;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -56,32 +51,19 @@ public final class PluginRegistry {
 	private ObjectMapper objectMapper;
 
 	@Autowired(required = false)
-	private List<PanelProviderPlugin> springPanelProviders;
+	private List<Object> springPanelProviders;
 
 	private final ApplicationPluginContext pluginContext = new DefaultApplicationPluginContext();
-	private final List<BasePlugin> loadedPlugins = new CopyOnWriteArrayList<>();
-	private final List<PanelProviderPlugin> panelProviders = new CopyOnWriteArrayList<>();
-	private final List<Class<? extends PanelProviderPlugin>> panelProviderTypes = new CopyOnWriteArrayList<>();
-	private final List<QuickViewProviderPlugin> quickViewProviders = new CopyOnWriteArrayList<>();
-	private final List<ScreenProviderPlugin> screenProviders = new CopyOnWriteArrayList<>();
 	private final List<URLClassLoader> pluginClassLoaders = new CopyOnWriteArrayList<>();
-	private final ConcurrentHashMap<ScreenProviderPlugin, PluginDescriptor> screenProviderInfo = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<ResourceContentPlugin, PluginDescriptor> screenProviderInfo = new ConcurrentHashMap<>();
 
 	@PostConstruct
 	public void init() {
 		if (springPanelProviders == null) {
 			return;
 		}
-		for (PanelProviderPlugin provider : springPanelProviders) {
-			try {
-				provider.load(pluginContext);
-				panelProviders.add(provider);
-				loadedPlugins.add(provider);
-				log.info("Registered built-in panel provider: [{}]", provider.getClass().getName());
-			} catch (Exception e) {
-				log.error("Failed to initialize built-in panel provider [{}]: {}", provider.getClass().getName(),
-						e.getMessage(), e);
-			}
+		for (Object provider : springPanelProviders) {
+			registerSpringProvider(provider);
 		}
 	}
 
@@ -151,99 +133,192 @@ public final class PluginRegistry {
 			extractZip(zipFile, pluginDir);
 
 			Path manifestFile = pluginDir.resolve("plugin.json");
-			if (!Files.exists(manifestFile)) {
-				log.error("plugin.json not found in plugin: [{}]", zipFile.getName());
-				return;
-			}
+			PluginDescriptor manifest = readPluginDescriptor(manifestFile, zipFile.getName());
 
-			PluginDescriptor manifest = objectMapper.readValue(manifestFile.toFile(), PluginDescriptor.class);
-			log.info("Plugin manifest: id=[{}], name=[{}], version=[{}]", manifest.getId(), manifest.getName(),
-					manifest.getVersion());
-
-			List<URL> jarUrls = collectJarUrls(pluginDir);
-			if (jarUrls.isEmpty()) {
+			List<Path> jarPaths = collectJarPaths(pluginDir);
+			if (jarPaths.isEmpty()) {
 				log.error("No JAR files found in plugin: [{}]", zipFile.getName());
 				return;
 			}
 
-			URLClassLoader classLoader = new URLClassLoader(jarUrls.toArray(URL[]::new), getClass().getClassLoader());
+			URLClassLoader classLoader = new URLClassLoader(toUrls(jarPaths), getClass().getClassLoader());
 			pluginClassLoaders.add(classLoader);
-			loadPanelProviders(manifest.getPanelProviders(), classLoader);
-			loadProviders(manifest.getQuickViewProviders(), classLoader, QuickViewProviderPlugin.class,
-					quickViewProviders);
-			loadScreenProviders(manifest.getScreenProviders(), classLoader, manifest);
+
+			List<String> classNames = discoverResourceContentPluginClasses(jarPaths, classLoader);
+			if (classNames.isEmpty()) {
+				log.warn("No ResourceContentPlugin implementations found in plugin: [{}]", zipFile.getName());
+				return;
+			}
+
+			for (String className : classNames) {
+				loadResourceContentProvider(className, classLoader, manifest);
+			}
+
+			panelProviders.sort(Comparator.comparingInt(this::priorityOfPanelProvider));
 		} catch (IOException e) {
 			log.error("Failed to load plugin [{}]: {}", zipFile.getName(), e.getMessage(), e);
 		}
 	}
 
-	private void loadPanelProviders(List<String> classNames, ClassLoader classLoader) {
-		for (String className : classNames) {
-			try {
-				Class<?> clazz = classLoader.loadClass(className);
-				PanelProviderPlugin plugin = null;
-				if (PanelProviderPlugin.class.isAssignableFrom(clazz)) {
-					@SuppressWarnings("unchecked")
-					Class<? extends PanelProviderPlugin> type = (Class<? extends PanelProviderPlugin>) clazz
-							.asSubclass(PanelProviderPlugin.class);
-					plugin = type.getDeclaredConstructor().newInstance();
-					panelProviderTypes.add(type);
-				} else if (ResourceContentPlugin.class.isAssignableFrom(clazz)) {
-					@SuppressWarnings("unchecked")
-					Class<? extends ResourceContentPlugin> type = (Class<? extends ResourceContentPlugin>) clazz
-							.asSubclass(ResourceContentPlugin.class);
-					plugin = new ResourceContentPanelProviderAdapter(type, pluginContext);
-				}
-				if (plugin == null) {
-					throw new IllegalStateException("Unsupported panel provider contract: " + clazz.getName());
-				}
-				panelProviders.add(plugin);
-				loadedPlugins.add(plugin);
-				log.info("Loaded panel provider: [{}]", className);
-			} catch (Exception e) {
-				log.error("Failed to load panel provider [{}]: {}", className, e.getMessage(), e);
-				Alerts.showMessageDialog(null, "Failed to load panel provider [" + className + "]: " + e.getMessage(),
-						"Plugin Load Error", JOptionPane.ERROR_MESSAGE);
+	private void registerSpringProvider(Object provider) {
+		try {
+			if (provider instanceof PanelProviderPlugin panelProvider) {
+				panelProvider.load(pluginContext);
+				panelProviders.add(panelProvider);
+				loadedPlugins.add(panelProvider);
+				log.info("Registered built-in panel provider: [{}]", provider.getClass().getName());
+				return;
 			}
+			if (provider instanceof ResourceContentPlugin resourceProvider) {
+				ResourceContentPanelProviderAdapter adapter = new ResourceContentPanelProviderAdapter(
+						resourceProvider.getClass(),
+						pluginContext,
+						resourceProvider,
+						defaultPluginDescriptor(resourceProvider.getClass()));
+				panelProviders.add(adapter);
+				loadedPlugins.add(adapter);
+				log.info("Registered built-in resource content provider: [{}]", provider.getClass().getName());
+				return;
+			}
+			log.debug("Ignoring unsupported built-in plugin bean: [{}]", provider.getClass().getName());
+		} catch (Exception e) {
+			log.error("Failed to initialize built-in provider [{}]: {}", provider.getClass().getName(), e.getMessage(), e);
 		}
 	}
 
-	private <T extends BasePlugin> void loadProviders(List<String> classNames, ClassLoader classLoader,
-			Class<T> expectedType, List<T> target) {
+	private PluginDescriptor readPluginDescriptor(Path manifestFile, String pluginName) throws IOException {
+		if (!Files.exists(manifestFile)) {
+			log.warn("plugin.json not found in plugin: [{}]", pluginName);
+			return null;
+		}
+		PluginDescriptor manifest = objectMapper.readValue(manifestFile.toFile(), PluginDescriptor.class);
+		log.info("Plugin manifest: id=[{}], name=[{}], version=[{}]", manifest.getId(), manifest.getName(),
+				manifest.getVersion());
+		return manifest;
+	}
 
-		for (String className : classNames) {
-			try {
-				Class<?> clazz = classLoader.loadClass(className);
-				T plugin = expectedType.cast(clazz.getDeclaredConstructor().newInstance());
-				plugin.load(pluginContext);
-				target.add(plugin);
-				loadedPlugins.add(plugin);
-				log.info("Loaded plugin provider: [{}]", className);
-			} catch (Exception e) {
-				log.error("Failed to load plugin provider [{}]: {}", className, e.getMessage(), e);
-				Alerts.showMessageDialog(null, "Failed to load plugin provider [" + className + "]: " + e.getMessage(),
-						"Plugin Load Error", JOptionPane.ERROR_MESSAGE);
+	private List<Path> collectJarPaths(Path pluginDir) throws IOException {
+		List<Path> jarPaths = new ArrayList<>();
+		try (Stream<Path> stream = Files.list(pluginDir)) {
+			stream.filter(path -> path.toString().endsWith(".jar")).forEach(jarPaths::add);
+		}
+
+		Path libDir = pluginDir.resolve("lib");
+		if (Files.isDirectory(libDir)) {
+			try (Stream<Path> stream = Files.list(libDir)) {
+				stream.filter(path -> path.toString().endsWith(".jar")).forEach(jarPaths::add);
 			}
+		}
+		return jarPaths;
+	}
+
+	private URL[] toUrls(List<Path> jarPaths) {
+		return jarPaths.stream().map(this::toUrl).filter(java.util.Objects::nonNull).toArray(URL[]::new);
+	}
+
+	private URL toUrl(Path path) {
+		try {
+			return path.toUri().toURL();
+		} catch (Exception e) {
+			log.warn("Failed to convert JAR path to URL: {}", path, e);
+			return null;
 		}
 	}
 
-	private void loadScreenProviders(List<String> classNames, ClassLoader classLoader, PluginDescriptor manifest) {
-		for (String className : classNames) {
-			try {
-				Class<?> clazz = classLoader.loadClass(className);
-				ScreenProviderPlugin plugin = ScreenProviderPlugin.class
-						.cast(clazz.getDeclaredConstructor().newInstance());
-				plugin.load(pluginContext);
-				screenProviders.add(plugin);
-				loadedPlugins.add(plugin);
-				screenProviderInfo.put(plugin, manifest);
-				log.info("Loaded screen provider: [{}]", className);
-			} catch (Exception e) {
-				log.error("Failed to load screen provider [{}]: {}", className, e.getMessage(), e);
-				Alerts.showMessageDialog(null, "Failed to load screen provider [" + className + "]: " + e.getMessage(),
-						"Plugin Load Error", JOptionPane.ERROR_MESSAGE);
+	private List<String> discoverResourceContentPluginClasses(List<Path> jarPaths, ClassLoader classLoader) {
+		List<String> classNames = new ArrayList<>();
+		for (Path jarPath : jarPaths) {
+			try (JarFile jarFile = new JarFile(jarPath.toFile())) {
+				Enumeration<JarEntry> entries = jarFile.entries();
+				while (entries.hasMoreElements()) {
+					JarEntry entry = entries.nextElement();
+					if (!isCandidateClassEntry(entry)) {
+						continue;
+					}
+					String className = toClassName(entry.getName());
+					if (isConcreteResourceContentPlugin(className, classLoader)) {
+						classNames.add(className);
+					}
+				}
+			} catch (IOException e) {
+				log.warn("Failed to scan plugin JAR [{}]: {}", jarPath, e.getMessage());
 			}
 		}
+		return classNames.stream().distinct().sorted().collect(Collectors.toList());
+	}
+
+	private boolean isCandidateClassEntry(JarEntry entry) {
+		return !entry.isDirectory()
+				&& entry.getName().endsWith(".class")
+				&& !entry.getName().equals("module-info.class")
+				&& !entry.getName().endsWith("package-info.class")
+				&& !entry.getName().contains("$");
+	}
+
+	private String toClassName(String entryName) {
+		return entryName.substring(0, entryName.length() - ".class".length()).replace('/', '.');
+	}
+
+	private boolean isConcreteResourceContentPlugin(String className, ClassLoader classLoader) {
+		try {
+			Class<?> clazz = Class.forName(className, false, classLoader);
+			int modifiers = clazz.getModifiers();
+			return ResourceContentPlugin.class.isAssignableFrom(clazz)
+					&& !clazz.isInterface()
+					&& !Modifier.isAbstract(modifiers);
+		} catch (LinkageError | ReflectiveOperationException e) {
+			log.debug("Skipping plugin class [{}]: {}", className, e.getMessage());
+			return false;
+		}
+	}
+
+	private void loadResourceContentProvider(String className, ClassLoader classLoader, PluginDescriptor manifest) {
+		try {
+			Class<?> clazz = classLoader.loadClass(className);
+			@SuppressWarnings("unchecked")
+			Class<? extends ResourceContentPlugin> type = (Class<? extends ResourceContentPlugin>) clazz
+					.asSubclass(ResourceContentPlugin.class);
+			ResourceContentPanelProviderAdapter plugin = new ResourceContentPanelProviderAdapter(type, pluginContext,
+					type.getDeclaredConstructor().newInstance(), pluginDescriptorFor(manifest, className));
+			panelProviders.add(plugin);
+			loadedPlugins.add(plugin);
+			log.info("Loaded resource content provider: [{}]", className);
+		} catch (Exception e) {
+			log.error("Failed to load resource content provider [{}]: {}", className, e.getMessage(), e);
+			Alerts.showMessageDialog(null,
+					"Failed to load resource content provider [" + className + "]: " + e.getMessage(),
+					"Plugin Load Error",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private PluginDescriptor pluginDescriptorFor(PluginDescriptor manifest, String className) {
+		if (manifest != null) {
+			return manifest;
+		}
+		PluginDescriptor descriptor = new PluginDescriptor();
+		descriptor.setName(simpleName(className));
+		descriptor.setId(className);
+		descriptor.setVersion("unknown");
+		descriptor.setDescription("Discovered ResourceContentPlugin");
+		descriptor.setType("Plugin");
+		return descriptor;
+	}
+
+	private PluginDescriptor defaultPluginDescriptor(Class<?> type) {
+		return pluginDescriptorFor(null, type.getName());
+	}
+
+	private String simpleName(String className) {
+		int lastDot = className.lastIndexOf('.');
+		return lastDot >= 0 ? className.substring(lastDot + 1) : className;
+	}
+
+	private int priorityOfPanelProvider(PanelProviderPlugin provider) {
+		if (provider instanceof ResourceContentPanelProviderAdapter adapter) {
+			return adapter.getPriority();
+		}
+		return 0;
 	}
 
 	private void extractZip(File zipFile, Path targetDir) throws IOException {
@@ -266,31 +341,6 @@ public final class PluginRegistry {
 					Files.copy(is, entryPath);
 				}
 			}
-		}
-	}
-
-	private List<URL> collectJarUrls(Path pluginDir) throws IOException {
-		List<URL> urls = new ArrayList<>();
-
-		try (var stream = Files.list(pluginDir)) {
-			stream.filter(path -> path.toString().endsWith(".jar")).forEach(path -> addJarUrl(urls, path));
-		}
-
-		Path libDir = pluginDir.resolve("lib");
-		if (Files.isDirectory(libDir)) {
-			try (var stream = Files.list(libDir)) {
-				stream.filter(path -> path.toString().endsWith(".jar")).forEach(path -> addJarUrl(urls, path));
-			}
-		}
-
-		return urls;
-	}
-
-	private void addJarUrl(List<URL> urls, Path path) {
-		try {
-			urls.add(path.toUri().toURL());
-		} catch (Exception e) {
-			log.warn("Failed to convert JAR path to URL: {}", path, e);
 		}
 	}
 
@@ -330,15 +380,6 @@ public final class PluginRegistry {
 		}
 	}
 
-	@Data
-	private static final class DefaultApplicationPluginContext implements ApplicationPluginContext {
-		private final PluginEventBus eventBus = new DefaultPluginEventBus();
-		private final ConcurrentHashMap<String, Object> globalData = new ConcurrentHashMap<>();
-		private final ConcurrentHashMap<String, Object> theme = new ConcurrentHashMap<>();
-		private final Settings settings = new InMemorySettings();
-		private ObjectMapper objectMapper = new ObjectMapper();
-	}
-
 	private static final class DefaultPluginEventBus implements PluginEventBus {
 
 		private final List<PluginEventListener> listeners = new CopyOnWriteArrayList<>();
@@ -366,7 +407,7 @@ public final class PluginRegistry {
 		}
 
 		@Override
-		public void emit(String type, java.util.Map<String, Object> event) {
+		public void emit(String type, Map<String, Object> event) {
 			for (NuclrEventListener listener : nuclrListeners) {
 				if (listener.isMessageSupported(type)) {
 					listener.handleMessage(type, event);
@@ -391,28 +432,6 @@ public final class PluginRegistry {
 		}
 	}
 
-	private static final class InMemorySettings implements Settings {
-
-		private final ConcurrentHashMap<String, ConcurrentHashMap<String, Object>> namespaces = new ConcurrentHashMap<>();
-
-		@Override
-		public void set(String namespace, String key, Object value) {
-			namespaces.computeIfAbsent(namespace, unused -> new ConcurrentHashMap<>()).put(key, value);
-		}
-
-		@Override
-		@SuppressWarnings("unchecked")
-		public <T> T get(String namespace, String key) {
-			return (T) namespaces.getOrDefault(namespace, new ConcurrentHashMap<>()).get(key);
-		}
-
-		@Override
-		public <T> T getOrDefault(String namespace, String key, T defaultValue) {
-			T value = get(namespace, key);
-			return value != null ? value : defaultValue;
-		}
-	}
-
 	public interface DelegateAwarePanelProvider {
 
 		boolean wrapsDelegate(Object candidate);
@@ -424,30 +443,38 @@ public final class PluginRegistry {
 		private final Class<? extends ResourceContentPlugin> delegateType;
 		private final ApplicationPluginContext pluginContext;
 		private final ResourceContentPlugin delegate;
+		private final PluginDescriptor pluginDescriptor;
 
 		private ResourceContentPanelProviderAdapter(
 				Class<? extends ResourceContentPlugin> delegateType,
-				ApplicationPluginContext pluginContext) throws Exception {
-			this(delegateType, pluginContext, delegateType.getDeclaredConstructor().newInstance());
+				ApplicationPluginContext pluginContext,
+				ResourceContentPlugin delegate,
+				PluginDescriptor pluginDescriptor) {
+			this.delegateType = delegateType;
+			this.pluginContext = pluginContext;
+			this.delegate = delegate;
+			this.pluginDescriptor = pluginDescriptor;
+			this.delegate.load(pluginContext);
 		}
 
 		private ResourceContentPanelProviderAdapter(
 				Class<? extends ResourceContentPlugin> delegateType,
 				ApplicationPluginContext pluginContext,
-				ResourceContentPlugin delegate) throws Exception {
-			this.delegateType = delegateType;
-			this.pluginContext = pluginContext;
-			this.delegate = delegate;
-			this.delegate.load(pluginContext);
+				PluginDescriptor pluginDescriptor) throws Exception {
+			this(delegateType, pluginContext, delegateType.getDeclaredConstructor().newInstance(), pluginDescriptor);
 		}
 
 		private ResourceContentPanelProviderAdapter newInstance() throws Exception {
-			return new ResourceContentPanelProviderAdapter(delegateType, pluginContext);
+			return new ResourceContentPanelProviderAdapter(delegateType, pluginContext, pluginDescriptor);
+		}
+
+		private int getPriority() {
+			return delegate.priority();
 		}
 
 		@Override
 		public PluginDescriptor getPluginInfo() {
-			return toPluginDescriptor(delegate.manifest());
+			return pluginDescriptor;
 		}
 
 		@Override
@@ -462,8 +489,7 @@ public final class PluginRegistry {
 		}
 
 		@Override
-		public boolean openItem(PluginPathResource resource, java.util.concurrent.atomic.AtomicBoolean cancelled)
-				throws Exception {
+		public boolean openItem(PluginPathResource resource, AtomicBoolean cancelled) throws Exception {
 			return delegate.openResource(resource, cancelled);
 		}
 
@@ -485,16 +511,6 @@ public final class PluginRegistry {
 		}
 
 		@Override
-		public void onFocusGained() {
-			invokeNoArg("onFocusGained");
-		}
-
-		@Override
-		public void onFocusLost() {
-			invokeNoArg("onFocusLost");
-		}
-
-		@Override
 		public boolean wrapsDelegate(Object candidate) {
 			return delegate == candidate;
 		}
@@ -508,51 +524,6 @@ public final class PluginRegistry {
 				log.debug("Failed to invoke [{}] on [{}]: {}", methodName, delegate.getClass().getName(),
 						ex.getMessage());
 			}
-		}
-	}
-
-	private static PluginDescriptor toPluginDescriptor(PluginManifest manifest) {
-		if (manifest == null) {
-			return null;
-		}
-		PluginDescriptor descriptor = new PluginDescriptor();
-		descriptor.setSchemaVersion(manifest.getSchemaVersion());
-		descriptor.setName(manifest.getName());
-		descriptor.setId(manifest.getId());
-		descriptor.setVersion(manifest.getVersion());
-		descriptor.setDescription(manifest.getDescription());
-		descriptor.setAuthor(manifest.getAuthor());
-		descriptor.setLicense(manifest.getLicense());
-		descriptor.setWebsite(manifest.getWebsite());
-		descriptor.setPageUrl(manifest.getPageUrl());
-		descriptor.setDocUrl(manifest.getDocUrl());
-		Object type = readField(manifest, "type");
-		if (type instanceof String text) {
-			descriptor.setType(text);
-		}
-		for (String field : List.of("panelProviders", "quickViewProviders", "screenProviders")) {
-			Object value = readField(manifest, field);
-			if (value instanceof List<?> list) {
-				List<String> strings = list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
-				switch (field) {
-					case "panelProviders" -> descriptor.setPanelProviders(strings);
-					case "quickViewProviders" -> descriptor.setQuickViewProviders(strings);
-					case "screenProviders" -> descriptor.setScreenProviders(strings);
-					default -> {
-					}
-				}
-			}
-		}
-		return descriptor;
-	}
-
-	private static Object readField(Object target, String fieldName) {
-		try {
-			var field = target.getClass().getDeclaredField(fieldName);
-			field.setAccessible(true);
-			return field.get(target);
-		} catch (Exception ignored) {
-			return null;
 		}
 	}
 }
