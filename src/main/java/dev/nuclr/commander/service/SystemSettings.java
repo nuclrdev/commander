@@ -67,29 +67,29 @@ import lombok.extern.slf4j.Slf4j;
  */
 public class SystemSettings implements Settings {
 
-	private static final String SETTINGS_FILE_NAME = "settings.json";
-	private static final String LOCK_FILE_NAME = "settings.lock";
-	private static final String TEMP_FILE_NAME = SETTINGS_FILE_NAME + ".tmp";
-	private static final int MAX_WRITE_RETRIES = 5;
-	private static final Duration RETRY_DELAY = Duration.ofMillis(150);
-	private static final String DEVELOPER_NAMESPACE = "system";
-	private static final String DEVELOPER_MODE_KEY = "developerModeOn";
-	private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+	private static final String SettingsFileName = "settings.json";
+	private static final String LockFileName = "settings.lock";
+	private static final String TempFileName = SettingsFileName + ".tmp";
+	private static final int MaxWriteRetries = 5;
+	private static final Duration RetryDelay = Duration.ofMillis(150);
+	private static final String DeveloperNamespace = "system";
+	private static final String DeveloperModeKey = "developerModeOn";
+	private static final TypeReference<Map<String, Object>> MapType = new TypeReference<>() {
 	};
 
 	@Autowired
 	private ObjectMapper objectMapper;
 
 	private Path config(String folder) {
-		return LocalDataLocation.resolve(folder, SETTINGS_FILE_NAME);
+		return LocalDataLocation.resolve(folder, SettingsFileName);
 	}
 
 	private Path lockFile(String folder) {
-		return LocalDataLocation.resolve(folder, LOCK_FILE_NAME);
+		return LocalDataLocation.resolve(folder, LockFileName);
 	}
 
 	public boolean isDeveloperModeOn() {
-		return getOrDefault(DEVELOPER_NAMESPACE, DEVELOPER_MODE_KEY, false);
+		return getOrDefault(DeveloperNamespace, DeveloperModeKey, false);
 	}
 
 	@Override
@@ -98,13 +98,13 @@ public class SystemSettings implements Settings {
 		Path lockPath = lockFile(namespace);
 		Exception lastFailure = null;
 
-		for (int attempt = 1; attempt <= MAX_WRITE_RETRIES; attempt++) {
+		for (int attempt = 1; attempt <= MaxWriteRetries; attempt++) {
 			try {
 				writeSetting(configPath, lockPath, key, value);
 				return;
 			} catch (Exception e) {
 				lastFailure = e;
-				if (attempt < MAX_WRITE_RETRIES && isRetryable(e)) {
+				if (attempt < MaxWriteRetries && isRetryable(e)) {
 					sleepBeforeRetry();
 					continue;
 				}
@@ -161,7 +161,7 @@ public class SystemSettings implements Settings {
 			if (bytes.length == 0) {
 				return new HashMap<>();
 			}
-			Map<String, Object> values = objectMapper.readValue(bytes, MAP_TYPE);
+			Map<String, Object> values = objectMapper.readValue(bytes, MapType);
 			return values != null ? new HashMap<>(values) : new HashMap<>();
 		} catch (IOException e) {
 			log.warn("Failed to load settings from {}: {}", configPath, e.toString());
@@ -171,7 +171,7 @@ public class SystemSettings implements Settings {
 
 	private void writeAtomically(Path configPath, Map<String, Object> settings) throws IOException {
 		Path dir = configPath.getParent();
-		Path tmp = dir.resolve(TEMP_FILE_NAME);
+		Path tmp = dir.resolve(TempFileName);
 
 		try {
 			try (FileChannel ch = FileChannel.open(tmp, WRITE, CREATE, TRUNCATE_EXISTING);
@@ -203,7 +203,7 @@ public class SystemSettings implements Settings {
 
 	private void sleepBeforeRetry() {
 		try {
-			Thread.sleep(RETRY_DELAY.toMillis());
+			Thread.sleep(RetryDelay.toMillis());
 		} catch (InterruptedException interrupted) {
 			Thread.currentThread().interrupt();
 			throw new IllegalStateException("Interrupted while waiting to retry settings save", interrupted);
