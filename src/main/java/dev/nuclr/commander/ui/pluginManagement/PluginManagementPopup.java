@@ -1,3 +1,20 @@
+/*
+
+	Copyright 2026 Sergio, Nuclr (https://nuclr.dev)
+	
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+	
+	http://www.apache.org/licenses/LICENSE-2.0
+	
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	See the License for the specific language governing permissions and
+	limitations under the License.
+
+*/
 package dev.nuclr.commander.ui.pluginManagement;
 
 import java.awt.BorderLayout;
@@ -24,7 +41,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import dev.nuclr.commander.plugin.PluginDescriptor;
-import dev.nuclr.commander.service.PluginRegistry;
+import dev.nuclr.commander.plugin.PluginRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -51,7 +68,7 @@ public class PluginManagementPopup {
 			listPanel.add(emptyLabel);
 		} else {
 			for (var plugin : plugins) {
-				listPanel.add(buildPluginCard(plugin.getPluginInfo()));
+				listPanel.add(buildPluginCard(pluginRegistry.getPluginDescriptors(plugin)));
 				listPanel.add(Box.createVerticalStrut(8));
 			}
 		}

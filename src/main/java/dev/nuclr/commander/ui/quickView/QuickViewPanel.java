@@ -1,3 +1,20 @@
+/*
+
+	Copyright 2026 Sergio, Nuclr (https://nuclr.dev)
+	
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+	
+	http://www.apache.org/licenses/LICENSE-2.0
+	
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	See the License for the specific language governing permissions and
+	limitations under the License.
+
+*/
 package dev.nuclr.commander.ui.quickView;
 
 import java.awt.CardLayout;
@@ -22,8 +39,9 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.common.ThemeSchemeStore;
-import dev.nuclr.commander.service.PluginRegistry;
-import dev.nuclr.plugin.QuickViewProviderPlugin;
+import dev.nuclr.commander.plugin.PluginDescriptor;
+import dev.nuclr.commander.plugin.PluginRegistry;
+import dev.nuclr.plugin.ResourceContentPlugin;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -48,15 +66,13 @@ public class QuickViewPanel {
 	@Autowired
 	private ThemeSchemeStore themeSchemeStore;
 
-	private Map<String, QuickViewProviderPlugin> loadedPlugins = new HashMap<>();
-
 	private volatile Thread currentLoadThread;
 
 	/** Cancellation token handed to the in-flight plugin's open() call. */
 	private volatile AtomicBoolean currentCancelled;
 
 	/** The provider whose content is currently displayed (null if none). */
-	private volatile QuickViewProviderPlugin activeProvider;
+	private volatile ResourceContentPlugin activeProvider;
 
 	/**
 	 * Monotonically increasing counter. Each call to show() increments it.
@@ -97,7 +113,7 @@ public class QuickViewPanel {
 		}
 
 		var item = new PathQuickViewItem(path);
-		var plugins = pluginRegistry.getQuickViewProvidersByItem(item);
+		var plugins = pluginRegistry.getPluginByItem(item);
 
 		if (plugins == null || plugins.isEmpty()) {
 			showNoProvider(path, cards);
@@ -107,13 +123,14 @@ public class QuickViewPanel {
 		// Initialise plugin panels on the EDT before going async
 		for (var plugin : plugins) {
 			log.info("Found provider [{}] for: {}", plugin.getClass().getName(), path);
-			applyTheme(plugin);
 			String pluginKey = plugin.getClass().getName();
+			/*
 			if (!loadedPlugins.containsKey(pluginKey)) {
-				var pluginPanel = plugin.getPanel();
+				var pluginPanel = plugin.panel();
 				loadedPlugins.put(pluginKey, plugin);
 				panel.add(pluginPanel, pluginKey);
 			}
+			*/
 		}
 
 		// Show loading feedback immediately while the plugin opens the file
@@ -130,7 +147,7 @@ public class QuickViewPanel {
 				long start = System.currentTimeMillis();
 				boolean success;
 				try {
-					success = plugin.openItem(item, cancelled);
+					success = plugin.openResource(item, cancelled);
 					log.info("Plugin [{}] open took {} ms", plugin.getClass().getName(),
 							System.currentTimeMillis() - start);
 				} catch (Exception e) {
@@ -171,7 +188,7 @@ public class QuickViewPanel {
 			t.interrupt();
 			currentLoadThread = null;
 		}
-		QuickViewProviderPlugin prev = activeProvider;
+		ResourceContentPlugin prev = activeProvider;
 		if (prev != null) {
 			activeProvider = null;
 			closeQuietly(prev);
@@ -185,9 +202,9 @@ public class QuickViewPanel {
 		return currentGeneration.get() != myGen || Thread.currentThread().isInterrupted();
 	}
 
-	private void closeQuietly(QuickViewProviderPlugin provider) {
+	private void closeQuietly(ResourceContentPlugin provider) {
 		try {
-			provider.closeItem();
+			provider.closeResource();
 		} catch (Exception e) {
 			log.warn("Error closing provider [{}]: {}", provider.getClass().getName(), e.getMessage());
 		}
@@ -222,23 +239,6 @@ public class QuickViewPanel {
 		label.setFont(label.getFont().deriveFont(Font.PLAIN, 13f));
 		p.add(label);
 		return p;
-	}
-
-	private void applyTheme(QuickViewProviderPlugin plugin) {
-		Object pluginTheme = currentPluginTheme();
-		if (pluginTheme == null) {
-			return;
-		}
-
-		try {
-			plugin.getClass()
-					.getMethod("applyTheme", pluginTheme.getClass())
-					.invoke(plugin, pluginTheme);
-		} catch (NoSuchMethodException ignored) {
-			// Older plugins can ignore host theme settings.
-		} catch (Exception e) {
-			log.warn("Failed to apply theme to provider [{}]: {}", plugin.getClass().getName(), e.getMessage());
-		}
 	}
 
 	private Object currentPluginTheme() {

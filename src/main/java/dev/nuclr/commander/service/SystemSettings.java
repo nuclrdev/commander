@@ -37,10 +37,11 @@ import java.util.Map;
 import javax.swing.JOptionPane;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.nuclr.platform.Settings;
 import lombok.extern.slf4j.Slf4j;
@@ -65,6 +66,7 @@ import lombok.extern.slf4j.Slf4j;
  * not yet exist. {@link #getOrDefault(String, String, Object)} returns the
  * provided fallback in that case.
  */
+@Component
 public class SystemSettings implements Settings {
 
 	private static final String SettingsFileName = "settings.json";

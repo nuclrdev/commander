@@ -2,6 +2,8 @@ package dev.nuclr.commander.common;
 
 import java.util.Map;
 
+import dev.nuclr.platform.ThemeScheme;
+
 /**
  * JSON document containing a selectable set of named color schemes.
  */

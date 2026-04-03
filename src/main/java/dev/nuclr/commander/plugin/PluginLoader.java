@@ -1,4 +1,4 @@
-package dev.nuclr.commander.service;
+package dev.nuclr.commander.plugin;
 
 import java.io.File;
 import java.io.IOException;
@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.nuclr.commander.common.IOUtils;
-import dev.nuclr.commander.plugin.ZipVerifier;
 import dev.nuclr.commander.ui.common.Alerts;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
