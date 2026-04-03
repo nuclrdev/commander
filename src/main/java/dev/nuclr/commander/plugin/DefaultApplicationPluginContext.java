@@ -17,10 +17,9 @@
 */
 package dev.nuclr.commander.plugin;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
 import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.platform.Settings;
@@ -30,20 +29,28 @@ import dev.nuclr.platform.plugin.NuclrPluginContext;
 import lombok.Data;
 
 @Data
-@Component
+@Singleton
 public final class DefaultApplicationPluginContext implements NuclrPluginContext {
 
-	@Autowired
-	private NuclrEventBus eventBus;
+	private final NuclrEventBus eventBus;
 
-	@Autowired
-	private ObjectMapper objectMapper;
+	private final ObjectMapper objectMapper;
 
-	@Autowired
-	private Settings settings;
+	private final Settings settings;
 
-	@Autowired
-	private ThemeSchemeStore themeSchemeStore;
+	private final ThemeSchemeStore themeSchemeStore;
+
+	@Inject
+	public DefaultApplicationPluginContext(
+			NuclrEventBus eventBus,
+			ObjectMapper objectMapper,
+			Settings settings,
+			ThemeSchemeStore themeSchemeStore) {
+		this.eventBus = eventBus;
+		this.objectMapper = objectMapper;
+		this.settings = settings;
+		this.themeSchemeStore = themeSchemeStore;
+	}
 
 	public NuclrEventBus getEventBus() {
 		return eventBus;

@@ -3,39 +3,41 @@ package dev.nuclr.commander.plugin;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.concurrent.Executor;
 
 import javax.swing.JOptionPane;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.task.TaskExecutor;
-import org.springframework.stereotype.Service;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
 import dev.nuclr.commander.common.IOUtils;
+import dev.nuclr.commander.config.AppProperties;
 import dev.nuclr.commander.ui.common.Alerts;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Service
+@Singleton
 public class PluginLoader {
 
-	@Autowired
-	private TaskExecutor taskExecutor;
+	private final Executor taskExecutor;
 
-	@Autowired
-	private ObjectMapper objectMapper;
+	private final ObjectMapper objectMapper;
 
-	@Value("${core.plugins.folder}")
-	private String corePluginsDirectory;
+	private final String corePluginsDirectory;
 
-	@Autowired
-	private PluginRegistry pluginRegistry;
+	private final PluginRegistry pluginRegistry;
 
-	@PostConstruct
-	public void init() {
+	@Inject
+	public PluginLoader(
+			Executor taskExecutor,
+			ObjectMapper objectMapper,
+			AppProperties appProperties,
+			PluginRegistry pluginRegistry) {
+		this.taskExecutor = taskExecutor;
+		this.objectMapper = objectMapper;
+		this.corePluginsDirectory = appProperties.getRequired("core.plugins.folder");
+		this.pluginRegistry = pluginRegistry;
 		taskExecutor.execute(new Runnable() {
 			@Override
 			public void run() {

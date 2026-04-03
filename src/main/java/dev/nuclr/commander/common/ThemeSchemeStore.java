@@ -15,28 +15,26 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Component
+@Singleton
 public class ThemeSchemeStore {
 
 	private static final String APP_NAME = "nuclr";
 	private static final String FILE_NAME = "themes.json";
 
-	@Autowired
-	private ObjectMapper mapper;
+	private final ObjectMapper mapper;
 
 	private Path configFile;
 
-	@PostConstruct
-	void init() {
+	@Inject
+	public ThemeSchemeStore(ObjectMapper mapper) {
+		this.mapper = mapper;
 		this.configFile = LocalSettingsStore.resolveSettingsFile(APP_NAME, FILE_NAME);
 		try {
 			Files.createDirectories(configFile.getParent());

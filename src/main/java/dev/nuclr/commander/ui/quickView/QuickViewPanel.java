@@ -34,37 +34,30 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
 import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.commander.plugin.PluginDescriptor;
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.plugin.ResourceContentPlugin;
-import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Component
-@Lazy
+@Singleton
 @Data
 public class QuickViewPanel {
 
 	private JPanel panel;
 
-	@Autowired
-	private NoQuickViewAvailablePanel noQuickViewAvailablePanel;
+	private final NoQuickViewAvailablePanel noQuickViewAvailablePanel;
 
-	@Autowired
-	private FolderQuickViewPanel folderQuickViewPanel;
+	private final FolderQuickViewPanel folderQuickViewPanel;
 
-	@Autowired
-	private PluginRegistry pluginRegistry;
+	private final PluginRegistry pluginRegistry;
 
-	@Autowired
-	private ThemeSchemeStore themeSchemeStore;
+	private final ThemeSchemeStore themeSchemeStore;
 
 	private volatile Thread currentLoadThread;
 
@@ -85,8 +78,16 @@ public class QuickViewPanel {
 	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
 	private static final String CARD_FOLDER      = "FolderQuickViewPanel";
 
-	@PostConstruct
-	public void init() {
+	@Inject
+	public QuickViewPanel(
+			NoQuickViewAvailablePanel noQuickViewAvailablePanel,
+			FolderQuickViewPanel folderQuickViewPanel,
+			PluginRegistry pluginRegistry,
+			ThemeSchemeStore themeSchemeStore) {
+		this.noQuickViewAvailablePanel = noQuickViewAvailablePanel;
+		this.folderQuickViewPanel = folderQuickViewPanel;
+		this.pluginRegistry = pluginRegistry;
+		this.themeSchemeStore = themeSchemeStore;
 		log.info("QuickViewPanel initialized");
 		this.panel = new JPanel(new CardLayout());
 		this.panel.add(noQuickViewAvailablePanel, CARD_NO_PROVIDER);

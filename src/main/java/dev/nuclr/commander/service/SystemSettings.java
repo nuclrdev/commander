@@ -36,17 +36,15 @@ import java.util.Map;
 
 import javax.swing.JOptionPane;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
 import dev.nuclr.platform.Settings;
 import lombok.extern.slf4j.Slf4j;
 
-@Service
+@Singleton
 @Slf4j
 /**
  * Persistent implementation of {@link Settings} backed by JSON files under the
@@ -66,7 +64,6 @@ import lombok.extern.slf4j.Slf4j;
  * not yet exist. {@link #getOrDefault(String, String, Object)} returns the
  * provided fallback in that case.
  */
-@Component
 public class SystemSettings implements Settings {
 
 	private static final String SettingsFileName = "settings.json";
@@ -79,8 +76,12 @@ public class SystemSettings implements Settings {
 	private static final TypeReference<Map<String, Object>> MapType = new TypeReference<>() {
 	};
 
-	@Autowired
-	private ObjectMapper objectMapper;
+	private final ObjectMapper objectMapper;
+
+	@Inject
+	public SystemSettings(ObjectMapper objectMapper) {
+		this.objectMapper = objectMapper;
+	}
 
 	private Path config(String folder) {
 		return LocalDataLocation.resolve(folder, SettingsFileName);

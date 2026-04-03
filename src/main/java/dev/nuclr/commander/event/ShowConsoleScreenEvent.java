@@ -1,11 +1,14 @@
 package dev.nuclr.commander.event;
 
-import org.springframework.context.ApplicationEvent;
+import lombok.Getter;
 
-public class ShowConsoleScreenEvent extends ApplicationEvent {
+@Getter
+public class ShowConsoleScreenEvent {
+
+	private final Object source;
 
 	public ShowConsoleScreenEvent(Object source) {
-		super(source);
+		this.source = source;
 	}
 
 }

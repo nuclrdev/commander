@@ -18,16 +18,15 @@ import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.UIManager;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Component;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
+import dev.nuclr.commander.event.AppEventBus;
 import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.plugin.MenuResource;
-import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 
-@Component
+@Singleton
 @Getter
 public class FunctionKeyBar {
 
@@ -46,8 +45,7 @@ public class FunctionKeyBar {
 			new Item(12, "Screen")
 	};
 
-	@Autowired
-	private ApplicationEventPublisher applicationEventPublisher;
+	private final AppEventBus appEventBus;
 
 	private JPanel panel;
 	private final List<JButton> buttons = new ArrayList<>();
@@ -55,8 +53,9 @@ public class FunctionKeyBar {
 	private final Map<Integer, String> currentLabels = new HashMap<>();
 	private final Map<Integer, MenuResource> currentMenuResources = new HashMap<>();
 
-	@PostConstruct
-	public void init() {
+	@Inject
+	public FunctionKeyBar(AppEventBus appEventBus) {
+		this.appEventBus = appEventBus;
 		panel = new JPanel(new GridLayout(1, ITEMS.length, 8, 0));
 		panel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
 
@@ -73,7 +72,7 @@ public class FunctionKeyBar {
 	public void publish(int functionKeyNumber) {
 		String label = currentLabels.getOrDefault(functionKeyNumber, "");
 		MenuResource menuResource = currentMenuResources.get(functionKeyNumber);
-		applicationEventPublisher.publishEvent(
+		appEventBus.publish(
 				new FunctionKeyCommandEvent(this, functionKeyNumber, label, menuResource));
 	}
 

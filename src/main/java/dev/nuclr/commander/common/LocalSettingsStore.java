@@ -17,18 +17,14 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Component
-@RequiredArgsConstructor
+@Singleton
 public class LocalSettingsStore {
 
 	/**
@@ -38,13 +34,13 @@ public class LocalSettingsStore {
 	private static final String APP_NAME = "nuclr";
 	private static final String FILE_NAME = "settings.json";
 
-	@Autowired
-	private ObjectMapper mapper;
+	private final ObjectMapper mapper;
 	
 	private Path settingsFile;
 
-	@PostConstruct
-	void init() {
+	@Inject
+	public LocalSettingsStore(ObjectMapper mapper) {
+		this.mapper = mapper;
 		this.settingsFile = resolveSettingsFile(APP_NAME, FILE_NAME);
 
 		try {

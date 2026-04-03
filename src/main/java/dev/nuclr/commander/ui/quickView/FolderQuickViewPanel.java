@@ -25,13 +25,14 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-import org.springframework.stereotype.Component;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
 
 import dev.nuclr.commander.common.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Component
+@Singleton
 public class FolderQuickViewPanel extends JPanel {
 
 	private static final int INFO_PANEL_WIDTH = 420;
@@ -53,6 +54,10 @@ public class FolderQuickViewPanel extends JPanel {
 	private volatile Thread scanThread;
 
 	private boolean uiBuilt = false;
+
+	@Inject
+	public FolderQuickViewPanel() {
+	}
 
 	@Override
 	public void updateUI() {

@@ -21,11 +21,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.springframework.stereotype.Service;
+import com.google.inject.Singleton;
 
 import dev.nuclr.plugin.PluginPathResource;
 
-@Service
+@Singleton
 public class PanelTransferService {
 
 	private static final int COPY_BUFFER_SIZE = 64 * 1024;
