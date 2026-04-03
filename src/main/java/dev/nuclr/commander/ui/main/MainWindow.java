@@ -31,18 +31,10 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BooleanSupplier;
 
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
@@ -56,14 +48,12 @@ import javax.swing.JOptionPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
-import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
@@ -79,15 +69,9 @@ import dev.nuclr.commander.event.ShowEditorScreenEvent;
 import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.commander.service.PanelTransferService;
-import dev.nuclr.commander.service.PanelTransferService.AccessPolicy;
-import dev.nuclr.commander.service.PanelTransferService.ConflictResolution;
-import dev.nuclr.commander.service.PanelTransferService.TransferOptions;
-import dev.nuclr.commander.service.PanelTransferService.TransferProgress;
 import dev.nuclr.commander.ui.ChangeDrivePopup;
 import dev.nuclr.commander.ui.ConsolePanel;
 import dev.nuclr.commander.ui.common.Alerts;
-import dev.nuclr.commander.ui.common.TransferConfirmationDialog;
-import dev.nuclr.commander.ui.common.TransferProgressDialog;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
@@ -95,12 +79,18 @@ import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.plugin.MenuResource;
-import dev.nuclr.plugin.ResourceContentPlugin;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.ResourceContentPlugin;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * 
+ * Main application window. Manages the main UI layout, global keyboard shortcuts, and screen navigation.
+ * 
+ * 
+ * 
+ */
 @Service
 @Slf4j
 public class MainWindow implements NuclrEventListener {
