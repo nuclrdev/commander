@@ -1,13 +1,13 @@
 package dev.nuclr.commander.service;
 
-import com.google.inject.Singleton;
+import org.springframework.stereotype.Service;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Data
-@Singleton
+@Service
 public class PluginMarketplaceService {
 
 	public void searchQuickViewPlugins(String query) {

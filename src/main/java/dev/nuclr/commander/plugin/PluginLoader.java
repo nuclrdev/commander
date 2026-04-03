@@ -3,41 +3,39 @@ package dev.nuclr.commander.plugin;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.concurrent.Executor;
 
 import javax.swing.JOptionPane;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Service;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
 
 import dev.nuclr.commander.common.IOUtils;
-import dev.nuclr.commander.config.AppProperties;
 import dev.nuclr.commander.ui.common.Alerts;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Singleton
+@Service
 public class PluginLoader {
 
-	private final Executor taskExecutor;
+	@Autowired
+	private TaskExecutor taskExecutor;
 
-	private final ObjectMapper objectMapper;
+	@Autowired
+	private ObjectMapper objectMapper;
 
-	private final String corePluginsDirectory;
+	@Value("${core.plugins.folder}")
+	private String corePluginsDirectory;
 
-	private final PluginRegistry pluginRegistry;
+	@Autowired
+	private PluginRegistry pluginRegistry;
 
-	@Inject
-	public PluginLoader(
-			Executor taskExecutor,
-			ObjectMapper objectMapper,
-			AppProperties appProperties,
-			PluginRegistry pluginRegistry) {
-		this.taskExecutor = taskExecutor;
-		this.objectMapper = objectMapper;
-		this.corePluginsDirectory = appProperties.getRequired("core.plugins.folder");
-		this.pluginRegistry = pluginRegistry;
+	@PostConstruct
+	public void init() {
 		taskExecutor.execute(new Runnable() {
 			@Override
 			public void run() {

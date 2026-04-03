@@ -37,23 +37,19 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import dev.nuclr.commander.plugin.PluginDescriptor;
 import dev.nuclr.commander.plugin.PluginRegistry;
 import lombok.extern.slf4j.Slf4j;
 
-@Singleton
+@Service
 @Slf4j
 public class PluginManagementPopup {
 
-	private final PluginRegistry pluginRegistry;
-
-	@Inject
-	public PluginManagementPopup(PluginRegistry pluginRegistry) {
-		this.pluginRegistry = pluginRegistry;
-	}
+	@Autowired
+	private PluginRegistry pluginRegistry;
 
 	public void show(JFrame parent) {
 		var dialog = new JDialog(parent, "Plugin Management", true);

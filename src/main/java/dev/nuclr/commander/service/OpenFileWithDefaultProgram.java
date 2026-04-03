@@ -6,21 +6,15 @@ import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
+import org.springframework.context.ApplicationListener;
+import org.springframework.stereotype.Component;
 
-import dev.nuclr.commander.event.AppEventBus;
 import dev.nuclr.commander.event.ListViewFileOpen;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Singleton
-public final class OpenFileWithDefaultProgram {
-
-	@Inject
-	public OpenFileWithDefaultProgram(AppEventBus appEventBus) {
-		appEventBus.subscribe(ListViewFileOpen.class, this::onApplicationEvent);
-	}
+@Component
+public final class OpenFileWithDefaultProgram implements ApplicationListener<ListViewFileOpen> {
 
 	public void open(File file) {
 		if (file == null) {
@@ -67,6 +61,7 @@ public final class OpenFileWithDefaultProgram {
 		pb.start();
 	}
 
+	@Override
 	public void onApplicationEvent(ListViewFileOpen event) {
 		Path path = event.getPath();
 		if (path == null) return;

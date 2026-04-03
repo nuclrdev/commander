@@ -23,8 +23,8 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.common.FilenameUtils;
 import dev.nuclr.commander.service.PluginMarketplaceService;
@@ -32,14 +32,16 @@ import dev.nuclr.commander.service.SystemSettings;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@Singleton
+@Component
 public class NoQuickViewAvailablePanel extends JPanel {
 
 	private static final String GITHUB_ISSUES_URL = "https://github.com/nuclrdev/commander/issues";
 
-	private final SystemSettings systemSettings;
+	@Autowired
+	private SystemSettings systemSettings;
 
-	private final PluginMarketplaceService pluginMarketplaceService;
+	@Autowired
+	private PluginMarketplaceService pluginMarketplaceService;
 
 	private JLabel iconLabel;
 	private JLabel titleLabel;
@@ -49,12 +51,6 @@ public class NoQuickViewAvailablePanel extends JPanel {
 	private JPanel centerPanel;
 
 	private boolean uiBuilt = false;
-
-	@Inject
-	public NoQuickViewAvailablePanel(SystemSettings systemSettings, PluginMarketplaceService pluginMarketplaceService) {
-		this.systemSettings = systemSettings;
-		this.pluginMarketplaceService = pluginMarketplaceService;
-	}
 
 	private void buildUI() {
 		setLayout(new BorderLayout());

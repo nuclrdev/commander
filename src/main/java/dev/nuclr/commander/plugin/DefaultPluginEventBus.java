@@ -21,13 +21,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import com.google.inject.Singleton;
+import org.springframework.stereotype.Component;
 
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
 import lombok.extern.slf4j.Slf4j;
 
-@Singleton
+@Component
 @Slf4j
 public final class DefaultPluginEventBus implements NuclrEventBus {
 

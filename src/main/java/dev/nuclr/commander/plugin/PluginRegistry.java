@@ -46,9 +46,10 @@ import java.util.zip.ZipFile;
 import javax.swing.JComponent;
 import javax.swing.JOptionPane;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
 
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
 import dev.nuclr.platform.Settings;
@@ -57,27 +58,28 @@ import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.plugin.MenuResource;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.ResourceContentPlugin;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
-@Singleton
+@Service
 @Slf4j
 public final class PluginRegistry {
 
-	private final ObjectMapper objectMapper;
+	@Autowired
+	private ObjectMapper objectMapper;
 
 	private List<ResourceContentPlugin> plugins = new CopyOnWriteArrayList<>();
 
-	private final NuclrPluginContext pluginContext;
+	@Autowired
+	private NuclrPluginContext pluginContext;
 	
 	private final List<URLClassLoader> pluginClassLoaders = new CopyOnWriteArrayList<>();
 	
 	private final Map<ResourceContentPlugin, PluginDescriptor> pluginDescriptors = new ConcurrentHashMap<>();
 
-	@Inject
-	public PluginRegistry(ObjectMapper objectMapper, NuclrPluginContext pluginContext) {
-		this.objectMapper = objectMapper;
-		this.pluginContext = pluginContext;
+	@PostConstruct
+	public void init() {
 	}
 
 	public List<ResourceContentPlugin> getLoadedPlugins() {

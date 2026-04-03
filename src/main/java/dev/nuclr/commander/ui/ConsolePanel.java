@@ -9,28 +9,29 @@ import java.util.Map;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
+import org.springframework.stereotype.Component;
+
 import com.jediterm.terminal.TerminalColor;
 import com.jediterm.terminal.TextStyle;
 import com.jediterm.terminal.ui.JediTermWidget;
 import com.jediterm.terminal.ui.settings.DefaultSettingsProvider;
 import com.pty4j.PtyProcess;
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
 
 import dev.nuclr.commander.common.SystemUtils;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 @Data
 @Slf4j
-@Singleton
+@Component
 public class ConsolePanel {
 
 	private JPanel consolePanel;
 	private JediTermWidget termWidget;
 
-	@Inject
-	public ConsolePanel() {
+	@PostConstruct
+	public void init() {
 		log.info("Initializing ConsolePanel...");
 
 		consolePanel = new JPanel(new BorderLayout());

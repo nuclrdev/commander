@@ -1,14 +1,11 @@
 package dev.nuclr.commander.event;
 
-import lombok.Getter;
+import org.springframework.context.ApplicationEvent;
 
-@Getter
-public class ShowFilePanelsViewEvent {
-
-	private final Object source;
+public class ShowFilePanelsViewEvent extends ApplicationEvent {
 
 	public ShowFilePanelsViewEvent(Object source) {
-		this.source = source;
+		super(source);
 	}
 
 }

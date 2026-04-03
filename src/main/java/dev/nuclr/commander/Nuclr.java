@@ -1,24 +1,18 @@
 package dev.nuclr.commander;
 
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
-import java.util.concurrent.ExecutorService;
 
-import com.google.inject.Guice;
-import com.google.inject.Injector;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import dev.nuclr.commander.common.MacOSIntegration;
 import dev.nuclr.commander.common.SystemUtils;
-import dev.nuclr.commander.config.CommanderModule;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public final class Nuclr {
 
-	static Injector injector;
+	static AnnotationConfigApplicationContext ctx;
 
-	public static long startTime = ManagementFactory.getRuntimeMXBean().getStartTime();
-	
 	public static void main(String[] args) throws IOException {
 
 		// Print the application version
@@ -28,17 +22,18 @@ public final class Nuclr {
 			MacOSIntegration.installAboutHandler();
 		}
 
-		injector = Guice.createInjector(new CommanderModule());
+		ctx = new AnnotationConfigApplicationContext("dev.nuclr.commander");
+		ctx.start();
 
 	}
 
 	public static void exit() {
 		try {
-			if (injector != null) {
-				injector.getInstance(ExecutorService.class).shutdownNow();
-			}
+			ctx.stop();
+			ctx.close();
 		} catch (Exception e) {
 			log.error("Error while shutting down the application: {}", e.getMessage(), e);
+			// Optionally, you can choose to exit with a non-zero status code to indicate an error
 			System.exit(1);
 			return;
 		}
