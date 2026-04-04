@@ -25,53 +25,53 @@ import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.ResourceContentPlugin;
 
 public class PanelState {
-	
-	private final ArrayDeque<PanelLayer> stack = new ArrayDeque<>();
 
-	private boolean isEmpty() {
+	public final ArrayDeque<PanelLayer> stack = new ArrayDeque<>();
+
+	public boolean isEmpty() {
 		return stack.isEmpty();
 	}
 
-	private int stackSize() {
+	public int stackSize() {
 		return stack.size();
 	}
 
-	private void push(PanelLayer layer) {
+	public void push(PanelLayer layer) {
 		stack.addLast(layer);
 	}
 
-	private PanelLayer pop() {
+	public PanelLayer pop() {
 		return stack.removeLast();
 	}
 
-	private boolean contains(ResourceContentPlugin provider) {
+	public boolean contains(ResourceContentPlugin provider) {
 		return stack.stream().anyMatch(layer -> layer.provider == provider);
 	}
 
-	private PanelLayer bottom() {
+	public PanelLayer bottom() {
 		return stack.peekFirst();
 	}
 
-	private PanelLayer top() {
+	public PanelLayer top() {
 		return stack.peekLast();
 	}
 
-	private ResourceContentPlugin provider() {
+	public ResourceContentPlugin provider() {
 		PanelLayer layer = top();
 		return layer != null ? layer.provider : null;
 	}
 
-	private JComponent component() {
+	public JComponent component() {
 		PanelLayer layer = top();
 		return layer != null ? layer.component : null;
 	}
 
-	private PluginPathResource currentResource() {
+	public PluginPathResource currentResource() {
 		PanelLayer layer = top();
 		return layer != null ? layer.currentResource : null;
 	}
 
-	private void setCurrentResource(PluginPathResource resource) {
+	public void setCurrentResource(PluginPathResource resource) {
 		PanelLayer layer = top();
 		if (layer != null) {
 			layer.currentResource = resource;

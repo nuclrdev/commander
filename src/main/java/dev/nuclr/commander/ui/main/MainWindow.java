@@ -18,6 +18,7 @@
 package dev.nuclr.commander.ui.main;
 
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
@@ -32,12 +33,10 @@ import java.awt.event.KeyEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
 
 import javax.swing.ImageIcon;
-import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -186,19 +185,25 @@ public class MainWindow implements NuclrEventListener {
 
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		mainFrame.setLayout(new BorderLayout());
+		
+		mainFrame.setLayout(new CardLayout());
+		
 		mainFrame.setSize(savedSettings.windowWidth(), savedSettings.windowHeight());
+		
 		if (savedSettings.windowX() >= 0 && savedSettings.windowY() >= 0) {
 			mainFrame.setLocation(savedSettings.windowX(), savedSettings.windowY());
 		} else {
 			mainFrame.setLocationRelativeTo(null);
 		}
+		
 		if (savedSettings.maximized()) {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		}
 
 		var appIcon = new ImageIcon("data/images/icon-512.png").getImage();
+		
 		mainFrame.setIconImage(appIcon);
+		
 		if (SystemUtils.isOsMac() && Taskbar.isTaskbarSupported()) {
 			Taskbar.getTaskbar().setIconImage(appIcon);
 		}
@@ -207,6 +212,7 @@ public class MainWindow implements NuclrEventListener {
 				JSplitPane.HORIZONTAL_SPLIT,
 				placeholder("Loading plugins..."),
 				placeholder("Loading plugins..."));
+		
 		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
 			int loc = (int) evt.getNewValue();
 			int paneWidth = mainSplitPane.getWidth();
@@ -219,10 +225,13 @@ public class MainWindow implements NuclrEventListener {
 		mainFrame.setJMenuBar(buildMenuBar());
 		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
 		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
+		
 		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(buildKeyDispatcher());
+		
 		KeyboardFocusManager
 				.getCurrentKeyboardFocusManager()
 				.addPropertyChangeListener("focusOwner", evt -> onFocusOwnerChanged((Component) evt.getNewValue()));
+		
 		mainFrame.addComponentListener(new ComponentAdapter() {
 			@Override
 			public void componentResized(ComponentEvent e) {
@@ -244,7 +253,23 @@ public class MainWindow implements NuclrEventListener {
 		startQuickViewRefreshTimer();
 		
 		mainFrame.setVisible(true);
+		
 		restoreMainDividerLocation();
+		
+		loadDefaultPanels();
+		
+	}
+
+	private void loadDefaultPanels() {
+
+		var defaultPlugin = pluginRegistry.getPluginById("dev.nuclr.plugin.core.panel.fs");
+		
+		// Add file panels
+		log.info("Loading default file panels...");
+		
+		// Add console to background async
+		
+		
 	}
 
 	private JMenuBar buildMenuBar() {
@@ -881,72 +906,6 @@ public class MainWindow implements NuclrEventListener {
 				UIManager.put(entry.getKey(), Color.decode(entry.getValue()));
 			} catch (Exception ex) {
 				log.warn("Invalid theme color for {}: {}", entry.getKey(), entry.getValue());
-			}
-		}
-	}
-
-	private static final class PanelLayer {
-		private final ResourceContentPlugin provider;
-		private final JComponent component;
-		private PluginPathResource currentResource;
-
-		private PanelLayer(ResourceContentPlugin provider, JComponent component, PluginPathResource currentResource) {
-			this.provider = provider;
-			this.component = component;
-			this.currentResource = currentResource;
-		}
-	}
-
-	private static final class PanelState {
-		private final ArrayDeque<PanelLayer> stack = new ArrayDeque<>();
-
-		private boolean isEmpty() {
-			return stack.isEmpty();
-		}
-
-		private int stackSize() {
-			return stack.size();
-		}
-
-		private void push(PanelLayer layer) {
-			stack.addLast(layer);
-		}
-
-		private PanelLayer pop() {
-			return stack.removeLast();
-		}
-
-		private boolean contains(ResourceContentPlugin provider) {
-			return stack.stream().anyMatch(layer -> layer.provider == provider);
-		}
-
-		private PanelLayer bottom() {
-			return stack.peekFirst();
-		}
-
-		private PanelLayer top() {
-			return stack.peekLast();
-		}
-
-		private ResourceContentPlugin provider() {
-			PanelLayer layer = top();
-			return layer != null ? layer.provider : null;
-		}
-
-		private JComponent component() {
-			PanelLayer layer = top();
-			return layer != null ? layer.component : null;
-		}
-
-		private PluginPathResource currentResource() {
-			PanelLayer layer = top();
-			return layer != null ? layer.currentResource : null;
-		}
-
-		private void setCurrentResource(PluginPathResource resource) {
-			PanelLayer layer = top();
-			if (layer != null) {
-				layer.currentResource = resource;
 			}
 		}
 	}

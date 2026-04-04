@@ -3,7 +3,8 @@ package dev.nuclr.commander.plugin;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 
 import javax.swing.JOptionPane;
 
@@ -11,8 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.nuclr.commander.common.IOUtils;
 import dev.nuclr.commander.ui.common.Alerts;
@@ -26,9 +25,6 @@ public class PluginLoader {
 	@Autowired
 	private TaskExecutor taskExecutor;
 
-	@Autowired
-	private ObjectMapper objectMapper;
-
 	@Value("${core.plugins.folder}")
 	private String corePluginsDirectory;
 
@@ -38,6 +34,8 @@ public class PluginLoader {
 	private byte[] publicKey;
 	
 	private File pluginsFolder;
+	
+	private Set<File> excludedPlugins = new HashSet<>();
 
 	@PostConstruct
 	public void init() {
@@ -49,6 +47,7 @@ public class PluginLoader {
 		// Load the latest version of the file panel plugin first
 		File latest = findLatestVersion(pluginsFolder, "filepanel-fs-", ".zip");
 		if (latest != null) {
+			this.excludedPlugins.add(latest);
 		    this.loadFile(latest);
 		} else {
 		    log.error("No file panel plugin found in directory: [{}]", pluginsFolder);
@@ -76,6 +75,12 @@ public class PluginLoader {
 
 		Arrays.stream(pluginsFolder.listFiles(File::isFile)).filter(file -> file.getName().endsWith("zip"))
 			.forEach(file -> {
+				
+				if (excludedPlugins.contains(file)) {
+					log.info("Skipping plugin [{}] as it has already been loaded", file.getName());
+					return;
+				}
+				
 				loadFile(file);
 			}
 		);

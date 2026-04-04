@@ -23,12 +23,9 @@ import java.io.InputStream;
 import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
@@ -36,15 +33,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipFile;
-
-import javax.swing.JComponent;
-import javax.swing.JOptionPane;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -52,14 +45,10 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
-import dev.nuclr.platform.Settings;
-import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
-import dev.nuclr.plugin.MenuResource;
 import dev.nuclr.plugin.PluginPathResource;
 import dev.nuclr.plugin.ResourceContentPlugin;
 import jakarta.annotation.PostConstruct;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -73,11 +62,11 @@ public final class PluginRegistry {
 
 	@Autowired
 	private NuclrPluginContext pluginContext;
-	
-	private final List<URLClassLoader> pluginClassLoaders = new CopyOnWriteArrayList<>();
-	
-	private final Map<ResourceContentPlugin, PluginDescriptor> pluginDescriptors = new ConcurrentHashMap<>();
 
+	private final List<URLClassLoader> pluginClassLoaders = new CopyOnWriteArrayList<>();
+
+	private final Map<ResourceContentPlugin, PluginDescriptor> pluginDescriptors = new ConcurrentHashMap<>();
+	
 	@PostConstruct
 	public void init() {
 	}
@@ -87,11 +76,11 @@ public final class PluginRegistry {
 	}
 
 	public void loadPlugin(File zipFile) {
-		
+
 		log.info("Loading plugin: [{}]", zipFile.getAbsolutePath());
 
 		try {
-			
+
 			var pluginDir = Files.createTempDirectory("nuclr-plugin-" + UUID.randomUUID());
 			extractZip(zipFile, pluginDir);
 
@@ -114,14 +103,20 @@ public final class PluginRegistry {
 			}
 
 			for (var className : classNames) {
-				// TODO loadResourceContentProvider(className, classLoader, manifest);
+				loadResourceContentProvider(className, classLoader, manifest);
 			}
 
 			plugins.sort(Comparator.comparingInt(ResourceContentPlugin::priority));
-			
+
 		} catch (IOException e) {
 			log.error("Failed to load plugin [{}]: {}", zipFile.getName(), e.getMessage(), e);
 		}
+	}
+
+	private void loadResourceContentProvider(String className, URLClassLoader classLoader, PluginDescriptor manifest) {
+
+		
+		
 	}
 
 	private PluginDescriptor readPluginDescriptor(Path manifestFile, String pluginName) throws IOException {
@@ -186,10 +181,8 @@ public final class PluginRegistry {
 	}
 
 	private boolean isCandidateClassEntry(JarEntry entry) {
-		return !entry.isDirectory()
-				&& entry.getName().endsWith(".class")
-				&& !entry.getName().equals("module-info.class")
-				&& !entry.getName().endsWith("package-info.class")
+		return !entry.isDirectory() && entry.getName().endsWith(".class")
+				&& !entry.getName().equals("module-info.class") && !entry.getName().endsWith("package-info.class")
 				&& !entry.getName().contains("$");
 	}
 
@@ -201,8 +194,7 @@ public final class PluginRegistry {
 		try {
 			Class<?> clazz = Class.forName(className, false, classLoader);
 			int modifiers = clazz.getModifiers();
-			return ResourceContentPlugin.class.isAssignableFrom(clazz)
-					&& !clazz.isInterface()
+			return ResourceContentPlugin.class.isAssignableFrom(clazz) && !clazz.isInterface()
 					&& !Modifier.isAbstract(modifiers);
 		} catch (LinkageError | ReflectiveOperationException e) {
 			log.debug("Skipping plugin class [{}]: {}", className, e.getMessage());
@@ -237,7 +229,7 @@ public final class PluginRegistry {
 			}
 		}
 	}
-	
+
 	public PluginDescriptor getPluginDescriptors(ResourceContentPlugin plugin) {
 		return this.pluginDescriptors.get(plugin);
 	}
@@ -257,10 +249,14 @@ public final class PluginRegistry {
 	}
 
 	public ResourceContentPlugin getPluginByResource(PluginPathResource resource) {
-		return this.plugins.stream()
-				.filter(plugin -> plugin.supports(resource))
-				.findFirst()
-				.orElse(null);
+		return this.plugins.stream().filter(plugin -> plugin.supports(resource)).findFirst().orElse(null);
+	}
+
+	public ResourceContentPlugin getPluginById(String string) {
+		return this.plugins.stream().filter(plugin -> {
+			var descriptor = this.pluginDescriptors.get(plugin);
+			return descriptor != null && descriptor.getId().equals(string);
+		}).findFirst().orElse(null);
 	}
 
 }
