@@ -185,7 +185,6 @@ public class MainWindow implements NuclrEventListener {
 			Taskbar.getTaskbar().setIconImage(appIcon);
 		}
 
-
 		mainFrame.setJMenuBar(buildMenuBar());
 		mainFrame.add(this.splitPane, BorderLayout.CENTER);
 		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
@@ -209,6 +208,8 @@ public class MainWindow implements NuclrEventListener {
 		});
 
 		mainFrame.addWindowStateListener(e -> saveWindowState());
+		
+		this.splitPane.init();
 
 		setActiveScreenComponent( this.splitPane);
 

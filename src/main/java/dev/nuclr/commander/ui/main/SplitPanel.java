@@ -69,7 +69,6 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		Left, Right, Fullscreen
 	}
 
-	@PostConstruct
 	public void init() {
 
 		log.info("Initializing FilePanel");
