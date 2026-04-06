@@ -35,9 +35,13 @@ public final class DefaultPluginEventBus implements NuclrEventBus {
 
 	@Override
 	public void emit(String source, String type, Map<String, Object> event) {
+		
+		log.info("Emitting event: " + type + " from source: " + source);
+		
 		for (NuclrEventListener listener : listeners) {
 			try {
 				if (listener.isMessageSupported(type)) {
+					log.info("Handling event: " + type + " with listener: " + listener.getClass().getName());
 					listener.handleMessage(source, type, event);
 				}
 			} catch (Exception e) {

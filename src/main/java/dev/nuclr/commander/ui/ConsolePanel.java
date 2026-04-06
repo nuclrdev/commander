@@ -19,7 +19,6 @@ import com.jediterm.terminal.ui.settings.DefaultSettingsProvider;
 import com.pty4j.PtyProcess;
 
 import dev.nuclr.commander.common.SystemUtils;
-import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,10 +26,13 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Lazy
 @Component
-public class ConsolePanel {
+public final class ConsolePanel {
 
 	private JPanel consolePanel;
+	
 	private JediTermWidget termWidget;
+	
+	private boolean initialized = false;
 
 	public void init() {
 
@@ -70,7 +72,10 @@ public class ConsolePanel {
 					JOptionPane.ERROR_MESSAGE);
 		}
 
+		initialized = true;
+		
 		log.info("ConsolePanel initialized successfully.");
+		
 	}
 
 }

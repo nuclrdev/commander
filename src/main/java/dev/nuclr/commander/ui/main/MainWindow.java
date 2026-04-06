@@ -39,9 +39,9 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,8 +55,6 @@ import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.commander.event.Events;
-import dev.nuclr.commander.plugin.PluginRegistry;
-import dev.nuclr.commander.service.PanelTransferService;
 import dev.nuclr.commander.ui.ConsolePanel;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
@@ -74,11 +72,16 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class MainWindow implements NuclrEventListener {
 
+	private static final String ConsolePanel = "ConsolePanel";
+	private static final String SplitPanel = "SplitPanel";
+
 	public static final String SettingsNamespace = "MainWindow";	
 	
 	private static final int MAIN_DIVIDER_STEP_PIXELS = 30;
 
 	private JFrame mainFrame;
+	
+	private CardLayout cardLayout = new CardLayout();
 	
 	private int fontSize;
 	
@@ -102,23 +105,17 @@ public class MainWindow implements NuclrEventListener {
 	private FunctionKeyBar functionKeyBar;
 
 	@Autowired
-	private PluginRegistry pluginRegistry;
-
-	@Autowired
 	private NuclrEventBus eventBus;
 
 	@Autowired
 	private PluginManagementPopup pluginManagementPopup;
 
-	@Autowired
-	private PanelTransferService panelTransferService;
-	
 	@Autowired	
 	private SplitPanel splitPane;
 
-	private Timer quickViewRefreshTimer;
-	
 	private JComponent activeScreenComponent;
+	
+	private JPanel cardPanel;
 
 	@PostConstruct
 	public void init() {
@@ -155,8 +152,6 @@ public class MainWindow implements NuclrEventListener {
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-		mainFrame.setLayout(new CardLayout());
-
 		// Restore window size and position from settings
 		mainFrame.setSize(
 			this.settings.getOrDefault(SettingsNamespace, "windowWidth", 1024),
@@ -185,9 +180,14 @@ public class MainWindow implements NuclrEventListener {
 			Taskbar.getTaskbar().setIconImage(appIcon);
 		}
 
-		mainFrame.setJMenuBar(buildMenuBar());
-		mainFrame.add(this.splitPane, BorderLayout.CENTER);
-		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
+		this.cardPanel = new JPanel(cardLayout);
+		this.cardPanel.add(this.splitPane, SplitPanel);
+		
+		this.mainFrame.setJMenuBar(buildMenuBar());
+		
+		this.mainFrame.setLayout(new BorderLayout());
+		this.mainFrame.add(this.cardPanel, BorderLayout.CENTER);
+		this.mainFrame.add(this.functionKeyBar.getPanel(), BorderLayout.SOUTH);
 
 		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(buildKeyDispatcher());
 
@@ -461,16 +461,39 @@ public class MainWindow implements NuclrEventListener {
 
 		if (type.equals(Events.ShowFilePanelsViewEvent)) {
 		//	onShowFilePanelsView();
+		} else if (type.equals(Events.ShowConsoleScreenEvent)) {
+			onShowConsoleScreen();
+		}
+
+	}
+
+	public void onShowConsoleScreen() {
+		
+		log.info("Switching to console screen...");
+
+		if (consolePanel.isInitialized() == false) {
+			consolePanel.init();
+			this.cardPanel.add(consolePanel.getConsolePanel(), ConsolePanel);
 		}
 		
-		
+		this.cardLayout.show(this.cardPanel, ConsolePanel);
+
+		functionKeyBar.resetDefaultLabels();
+
+//		var lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+//		consolePanel.getConsolePanel().setVisible(true);
+
+		consolePanel.getTermWidget().requestFocusInWindow();
+
+		mainFrame.revalidate();
+
+		mainFrame.repaint();
 
 	}
 
 	@Override
 	public boolean isMessageSupported(String type) {
-		// TODO Auto-generated method stub
-		return false;
+		return true;
 	}
 	
 	public JFrame getMainFrame() {
