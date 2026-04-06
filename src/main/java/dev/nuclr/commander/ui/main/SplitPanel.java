@@ -20,6 +20,7 @@ package dev.nuclr.commander.ui.main;
 import java.awt.Font;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -54,7 +55,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	@Autowired
 	private QuickViewPanel quickViewPanel;
-	
+
 	@Autowired
 	private Settings settings;
 
@@ -72,7 +73,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	public void init() {
 
 		log.info("Initializing FilePanel");
-		
+
 		eventBus.subscribe(this);
 
 		dividerRatio = settings.getOrDefault(SettingsNamespace + "splitPanel", "dividerRatio", 0.5);
@@ -88,19 +89,41 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 				saveDividerRatio(dividerRatio);
 			}
 		});
-		
+
 		this.setLayout(new java.awt.BorderLayout());
 		this.add(mainSplitPane, java.awt.BorderLayout.CENTER);
 
 		loadDefaultPanels();
-		
+
+	}
+
+	private Path getDefaultDrivePath() {
+
+		String os = System.getProperty("os.name").toLowerCase();
+
+		if (os.contains("win")) {
+			// Windows: return a virtual "This PC" root — use null-root path
+			// FileSystems.getDefault().getRootDirectories() gives C:\, D:\, etc.
+			// But "This PC" itself has no real Path equivalent; conventionally use the
+			// first root
+			// or a sentinel. Here we return the user's home drive root.
+			Path home = Path.of(System.getProperty("user.home"));
+			return home.getRoot(); // e.g. C:\
+		}
+
+		// Unix / macOS / Linux
+		return Path.of("/");
 	}
 
 	private void loadDefaultPanels() {
+		
+		var resource = new NuclrResourcePath();
+		resource.setPath(getDefaultDrivePath());
 
 		// Left
 		{
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
+			plugin.openResource(resource, new AtomicBoolean(false));
 			var panel = plugin.panel();
 			setLeftComponent(panel);
 		}
@@ -108,6 +131,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		// Right
 		{
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
+			plugin.openResource(resource, new AtomicBoolean(false));
 			var panel = plugin.panel();
 			setRightComponent(panel);
 		}
@@ -153,7 +177,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	@Override
 	public void handleMessage(String source, String type, Map<String, Object> event) {
 		// TODO Auto-generated method stub
-		
+
 	}
 
 	@Override
@@ -163,9 +187,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 
 	public void toggleQuickView() {
-		
+
 	}
-	
-	
-	
+
 }
