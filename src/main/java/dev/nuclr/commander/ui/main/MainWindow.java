@@ -20,7 +20,6 @@ package dev.nuclr.commander.ui.main;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.Font;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -30,21 +29,16 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 
 import javax.swing.ImageIcon;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
-import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -52,8 +46,6 @@ import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
@@ -62,74 +54,46 @@ import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.common.ThemeSchemeStore;
-import dev.nuclr.commander.event.FunctionKeyCommandEvent;
-import dev.nuclr.commander.event.ShowConsoleScreenEvent;
-import dev.nuclr.commander.event.ShowEditorScreenEvent;
-import dev.nuclr.commander.event.ShowFilePanelsViewEvent;
+import dev.nuclr.commander.event.Events;
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.commander.service.PanelTransferService;
-import dev.nuclr.commander.ui.ChangeDrivePopup;
 import dev.nuclr.commander.ui.ConsolePanel;
-import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
-import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
-import dev.nuclr.commander.ui.quickView.QuickViewPanel;
+import dev.nuclr.platform.Settings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
-import dev.nuclr.plugin.MenuResource;
-import dev.nuclr.plugin.PluginPathResource;
-import dev.nuclr.plugin.ResourceContentPlugin;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 
- * Main application window. Manages the main UI layout, global keyboard shortcuts, and screen navigation.
- * 
- * 
- * 
+ * Main application window. Manages the main UI layout, global keyboard
+ * shortcuts, and screen navigation.
  */
 @Service
 @Slf4j
 public class MainWindow implements NuclrEventListener {
 
+	public static final String SettingsNamespace = "MainWindow";	
+	
 	private static final int MAIN_DIVIDER_STEP_PIXELS = 30;
 
 	private JFrame mainFrame;
-	private JSplitPane mainSplitPane;
-	private Component lastFocusedInSplitPane;
-	private Component activeScreenComponent;
-	private ResourceContentPlugin activeScreenProvider;
-	private double dividerRatio = 0.5;
-	private int fontSize = LocalSettingsStore.DEFAULT_FONT_SIZE;
+	
+	private int fontSize;
+	
 	private boolean shiftDown;
 	private boolean ctrlDown;
 	private boolean altDown;
-	private boolean quickViewActive;
-	private boolean quickViewShowingLeft;
-	private Path quickViewCurrentPath;
-	private PanelState focusedPanelState;
-	private PanelState quickViewSourceState;
-	private Component quickViewReplacedComponent;
-
-	private final PanelState leftPanelState = new PanelState();
-	private final PanelState rightPanelState = new PanelState();
-
+	
+	@Autowired
+	private Settings settings;
+	
 	@Autowired
 	private ConsolePanel consolePanel;
 
-	@Autowired
-	private QuickViewPanel quickViewPanel;
-
 	@Value("${version}")
 	private String version;
-
-	@Autowired
-	private ApplicationEventPublisher applicationEventPublisher;
-
-	@Autowired
-	private LocalSettingsStore settingsStore;
 
 	@Autowired
 	private ThemeSchemeStore themeSchemeStore;
@@ -139,7 +103,7 @@ public class MainWindow implements NuclrEventListener {
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
-	
+
 	@Autowired
 	private NuclrEventBus eventBus;
 
@@ -148,14 +112,19 @@ public class MainWindow implements NuclrEventListener {
 
 	@Autowired
 	private PanelTransferService panelTransferService;
+	
+	@Autowired	
+	private SplitPanel splitPane;
 
 	private Timer quickViewRefreshTimer;
+	
+	private JComponent activeScreenComponent;
 
 	@PostConstruct
 	public void init() {
-		
+
 		this.eventBus.subscribe(this);
-		
+
 		if (SwingUtilities.isEventDispatchThread()) {
 			initOnEdt();
 		} else {
@@ -164,74 +133,65 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	private void initOnEdt() {
-		
-		  // Disable custom window decorations
-        JFrame.setDefaultLookAndFeelDecorated(true);
-        JDialog.setDefaultLookAndFeelDecorated(true);
-        
+
+		// Disable custom window decorations
+		JFrame.setDefaultLookAndFeelDecorated(true);
+		JDialog.setDefaultLookAndFeelDecorated(true);
+
 		if (SystemUtils.isOsMac()) {
 			System.setProperty("apple.laf.useScreenMenuBar", "true");
 			System.setProperty("apple.awt.application.name", "Nuclr Commander");
 		}
 
-		var savedSettings = settingsStore.loadOrDefault();
-		fontSize = savedSettings.fontSize();
-		dividerRatio = savedSettings.dividerRatio();
+		this.fontSize = settings.getOrDefault(SettingsNamespace, "fontSize", 14);
 
 		FlatDarculaLaf.setup();
+		
 		applyThemeScheme();
+		
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
-		UIManager.put("Button.font", UIManager.getFont("defaultFont"));	
+		UIManager.put("Button.font", UIManager.getFont("defaultFont"));
 
 		mainFrame = new JFrame("Nuclr Commander (" + version + ")");
 		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		
+
 		mainFrame.setLayout(new CardLayout());
+
+		// Restore window size and position from settings
+		mainFrame.setSize(
+			this.settings.getOrDefault(SettingsNamespace, "windowWidth", 1024),
+			this.settings.getOrDefault(SettingsNamespace, "windowHeight", 768)
+		);
 		
-		mainFrame.setSize(savedSettings.windowWidth(), savedSettings.windowHeight());
-		
-		if (savedSettings.windowX() >= 0 && savedSettings.windowY() >= 0) {
-			mainFrame.setLocation(savedSettings.windowX(), savedSettings.windowY());
+		// Restore window position if valid coordinates are available, otherwise center on screen
+		var windowX = this.settings.getOrDefault(SettingsNamespace, "windowX", -1);
+		var windowY = this.settings.getOrDefault(SettingsNamespace, "windowY", -1);
+
+		if (windowX >= 0 && windowY >= 0) {
+			mainFrame.setLocation(windowX, windowY);
 		} else {
 			mainFrame.setLocationRelativeTo(null);
 		}
-		
-		if (savedSettings.maximized()) {
+
+		if (this.settings.getOrDefault(SettingsNamespace, "extendedState", false)) {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		}
 
 		var appIcon = new ImageIcon("data/images/icon-512.png").getImage();
-		
+
 		mainFrame.setIconImage(appIcon);
-		
+
 		if (SystemUtils.isOsMac() && Taskbar.isTaskbarSupported()) {
 			Taskbar.getTaskbar().setIconImage(appIcon);
 		}
 
-		mainSplitPane = new JSplitPane(
-				JSplitPane.HORIZONTAL_SPLIT,
-				placeholder("Loading plugins..."),
-				placeholder("Loading plugins..."));
-		
-		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
-			int loc = (int) evt.getNewValue();
-			int paneWidth = mainSplitPane.getWidth();
-			if (paneWidth > 0) {
-				dividerRatio = Math.max(0.01, Math.min(0.99, loc / (double) paneWidth));
-				saveDividerRatio(dividerRatio);
-			}
-		});
 
 		mainFrame.setJMenuBar(buildMenuBar());
-		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
+		mainFrame.add(this.splitPane, BorderLayout.CENTER);
 		mainFrame.add(functionKeyBar.getPanel(), BorderLayout.SOUTH);
-		
+
 		KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(buildKeyDispatcher());
-		
-		KeyboardFocusManager
-				.getCurrentKeyboardFocusManager()
-				.addPropertyChangeListener("focusOwner", evt -> onFocusOwnerChanged((Component) evt.getNewValue()));
-		
+
 		mainFrame.addComponentListener(new ComponentAdapter() {
 			@Override
 			public void componentResized(ComponentEvent e) {
@@ -247,29 +207,22 @@ public class MainWindow implements NuclrEventListener {
 				}
 			}
 		});
-		
+
 		mainFrame.addWindowStateListener(e -> saveWindowState());
-		
-		startQuickViewRefreshTimer();
-		
+
+		setActiveScreenComponent( this.splitPane);
+
 		mainFrame.setVisible(true);
-		
-		restoreMainDividerLocation();
-		
-		loadDefaultPanels();
+
+	}
+
+	protected void saveWindowState() {
+		// TODO Auto-generated method stub
 		
 	}
 
-	private void loadDefaultPanels() {
-
-		var defaultPlugin = pluginRegistry.getPluginById("dev.nuclr.plugin.core.panel.fs");
-		
-		// Add file panels
-		log.info("Loading default file panels...");
-		
-		// Add console to background async
-		
-		
+	private void setActiveScreenComponent(JComponent c) {
+		this.activeScreenComponent = c;
 	}
 
 	private JMenuBar buildMenuBar() {
@@ -277,22 +230,26 @@ public class MainWindow implements NuclrEventListener {
 
 		JMenu leftMenu = new JMenu("Left");
 		leftMenu.setMnemonic(KeyEvent.VK_L);
-		leftMenu.add(item("Change drive", KeyStroke.getKeyStroke(KeyEvent.VK_F1, InputEvent.ALT_DOWN_MASK), e -> showChangeDrive(true)));
+		leftMenu.add(item("Change drive", KeyStroke.getKeyStroke(KeyEvent.VK_F1, InputEvent.ALT_DOWN_MASK),
+				e -> eventBus.emit(Events.ShowChangeDriveLeftPopup)));
 		menuBar.add(leftMenu);
 
 		JMenu commandsMenu = new JMenu("Commands");
 		commandsMenu.setMnemonic(KeyEvent.VK_C);
-		commandsMenu.add(item("Plugin commands", KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0), e -> pluginManagementPopup.show(mainFrame)));
+		commandsMenu.add(item("Plugin commands", KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0),
+				e -> pluginManagementPopup.show(mainFrame)));
 		menuBar.add(commandsMenu);
 
 		JMenu optionsMenu = new JMenu("Options");
 		optionsMenu.setMnemonic(KeyEvent.VK_O);
-		optionsMenu.add(item("Toggle console", KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK), e -> toggleConsole()));
+		optionsMenu.add(item("Toggle console", KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK),
+				e -> toggleConsole()));
 		menuBar.add(optionsMenu);
 
 		JMenu rightMenu = new JMenu("Right");
 		rightMenu.setMnemonic(KeyEvent.VK_R);
-		rightMenu.add(item("Change drive", KeyStroke.getKeyStroke(KeyEvent.VK_F2, InputEvent.ALT_DOWN_MASK), e -> showChangeDrive(false)));
+		rightMenu.add(item("Change drive", KeyStroke.getKeyStroke(KeyEvent.VK_F2, InputEvent.ALT_DOWN_MASK),
+				e -> eventBus.emit(Events.ShowChangeDriveRightPopup)));
 		menuBar.add(rightMenu);
 
 		return menuBar;
@@ -306,9 +263,9 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	private KeyEventDispatcher buildKeyDispatcher() {
-		
+
 		return e -> {
-			
+
 			if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() != mainFrame) {
 				return false;
 			}
@@ -320,40 +277,32 @@ public class MainWindow implements NuclrEventListener {
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_Q && e.isControlDown() && mainSplitPane.isVisible()) {
-				toggleQuickView();
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_Q && e.isControlDown()
+					&& isVisible(splitPane)) {
+				splitPane.toggleQuickView();
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED
-					&& e.isControlDown()
-					&& !e.isAltDown()
-					&& mainSplitPane.isVisible()
-					&& (e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_RIGHT)) {
-				moveMainDivider(e.getKeyCode() == KeyEvent.VK_LEFT ? -MAIN_DIVIDER_STEP_PIXELS : MAIN_DIVIDER_STEP_PIXELS);
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F1 && e.isAltDown()
+					&& isVisible(splitPane)) {
+				eventBus.emit(Events.ShowChangeDriveLeftPopup);
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F1 && e.isAltDown() && mainSplitPane.isVisible()) {
-				showChangeDrive(true);
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F2 && e.isAltDown()
+					&& isVisible(splitPane)) {
+				eventBus.emit(Events.ShowChangeDriveRightPopup);
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F2 && e.isAltDown() && mainSplitPane.isVisible()) {
-				showChangeDrive(false);
-				return true;
-			}
-
-			if (e.getID() == KeyEvent.KEY_PRESSED && !e.isAltDown() && !e.isControlDown() && e.getKeyCode() == KeyEvent.VK_F10) {
+			if (e.getID() == KeyEvent.KEY_PRESSED && !e.isAltDown() && !e.isControlDown()
+					&& e.getKeyCode() == KeyEvent.VK_F10) {
 				confirmAndExitApplication();
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED
-					&& !e.isAltDown()
-					&& !e.isControlDown()
-					&& e.getKeyCode() >= KeyEvent.VK_F1
-					&& e.getKeyCode() <= KeyEvent.VK_F12) {
+			if (e.getID() == KeyEvent.KEY_PRESSED && !e.isAltDown() && !e.isControlDown()
+					&& e.getKeyCode() >= KeyEvent.VK_F1 && e.getKeyCode() <= KeyEvent.VK_F12) {
 				functionKeyBar.publish(e.getKeyCode() - KeyEvent.VK_F1 + 1);
 				return false;
 			}
@@ -368,37 +317,27 @@ public class MainWindow implements NuclrEventListener {
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED
-					&& e.isControlDown()
-					&& !e.isAltDown()
-					&& (e.getKeyCode() == KeyEvent.VK_EQUALS || e.getKeyCode() == KeyEvent.VK_PLUS || e.getKeyCode() == KeyEvent.VK_ADD)) {
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown() && !e.isAltDown()
+					&& (e.getKeyCode() == KeyEvent.VK_EQUALS || e.getKeyCode() == KeyEvent.VK_PLUS
+							|| e.getKeyCode() == KeyEvent.VK_ADD)) {
 				applyFontSize(Math.min(fontSize + 1, 32));
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED
-					&& e.isControlDown()
-					&& !e.isAltDown()
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown() && !e.isAltDown()
 					&& (e.getKeyCode() == KeyEvent.VK_MINUS || e.getKeyCode() == KeyEvent.VK_SUBTRACT)) {
 				applyFontSize(Math.max(fontSize - 1, 8));
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown() && !e.isAltDown() && e.getKeyCode() == KeyEvent.VK_0) {
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown() && !e.isAltDown()
+					&& e.getKeyCode() == KeyEvent.VK_0) {
 				applyFontSize(LocalSettingsStore.DEFAULT_FONT_SIZE);
 				return true;
 			}
 
-			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_ESCAPE && activeScreenComponent != null) {
-				applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
-				return true;
-			}
-
-			if (e.getID() == KeyEvent.KEY_PRESSED
-					&& e.getKeyCode() == KeyEvent.VK_TAB
-					&& !e.isAltDown()
-					&& !e.isControlDown()
-					&& mainSplitPane.isVisible()) {
+			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_TAB && !e.isAltDown()
+					&& !e.isControlDown() && isVisible(splitPane)) {
 				return transferPanelFocus();
 			}
 
@@ -406,356 +345,20 @@ public class MainWindow implements NuclrEventListener {
 		};
 	}
 
+	private boolean isVisible(SplitPanel c) {
+		return this.activeScreenComponent == c;
+	}
+
 	private boolean transferPanelFocus() {
 		// TODO Auto-generated method stub
 		return false;
 	}
 
-	private void startQuickViewRefreshTimer() {
-		quickViewRefreshTimer = new Timer(150, e -> refreshQuickViewPreview());
-		quickViewRefreshTimer.start();
-	}
-
-	private void configurePanel(PanelState state, ResourceContentPlugin template, boolean leftSide) {
-		try {
-			ResourceContentPlugin provider = pluginRegistry.createPanelProviderInstance(template);
-			List<PluginPathResource> roots = provider.getChangeDriveResources();
-			if (roots.isEmpty()) {
-				safeUnload(provider);
-				return;
-			}
-
-			PanelLayer layer = openPanelLayer(provider, roots.get(0));
-			if (layer == null) {
-				return;
-			}
-
-			state.push(layer);
-			renderActivePanel(state);
-
-			if (leftSide && rightPanelState.isEmpty() ) {
-				
-				SwingUtilities.invokeLater(()->{
-					var plugin = layer.provider;
-					plugin.panel().requestFocusInWindow();
-				});
-				focusedPanelState = state;
-				rebuildFunctionBar();
-			}
-
-			mainFrame.revalidate();
-			mainFrame.repaint();
-		} catch (Exception ex) {
-			log.error("Failed to initialize panel provider [{}]: {}", template.getClass().getName(), ex.getMessage(), ex);
-			Alerts.showMessageDialog(mainFrame, "Cannot initialize panel plugin:\n" + ex.getMessage(), "Plugin Error", JOptionPane.ERROR_MESSAGE);
-		}
-	}
-
-	private void renderActivePanel(PanelState state) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private PanelLayer openPanelLayer(ResourceContentPlugin provider, PluginPathResource pluginPathResource) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	private void safeUnload(ResourceContentPlugin provider) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private void showChangeDrive(boolean leftSide) {
-		PanelState state = leftSide ? leftPanelState : rightPanelState;
-		PanelLayer base = state.bottom();
-		if (base == null) {
-			return;
-		}
-		ChangeDrivePopup.show(
-				leftSide ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent(),
-				base.provider.getChangeDriveResources(),
-				base.currentResource,
-				resource -> openPanelResource(state, resource));
-	}
-
-	private Object openPanelResource(PanelState state, PluginPathResource resource) {
-		return null;
-	}
-
-	private JLabel placeholder(String text) {
-		JLabel label = new JLabel(text, JLabel.CENTER);
-		label.setFont(label.getFont().deriveFont(Font.PLAIN, 14f));
-		return label;
-	}
-
-	private void toggleQuickView() {
-		if (quickViewActive) {
-			closeQuickView();
-			return;
-		}
-
-		PanelState sourceState = focusedPanelState;
-		if (sourceState == null) {
-			return;
-		}
-
-		Path selectedPath = resolveSelectedPath(sourceState);
-		if (selectedPath == null) {
-			return;
-		}
-
-		boolean sourceIsRight = sourceState == rightPanelState;
-		quickViewShowingLeft = sourceIsRight;
-		quickViewSourceState = sourceState;
-		quickViewCurrentPath = selectedPath;
-		quickViewReplacedComponent = quickViewShowingLeft ? mainSplitPane.getLeftComponent() : mainSplitPane.getRightComponent();
-
-		if (quickViewShowingLeft) {
-			mainSplitPane.setLeftComponent(quickViewPanel.getPanel());
-		} else {
-			mainSplitPane.setRightComponent(quickViewPanel.getPanel());
-		}
-
-		quickViewPanel.show(selectedPath);
-		quickViewActive = true;
-		mainSplitPane.setDividerLocation(0.5);
-		mainFrame.revalidate();
-		mainFrame.repaint();
-	}
-
-	private void closeQuickView() {
-		if (!quickViewActive) {
-			return;
-		}
-
-		quickViewPanel.stop();
-		if (quickViewReplacedComponent != null) {
-			if (quickViewShowingLeft) {
-				mainSplitPane.setLeftComponent(quickViewReplacedComponent);
-			} else {
-				mainSplitPane.setRightComponent(quickViewReplacedComponent);
-			}
-		}
-
-		quickViewReplacedComponent = null;
-		quickViewSourceState = null;
-		quickViewCurrentPath = null;
-		quickViewActive = false;
-		restoreMainDividerLocation();
-		mainFrame.revalidate();
-		mainFrame.repaint();
-	}
-
-	private void refreshQuickViewPreview() {
-		if (!quickViewActive || quickViewSourceState == null) {
-			return;
-		}
-
-		Path selectedPath = resolveSelectedPath(quickViewSourceState);
-		if (selectedPath == null || selectedPath.equals(quickViewCurrentPath)) {
-			return;
-		}
-
-		quickViewCurrentPath = selectedPath;
-		quickViewPanel.show(selectedPath);
-	}
-
-	private Path resolveSelectedPath(PanelState state) {
-		if (state == null || state.component() == null) {
-			return null;
-		}
-
-		Path path = trySelectedPathMethod(state.component(), "getSelectedPath");
-		if (path != null) {
-			return path;
-		}
-
-		PluginPathResource selectedResource = trySelectedResourceMethod(state.component(), "getSelectedResource");
-		if (selectedResource != null && selectedResource.getPath() != null) {
-			return selectedResource.getPath();
-		}
-
-		Path reflectedTableSelection = tryResolveTableSelection(state.component());
-		if (reflectedTableSelection != null) {
-			return reflectedTableSelection;
-		}
-
-		return state.currentResource() != null ? state.currentResource().getPath() : null;
-	}
-
-	private Path trySelectedPathMethod(Object target, String methodName) {
-		try {
-			Method method = target.getClass().getMethod(methodName);
-			Object value = method.invoke(target);
-			return value instanceof Path path ? path : null;
-		} catch (Exception ignored) {
-			return null;
-		}
-	}
-
-	private PluginPathResource trySelectedResourceMethod(Object target, String methodName) {
-		try {
-			Method method = target.getClass().getMethod(methodName);
-			Object value = method.invoke(target);
-			return value instanceof PluginPathResource resource ? resource : null;
-		} catch (Exception ignored) {
-			return null;
-		}
-	}
-
-	private Path tryResolveTableSelection(Object panel) {
-		try {
-			Field tableField = panel.getClass().getDeclaredField("table");
-			tableField.setAccessible(true);
-			Object tableObject = tableField.get(panel);
-			if (!(tableObject instanceof javax.swing.JTable table)) {
-				return null;
-			}
-
-			int selectedRow = table.getSelectedRow();
-			if (selectedRow < 0) {
-				return null;
-			}
-
-			int modelRow = table.convertRowIndexToModel(selectedRow);
-			Object model = table.getModel();
-			Method getEntryAt = model.getClass().getMethod("getEntryAt", int.class);
-			Object entry = getEntryAt.invoke(model, modelRow);
-			if (entry == null) {
-				return null;
-			}
-
-			try {
-				Method pathMethod = entry.getClass().getMethod("path");
-				Object path = pathMethod.invoke(entry);
-				if (path instanceof Path selectedPath) {
-					return selectedPath;
-				}
-			} catch (NoSuchMethodException ignored) {
-				Method getPathMethod = entry.getClass().getMethod("getPath");
-				Object path = getPathMethod.invoke(entry);
-				if (path instanceof Path selectedPath) {
-					return selectedPath;
-				}
-			}
-		} catch (Exception ignored) {
-			return null;
-		}
-
-		return null;
-	}
-	
-	private void onFocusGained(ResourceContentPlugin plugin) {
-		plugin.panel().requestFocusInWindow();
-	}
-
-	@EventListener
-	public void onShowConsoleScreen(ShowConsoleScreenEvent event) {
-		functionKeyBar.resetDefaultLabels();
-		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-		mainFrame.remove(mainSplitPane);
-		mainFrame.add(consolePanel.getConsolePanel(), BorderLayout.CENTER);
-		mainSplitPane.setVisible(false);
-		consolePanel.getConsolePanel().setVisible(true);
-		consolePanel.getTermWidget().requestFocusInWindow();
-		mainFrame.revalidate();
-		mainFrame.repaint();
-	}
-
-	@EventListener
-	public void onShowEditorScreen(ShowEditorScreenEvent event) {
-		lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-		PluginPathResource resource = new PathQuickViewItem(event.getPath());
-		var provider = pluginRegistry.getPluginByResource(resource);
-		if (provider == null) {
-			Alerts.showMessageDialog(mainFrame, "No screen plugin can open:\n" + event.getPath().getFileName(), "No Screen Provider", JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-
-		activeScreenProvider = provider;
-		activeScreenComponent = provider.panel();
-		mainFrame.remove(mainSplitPane);
-		mainSplitPane.setVisible(false);
-		mainFrame.add(activeScreenComponent, BorderLayout.CENTER);
-		activeScreenComponent.setVisible(true);
-		activeScreenComponent.requestFocusInWindow();
-		functionKeyBar.setLabels(Map.of(1, "Help", 10, "Exit"));
-		mainFrame.revalidate();
-		mainFrame.repaint();
-	}
-
-	@EventListener
-	public void onShowFilePanelsView(ShowFilePanelsViewEvent event) {
-		if (activeScreenComponent != null) {
-			mainFrame.remove(activeScreenComponent);
-			activeScreenComponent = null;
-			activeScreenProvider = null;
-		}
-		mainFrame.remove(consolePanel.getConsolePanel());
-		mainFrame.add(mainSplitPane, BorderLayout.CENTER);
-		consolePanel.getConsolePanel().setVisible(false);
-		mainSplitPane.setVisible(true);
-		if (lastFocusedInSplitPane != null) {
-			lastFocusedInSplitPane.requestFocusInWindow();
-		}
-		rebuildFunctionBar();
-		mainFrame.revalidate();
-		mainFrame.repaint();
-	}
-
-	@EventListener
-	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
-		MenuResource menuResource = event.getMenuResource();
-		if (menuResource != null) {
-			Map<String, Object> payload = new java.util.HashMap<>();
-			payload.put("functionKeyNumber", event.getFunctionKeyNumber());
-			payload.put("label", event.getLabel());
-			if (focusedPanelState != null) {
-				payload.put("sourceProvider", focusedPanelState.provider());
-				payload.put("resource", focusedPanelState.currentResource());
-			}
-			eventBus.emit(menuResource.getEventType(), payload);
-			return;
-		}
-
-		if (event.getFunctionKeyNumber() == 10) {
-			if (activeScreenComponent != null) {
-				applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
-			} else {
-				confirmAndExitApplication();
-			}
-			return;
-		}
-
-		if (event.getFunctionKeyNumber() == 11) {
-			pluginManagementPopup.show(mainFrame);
-		}
-	}
-
 	private void toggleConsole() {
-		if (mainSplitPane.isVisible()) {
-			applicationEventPublisher.publishEvent(new ShowConsoleScreenEvent(this));
+		if (isVisible(splitPane)) {
+			eventBus.emit(Events.ShowConsoleScreenEvent);
 		} else {
-			applicationEventPublisher.publishEvent(new ShowFilePanelsViewEvent(this));
-		}
-	}
-
-	private void onFocusOwnerChanged(Component focusOwner) {
-		if (focusOwner == null || !mainSplitPane.isVisible()) {
-			return;
-		}
-
-		PanelState newFocused = null;
-		if (leftPanelState.component() != null && SwingUtilities.isDescendingFrom(focusOwner, leftPanelState.component())) {
-			newFocused = leftPanelState;
-		} else if (rightPanelState.component() != null && SwingUtilities.isDescendingFrom(focusOwner, rightPanelState.component())) {
-			newFocused = rightPanelState;
-		}
-
-		if (newFocused != null && newFocused != focusedPanelState) {
-			focusedPanelState = newFocused;
-			rebuildFunctionBar();
+			eventBus.emit(Events.ShowFilePanelsViewEvent);
 		}
 	}
 
@@ -781,16 +384,15 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	private void rebuildFunctionBar() {
-		if (!mainSplitPane.isVisible()) {
+		
+		if (!isVisible(splitPane)) {
 			return;
 		}
-		if (focusedPanelState == null || focusedPanelState.provider() == null) {
-			functionKeyBar.resetDefaultLabels();
-			return;
-		}
+		
+		functionKeyBar.resetDefaultLabels();
 
-		List<MenuResource> resources = focusedPanelState.provider().menuItems(focusedPanelState.currentResource());
-		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
+//		List<NuclrMenuResource> resources = focusedPanelState.provider().menuItems(focusedPanelState.currentResource());
+//		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
 	}
 
 	private void applyFontSize(int size) {
@@ -800,50 +402,28 @@ public class MainWindow implements NuclrEventListener {
 		saveFontSize(fontSize);
 	}
 
+	private void saveFontSize(int fontSize) {
+		this.settings.set(SettingsNamespace, "fontSize", fontSize);
+	}
+
 	private void toggleFullscreen() {
 		if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0) {
 			mainFrame.setExtendedState(JFrame.NORMAL);
 		} else {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		}
-		restoreMainDividerLocation();
-	}
-
-	private void moveMainDivider(int deltaPixels) {
-		int currentLocation = mainSplitPane.getDividerLocation();
-		int minimumLocation = mainSplitPane.getMinimumDividerLocation();
-		int maximumLocation = mainSplitPane.getMaximumDividerLocation();
-		int targetLocation = Math.max(minimumLocation, Math.min(maximumLocation, currentLocation + deltaPixels));
-		if (targetLocation != currentLocation) {
-			mainSplitPane.setDividerLocation(targetLocation);
-		}
-	}
-
-	private void restoreMainDividerLocation() {
-		SwingUtilities.invokeLater(() -> {
-			if (mainSplitPane.getLeftComponent() == null || mainSplitPane.getRightComponent() == null) {
-				return;
-			}
-			mainSplitPane.setDividerLocation(dividerRatio);
-		});
 	}
 
 	private void confirmAndExitApplication() {
-		Object[] options = {"Yes", "No"};
-		int choice = JOptionPane.showOptionDialog(
-				mainFrame,
-				"Exit Nuclr Commander?",
-				"Confirm Exit",
-				JOptionPane.YES_NO_OPTION,
-				JOptionPane.QUESTION_MESSAGE,
-				null,
-				options,
-				options[1]);
+		Object[] options = { "Yes", "No" };
+		int choice = JOptionPane.showOptionDialog(mainFrame, "Exit Nuclr Commander?", "Confirm Exit",
+				JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[1]);
 		if (choice == 0 || choice == JOptionPane.YES_OPTION) {
 			Nuclr.exit();
 		}
 	}
 
+	/*
 	private void saveWindowState() {
 		var settings = settingsStore.loadOrDefault();
 		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
@@ -851,53 +431,18 @@ public class MainWindow implements NuclrEventListener {
 		int height = isMaximized ? settings.windowHeight() : mainFrame.getHeight();
 		int x = isMaximized ? settings.windowX() : mainFrame.getX();
 		int y = isMaximized ? settings.windowY() : mainFrame.getY();
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(),
-				width,
-				height,
-				x,
-				y,
-				isMaximized,
-				settings.lastOpenedPath(),
-				settings.autosaveInterval(),
-				dividerRatio,
-				settings.colors(),
-				fontSize));
-	}
-
-	private void saveDividerRatio(double ratio) {
-		var settings = settingsStore.loadOrDefault();
-		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(),
-				settings.windowWidth(),
-				settings.windowHeight(),
-				settings.windowX(),
-				settings.windowY(),
-				isMaximized,
-				settings.lastOpenedPath(),
-				settings.autosaveInterval(),
-				ratio,
-				settings.colors(),
-				fontSize));
+		settingsStore.save(new LocalSettingsStore.AppSettings(settings.theme(), width, height, x, y, isMaximized,
+				settings.lastOpenedPath(), settings.autosaveInterval(), dividerRatio, settings.colors(), fontSize));
 	}
 
 	private void saveFontSize(int size) {
 		var settings = settingsStore.loadOrDefault();
 		boolean isMaximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
-		settingsStore.save(new LocalSettingsStore.AppSettings(
-				settings.theme(),
-				settings.windowWidth(),
-				settings.windowHeight(),
-				settings.windowX(),
-				settings.windowY(),
-				isMaximized,
-				settings.lastOpenedPath(),
-				settings.autosaveInterval(),
-				dividerRatio,
-				settings.colors(),
-				size));
+		settingsStore.save(new LocalSettingsStore.AppSettings(settings.theme(), settings.windowWidth(),
+				settings.windowHeight(), settings.windowX(), settings.windowY(), isMaximized, settings.lastOpenedPath(),
+				settings.autosaveInterval(), dividerRatio, settings.colors(), size));
 	}
+	 */
 
 	private void applyThemeScheme() {
 		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
@@ -911,9 +456,14 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	@Override
-	public void handleMessage(String type, Map<String, Object> event) {
-		// TODO Auto-generated method stub
+	public void handleMessage(String source, String type, Map<String, Object> event) {
+
+		if (type.equals(Events.ShowFilePanelsViewEvent)) {
+		//	onShowFilePanelsView();
+		}
 		
+		
+
 	}
 
 	@Override
@@ -921,4 +471,9 @@ public class MainWindow implements NuclrEventListener {
 		// TODO Auto-generated method stub
 		return false;
 	}
+	
+	public JFrame getMainFrame() {
+		return mainFrame;
+	}
+
 }

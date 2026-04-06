@@ -32,8 +32,8 @@ public class ConsolePanel {
 	private JPanel consolePanel;
 	private JediTermWidget termWidget;
 
-	@PostConstruct
 	public void init() {
+
 		log.info("Initializing ConsolePanel...");
 
 		consolePanel = new JPanel(new BorderLayout());
@@ -41,22 +41,19 @@ public class ConsolePanel {
 		DefaultSettingsProvider settings = new DefaultSettingsProvider() {
 			@Override
 			public TextStyle getDefaultStyle() {
-				return new TextStyle(
-						TerminalColor.fromColor(new com.jediterm.core.Color(255, 255, 255)),
+				return new TextStyle(TerminalColor.fromColor(new com.jediterm.core.Color(255, 255, 255)),
 						TerminalColor.fromColor(new com.jediterm.core.Color(0, 0, 0)));
 			}
 		};
-		
+
 		settings.useAntialiasing();
-		
+
 		termWidget = new JediTermWidget(settings);
 
 		consolePanel.add(termWidget, BorderLayout.CENTER);
 
 		// Pick a shell per OS (very basic)
-		String[] cmd = SystemUtils.isOsWindows()
-				? new String[] { "cmd.exe" }
-				: new String[] { "/bin/bash", "-l" };
+		String[] cmd = SystemUtils.isOsWindows() ? new String[] { "cmd.exe" } : new String[] { "/bin/bash", "-l" };
 
 		try {
 			Map<String, String> env = new HashMap<>(System.getenv());
@@ -69,8 +66,8 @@ public class ConsolePanel {
 			termWidget.start(); // starts the terminal session
 		} catch (Exception e) {
 			log.error("Failed to start terminal session", e);
-			JOptionPane.showMessageDialog(consolePanel, "Failed to start terminal session: " + e.getMessage(),
-					"Error", JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(consolePanel, "Failed to start terminal session: " + e.getMessage(), "Error",
+					JOptionPane.ERROR_MESSAGE);
 		}
 
 		log.info("ConsolePanel initialized successfully.");

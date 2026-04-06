@@ -23,7 +23,6 @@ import java.awt.Font;
 import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,9 +38,8 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.common.ThemeSchemeStore;
-import dev.nuclr.commander.plugin.PluginDescriptor;
 import dev.nuclr.commander.plugin.PluginRegistry;
-import dev.nuclr.plugin.ResourceContentPlugin;
+import dev.nuclr.plugin.NuclrPlugin;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -72,7 +70,7 @@ public class QuickViewPanel {
 	private volatile AtomicBoolean currentCancelled;
 
 	/** The provider whose content is currently displayed (null if none). */
-	private volatile ResourceContentPlugin activeProvider;
+	private volatile NuclrPlugin activeProvider;
 
 	/**
 	 * Monotonically increasing counter. Each call to show() increments it.
@@ -85,7 +83,6 @@ public class QuickViewPanel {
 	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
 	private static final String CARD_FOLDER      = "FolderQuickViewPanel";
 
-	@PostConstruct
 	public void init() {
 		log.info("QuickViewPanel initialized");
 		this.panel = new JPanel(new CardLayout());
@@ -188,7 +185,7 @@ public class QuickViewPanel {
 			t.interrupt();
 			currentLoadThread = null;
 		}
-		ResourceContentPlugin prev = activeProvider;
+		NuclrPlugin prev = activeProvider;
 		if (prev != null) {
 			activeProvider = null;
 			closeQuietly(prev);
@@ -202,7 +199,7 @@ public class QuickViewPanel {
 		return currentGeneration.get() != myGen || Thread.currentThread().isInterrupted();
 	}
 
-	private void closeQuietly(ResourceContentPlugin provider) {
+	private void closeQuietly(NuclrPlugin provider) {
 		try {
 			provider.closeResource();
 		} catch (Exception e) {

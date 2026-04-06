@@ -1,23 +1,24 @@
 package dev.nuclr.commander.ui.quickView;
 
 import java.io.BufferedInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.UUID;
 
-import dev.nuclr.plugin.PluginPathResource;
+import dev.nuclr.plugin.NuclrResourcePath;
 import lombok.Data;
 
 /**
- * {@link PluginPathResource} adapter for a NIO.2 {@link Path}.
+ * {@link NuclrResourcePath} adapter for a NIO.2 {@link Path}.
  *
  * <p>Works with any filesystem backend (local, ZIP, SFTP, etc.) — plugins
  * receive a plain {@link InputStream} and never see the underlying path.
  */
 @Data
-public class PathQuickViewItem extends PluginPathResource {
+public class PathQuickViewItem extends NuclrResourcePath {
 
 	private final Path path;
 
@@ -73,7 +74,7 @@ public class PathQuickViewItem extends PluginPathResource {
 	}
 
 	@Override
-	public InputStream openStream() throws Exception {
+	public InputStream openStream() throws IOException {
 		Objects.requireNonNull(path, "path");
 		return new BufferedInputStream(Files.newInputStream(path));
 	}

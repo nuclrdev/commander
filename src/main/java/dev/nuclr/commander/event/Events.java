@@ -14,26 +14,17 @@
 	See the License for the specific language governing permissions and
 	limitations under the License.
 
- */
-package dev.nuclr.commander.ui.main;
+*/
+package dev.nuclr.commander.event;
 
-import javax.swing.JComponent;
+public interface Events {
 
-import dev.nuclr.plugin.PluginPathResource;
-import dev.nuclr.plugin.ResourceContentPlugin;
-import lombok.Data;
+	public static final String ShowFilePanelsViewEvent = "show.file.panels.view.event";
 
-@Data
-public class PanelLayer {
+	public static final String ShowChangeDriveLeftPopup = "show.change.drive.popup.left.event";
 
-	public final ResourceContentPlugin provider;
-	public final JComponent component;
-	public PluginPathResource currentResource;
+	public static final String ShowChangeDriveRightPopup = "show.change.drive.popup.right.event";
 
-	public PanelLayer(ResourceContentPlugin provider, JComponent component, PluginPathResource currentResource) {
-		this.provider = provider;
-		this.component = component;
-		this.currentResource = currentResource;
-	}
+	public static final String ShowConsoleScreenEvent = "show.console.screen.event";
 
 }

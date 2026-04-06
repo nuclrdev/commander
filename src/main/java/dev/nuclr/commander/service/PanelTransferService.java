@@ -23,30 +23,30 @@ import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
 
-import dev.nuclr.plugin.PluginPathResource;
+import dev.nuclr.plugin.NuclrResourcePath;
 
 @Service
 public class PanelTransferService {
 
 	private static final int COPY_BUFFER_SIZE = 64 * 1024;
 
-	public void copy(List<PluginPathResource> sources, Path destinationDirectory) throws IOException {
+	public void copy(List<NuclrResourcePath> sources, Path destinationDirectory) throws IOException {
 		transfer(sources, new TransferOptions(destinationDirectory, ConflictResolution.OVERWRITE, null), false);
 	}
 
-	public void move(List<PluginPathResource> sources, Path destinationDirectory) throws IOException {
+	public void move(List<NuclrResourcePath> sources, Path destinationDirectory) throws IOException {
 		transfer(sources, new TransferOptions(destinationDirectory, ConflictResolution.OVERWRITE, null), true);
 	}
 
-	public void copy(List<PluginPathResource> sources, TransferOptions options) throws IOException {
+	public void copy(List<NuclrResourcePath> sources, TransferOptions options) throws IOException {
 		transfer(sources, options, false);
 	}
 
-	public void move(List<PluginPathResource> sources, TransferOptions options) throws IOException {
+	public void move(List<NuclrResourcePath> sources, TransferOptions options) throws IOException {
 		transfer(sources, options, true);
 	}
 
-	private void transfer(List<PluginPathResource> sources, TransferOptions options, boolean deleteSource) throws IOException {
+	private void transfer(List<NuclrResourcePath> sources, TransferOptions options, boolean deleteSource) throws IOException {
 		if (sources == null || sources.isEmpty()) {
 			return;
 		}
@@ -62,7 +62,7 @@ public class PanelTransferService {
 
 		for (int destinationIndex = 0; destinationIndex < destinationDirectories.size(); destinationIndex++) {
 			Path destinationDirectory = destinationDirectories.get(destinationIndex);
-			for (PluginPathResource source : sources) {
+			for (NuclrResourcePath source : sources) {
 				if (source == null || source.getPath() == null) {
 					continue;
 				}
@@ -92,7 +92,7 @@ public class PanelTransferService {
 	}
 
 	private boolean copyPath(
-			PluginPathResource source,
+			NuclrResourcePath source,
 			Path sourcePath,
 			Path targetPath,
 			TransferOptions options,
@@ -335,13 +335,13 @@ public class PanelTransferService {
 		return fileName != null ? fileName.toString() : path.toString();
 	}
 
-	private long countFiles(List<PluginPathResource> sources) throws IOException {
+	private long countFiles(List<NuclrResourcePath> sources) throws IOException {
 		return countFiles(sources, null);
 	}
 
-	private long countFiles(List<PluginPathResource> sources, TransferOptions options) throws IOException {
+	private long countFiles(List<NuclrResourcePath> sources, TransferOptions options) throws IOException {
 		long total = 0L;
-		for (PluginPathResource source : sources) {
+		for (NuclrResourcePath source : sources) {
 			if (source == null || source.getPath() == null) {
 				continue;
 			}
@@ -362,13 +362,13 @@ public class PanelTransferService {
 		return total * destinationDirectories(options).size();
 	}
 
-	private long countBytes(List<PluginPathResource> sources) throws IOException {
+	private long countBytes(List<NuclrResourcePath> sources) throws IOException {
 		return countBytes(sources, null);
 	}
 
-	private long countBytes(List<PluginPathResource> sources, TransferOptions options) throws IOException {
+	private long countBytes(List<NuclrResourcePath> sources, TransferOptions options) throws IOException {
 		long total = 0L;
-		for (PluginPathResource source : sources) {
+		for (NuclrResourcePath source : sources) {
 			if (source == null || source.getPath() == null) {
 				continue;
 			}

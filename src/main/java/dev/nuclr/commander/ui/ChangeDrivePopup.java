@@ -11,7 +11,7 @@ import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
 
-import dev.nuclr.plugin.PluginPathResource;
+import dev.nuclr.plugin.NuclrResourcePath;
 
 /**
  * Shows a popup menu listing change-drive resources for the active panel plugin.
@@ -20,14 +20,14 @@ public class ChangeDrivePopup {
 
     public static void show(
             Component anchorComponent,
-            List<? extends PluginPathResource> resources,
-            PluginPathResource currentResource,
-            Consumer<PluginPathResource> onSelect) {
+            List<? extends NuclrResourcePath> resources,
+            NuclrResourcePath currentResource,
+            Consumer<NuclrResourcePath> onSelect) {
         JPopupMenu popup = new JPopupMenu("Change Drive");
 
         JMenuItem currentItem = null;
 
-        for (PluginPathResource root : resources) {
+        for (NuclrResourcePath root : resources) {
             String label = root.getName();
             JMenuItem item = new JMenuItem(label);
             item.addActionListener(e -> onSelect.accept(root));
@@ -54,7 +54,7 @@ public class ChangeDrivePopup {
         }
     }
 
-    private static boolean sameResource(PluginPathResource left, PluginPathResource right) {
+    private static boolean sameResource(NuclrResourcePath left, NuclrResourcePath right) {
         if (left == right) {
             return true;
         }
