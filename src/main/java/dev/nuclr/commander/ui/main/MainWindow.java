@@ -345,6 +345,15 @@ public class MainWindow implements NuclrEventListener {
 			return false;
 		};
 	}
+	
+	private void makeCardVisible(String cardName) {
+		this.cardLayout.show(this.cardPanel, cardName);
+		if (cardName.equals(SplitPanel)) {
+			this.activeScreenComponent = this.splitPane;
+		} else if (cardName.equals(ConsolePanel)) {
+			this.activeScreenComponent = this.consolePanel.getConsolePanel();
+		}
+	}
 
 	private boolean isVisible(SplitPanel c) {
 		return this.activeScreenComponent == c;
@@ -356,6 +365,7 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	private void toggleConsole() {
+		
 		if (isVisible(splitPane)) {
 			eventBus.emit(Events.ShowConsoleScreenEvent);
 		} else {
@@ -460,7 +470,7 @@ public class MainWindow implements NuclrEventListener {
 	public void handleMessage(String source, String type, Map<String, Object> event) {
 
 		if (type.equals(Events.ShowFilePanelsViewEvent)) {
-		//	onShowFilePanelsView();
+			onShowFilePanelsView();
 		} else if (type.equals(Events.ShowConsoleScreenEvent)) {
 			onShowConsoleScreen();
 		}
@@ -476,12 +486,9 @@ public class MainWindow implements NuclrEventListener {
 			this.cardPanel.add(consolePanel.getConsolePanel(), ConsolePanel);
 		}
 		
-		this.cardLayout.show(this.cardPanel, ConsolePanel);
+		this.makeCardVisible(ConsolePanel);
 
 		functionKeyBar.resetDefaultLabels();
-
-//		var lastFocusedInSplitPane = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-//		consolePanel.getConsolePanel().setVisible(true);
 
 		consolePanel.getTermWidget().requestFocusInWindow();
 
@@ -489,6 +496,14 @@ public class MainWindow implements NuclrEventListener {
 
 		mainFrame.repaint();
 
+	}
+	
+	public void onShowFilePanelsView() {
+		log.info("Switching to file panels view...");
+		this.makeCardVisible(SplitPanel);
+		rebuildFunctionBar();
+		mainFrame.revalidate();
+		mainFrame.repaint();
 	}
 
 	@Override
