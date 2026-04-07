@@ -200,9 +200,17 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private void toggleQuickView() {
 		
 		if (quickViewActive) {
+			
 			log.info("Toggling Quick View: Deactivating");
+			
 		} else {
+			
 			log.info("Toggling Quick View: Activating");
+			
+			if (quickViewPanel.isInitialized() == false) {
+				quickViewPanel.init();
+			}
+			
 		}
 		
 		quickViewActive = !quickViewActive;

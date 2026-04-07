@@ -51,6 +51,8 @@ import lombok.extern.slf4j.Slf4j;
 public class QuickViewPanel {
 
 	private JPanel panel;
+	
+	private boolean initialized = false;
 
 	@Autowired
 	private NoQuickViewAvailablePanel noQuickViewAvailablePanel;
@@ -89,6 +91,7 @@ public class QuickViewPanel {
 		this.panel.add(noQuickViewAvailablePanel, CARD_NO_PROVIDER);
 		this.panel.add(folderQuickViewPanel, CARD_FOLDER);
 		this.panel.add(buildLoadingPanel(), CARD_LOADING);
+		initialized = true;
 	}
 
 	public void show(Path path) {
