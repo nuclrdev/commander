@@ -360,8 +360,7 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	private boolean transferPanelFocus() {
-		// TODO Auto-generated method stub
-		return false;
+		return splitPane.switchFocus();
 	}
 
 	private void toggleConsole() {

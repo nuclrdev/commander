@@ -39,6 +39,7 @@ import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.platform.Settings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
+import dev.nuclr.plugin.NuclrPlugin;
 import dev.nuclr.plugin.NuclrResourcePath;
 import lombok.extern.slf4j.Slf4j;
 
@@ -49,10 +50,11 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	public static final String SettingsNamespace = MainWindow.SettingsNamespace + ".SplitPanel.";
 
 	private JSplitPane mainSplitPane;
-	private JComponent leftComponent;
-	private JComponent rightComponent;
+	private NuclrPlugin leftPlugin;
+	private NuclrPlugin rightPlugin;
 	private double dividerRatio = 0.5;
 	private boolean quickViewActive = false;
+	private Side focusedSide = Side.Right;
 
 	@Autowired
 	private QuickViewPanel quickViewPanel;
@@ -138,16 +140,14 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		{
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
 			plugin.openResource(resource, new AtomicBoolean(false));
-			var panel = plugin.panel();
-			setLeftComponent(panel);
+			setLeftComponent(plugin);
 		}
 		
 		// Right
 		{
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
 			plugin.openResource(resource, new AtomicBoolean(false));
-			var panel = plugin.panel();
-			setRightComponent(panel);
+			setRightComponent(plugin);
 		}
 		
 	}
@@ -162,15 +162,15 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		return label;
 	}
 
-	public void setLeftComponent(JComponent component) {
-		this.leftComponent = component;
-		this.mainSplitPane.setLeftComponent(component);
+	public void setLeftComponent(NuclrPlugin component) {
+		this.leftPlugin = component;
+		this.mainSplitPane.setLeftComponent(component.panel());
 		updateSplitPane();
 	}
 
-	public void setRightComponent(JComponent component) {
-		this.rightComponent = component;
-		this.mainSplitPane.setRightComponent(component);
+	public void setRightComponent(NuclrPlugin component) {
+		this.rightPlugin = component;
+		this.mainSplitPane.setRightComponent(component.panel());
 		updateSplitPane();
 	}
 
@@ -197,6 +197,14 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		return false;
 	}
 	
+	public boolean switchFocus() {
+		focusedSide = (focusedSide == Side.Left) ? Side.Right : Side.Left;
+		var target = (focusedSide == Side.Left) ? leftPlugin : rightPlugin;
+		log.info("Switching focus to: " + focusedSide + " (" + (target != null ? target.getClass().getSimpleName() : "null") + ")");
+		target.onFocusGained();
+		return true;
+	}
+
 	private void toggleQuickView() {
 		
 		if (quickViewActive) {
