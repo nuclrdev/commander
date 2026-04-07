@@ -54,7 +54,6 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private NuclrPlugin rightPlugin;
 	private double dividerRatio = 0.5;
 	private boolean quickViewActive = false;
-	private Side focusedSide = Side.Right;
 
 	@Autowired
 	private QuickViewPanel quickViewPanel;
@@ -148,6 +147,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
 			plugin.openResource(resource, new AtomicBoolean(false));
 			setRightComponent(plugin);
+			plugin.onFocusGained();
 		}
 		
 	}
@@ -198,10 +198,20 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 	
 	public boolean switchFocus() {
-		focusedSide = (focusedSide == Side.Left) ? Side.Right : Side.Left;
-		var target = (focusedSide == Side.Left) ? leftPlugin : rightPlugin;
-		log.info("Switching focus to: " + focusedSide + " (" + (target != null ? target.getClass().getSimpleName() : "null") + ")");
-		target.onFocusGained();
+		
+		if (leftPlugin == null && rightPlugin == null) {
+			log.info("No plugins to switch focus to.");
+			return false;
+		}
+		
+		if (leftPlugin.isFocused()) {
+			leftPlugin.onFocusLost();
+			rightPlugin.onFocusGained();
+		} else {
+			leftPlugin.onFocusGained();
+			rightPlugin.onFocusLost();
+		}
+		
 		return true;
 	}
 
