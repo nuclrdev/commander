@@ -18,16 +18,18 @@
 package dev.nuclr.commander.ui.main;
 
 import java.awt.Font;
+import java.awt.event.ActionEvent;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.swing.AbstractAction;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -38,7 +40,6 @@ import dev.nuclr.platform.Settings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.plugin.NuclrResourcePath;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -93,6 +94,20 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		this.add(mainSplitPane, java.awt.BorderLayout.CENTER);
 
 		loadDefaultPanels();
+		
+		// 2. Get the InputMap for the desired focus condition
+		var inputMap = this.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+
+		// 3. Map a KeyStroke to an action name (string key)
+		inputMap.put(KeyStroke.getKeyStroke("control pressed Q"), "quickView");
+
+		// 4. Map the action name to an Action in the ActionMap
+		this.getActionMap().put("quickView", new AbstractAction() {
+		    @Override
+		    public void actionPerformed(ActionEvent e) {
+		    		toggleQuickView();
+		    }
+		});
 
 	}
 
@@ -175,18 +190,24 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	@Override
 	public void handleMessage(String source, String type, Map<String, Object> event) {
-		// TODO Auto-generated method stub
-
 	}
 
 	@Override
 	public boolean isMessageSupported(String type) {
-		// TODO Auto-generated method stub
 		return false;
 	}
-
-	public void toggleQuickView() {
-
+	
+	private void toggleQuickView() {
+		
+		if (quickViewActive) {
+			log.info("Toggling Quick View: Deactivating");
+		} else {
+			log.info("Toggling Quick View: Activating");
+		}
+		
+		quickViewActive = !quickViewActive;
 	}
+	
+	
 
 }

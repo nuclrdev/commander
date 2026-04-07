@@ -277,13 +277,13 @@ public class MainWindow implements NuclrEventListener {
 				toggleConsole();
 				return true;
 			}
-
+/*
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_Q && e.isControlDown()
 					&& isVisible(splitPane)) {
 				splitPane.toggleQuickView();
 				return true;
 			}
-
+*/
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F1 && e.isAltDown()
 					&& isVisible(splitPane)) {
 				eventBus.emit(Events.ShowChangeDriveLeftPopup);
