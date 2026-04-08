@@ -103,7 +103,8 @@ public class QuickViewPanel {
 		var plugins = pluginRegistry.getPluginByItem(path);
 
 		if (plugins == null || plugins.isEmpty()) {
-			showNoProvider(path);
+			this.noQuickViewAvailablePlugin.openResource(path, currentCancelled);
+			showCard(noQuickViewAvailablePlugin);
 			return;
 		}
 

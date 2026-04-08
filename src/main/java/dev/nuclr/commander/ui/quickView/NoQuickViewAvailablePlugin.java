@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.JComponent;
 
-import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.platform.ThemeScheme;
@@ -30,9 +30,9 @@ import dev.nuclr.plugin.NuclrPlugin;
 import dev.nuclr.plugin.NuclrResourcePath;
 
 @Component
-@Lazy
 public class NoQuickViewAvailablePlugin implements NuclrPlugin {
 	
+	@Autowired
 	private NoQuickViewAvailablePanel panel;
 
 	@Override
@@ -101,11 +101,6 @@ public class NoQuickViewAvailablePlugin implements NuclrPlugin {
 
 	@Override
 	public JComponent panel() {
-		
-		if (panel == null) {
-			panel = new NoQuickViewAvailablePanel();
-		}
-		
 		return panel;
 	}
 
@@ -126,6 +121,7 @@ public class NoQuickViewAvailablePlugin implements NuclrPlugin {
 
 	@Override
 	public boolean openResource(NuclrResourcePath resource, AtomicBoolean cancelled) {
+		panel.setPath(resource.getPath());
 		return true;
 	}
 

@@ -90,6 +90,7 @@ public class SystemSettings implements Settings {
 		return LocalDataLocation.resolve(folder, LockFileName);
 	}
 
+	@Override
 	public boolean isDeveloperModeOn() {
 		return getOrDefault(DeveloperNamespace, DeveloperModeKey, false);
 	}
