@@ -17,30 +17,21 @@
 */
 package dev.nuclr.commander.ui.quickView;
 
-import java.awt.CardLayout;
-import java.awt.Color;
-import java.awt.Font;
-import java.lang.reflect.Constructor;
+import java.awt.BorderLayout;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.plugin.NuclrPlugin;
-import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -49,22 +40,22 @@ import lombok.extern.slf4j.Slf4j;
 @Lazy
 @Data
 public class QuickViewPanel {
-
-	private JPanel panel;
+	
+	private JPanel panel = new JPanel();
 	
 	private boolean initialized = false;
 
 	@Autowired
-	private NoQuickViewAvailablePanel noQuickViewAvailablePanel;
+	private NoQuickViewAvailablePlugin noQuickViewAvailablePlugin;
 
 	@Autowired
-	private FolderQuickViewPanel folderQuickViewPanel;
+	private FolderQuickViewPlugin folderQuickViewPlugin;
+	
+	@Autowired
+	private LoadingQuickViewPlugin loadingQuickViewPlugin;
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
-
-	@Autowired
-	private ThemeSchemeStore themeSchemeStore;
 
 	private volatile Thread currentLoadThread;
 
@@ -81,42 +72,38 @@ public class QuickViewPanel {
 	 */
 	private final AtomicLong currentGeneration = new AtomicLong(0);
 
-	private static final String CARD_LOADING     = "Loading";
-	private static final String CARD_NO_PROVIDER = "NoQuickViewAvailablePanel";
-	private static final String CARD_FOLDER      = "FolderQuickViewPanel";
-
 	public void init() {
 		log.info("QuickViewPanel initialized");
-		this.panel = new JPanel(new CardLayout());
-		this.panel.add(noQuickViewAvailablePanel, CARD_NO_PROVIDER);
-		this.panel.add(folderQuickViewPanel, CARD_FOLDER);
-		this.panel.add(buildLoadingPanel(), CARD_LOADING);
+		panel.setLayout(new BorderLayout());
 		initialized = true;
+		setActiveProvider(loadingQuickViewPlugin);
 	}
 
-	public void show(Path path) {
+	public void show(Path p) {
+		
+		var path = new PathQuickViewItem(p);
+		
 		// Claim the slot before stopping the old thread so that any in-flight
 		// thread sees its generation is stale as soon as we increment.
 		long myGen = currentGeneration.incrementAndGet();
+		
 		stop();
 
-		var cards = (CardLayout) panel.getLayout();
 		if (path == null) {
-			showNoProvider(null, cards);
+			showNoProvider(path);
 			return;
 		}
 
-		if (Files.isDirectory(path)) {
-			folderQuickViewPanel.show(path);
-			showCard(cards, CARD_FOLDER);
+		if (Files.isDirectory(path.getPath())) {
+			this.folderQuickViewPlugin.openResource(path, currentCancelled);
+			showCard(folderQuickViewPlugin);
 			return;
 		}
 
-		var item = new PathQuickViewItem(path);
-		var plugins = pluginRegistry.getPluginByItem(item);
+		var plugins = pluginRegistry.getPluginByItem(path);
 
 		if (plugins == null || plugins.isEmpty()) {
-			showNoProvider(path, cards);
+			showNoProvider(path);
 			return;
 		}
 
@@ -134,7 +121,7 @@ public class QuickViewPanel {
 		}
 
 		// Show loading feedback immediately while the plugin opens the file
-		showCard(cards, CARD_LOADING);
+		showCard(loadingQuickViewPlugin);
 
 		AtomicBoolean cancelled = new AtomicBoolean(false);
 		currentCancelled = cancelled;
@@ -147,7 +134,7 @@ public class QuickViewPanel {
 				long start = System.currentTimeMillis();
 				boolean success;
 				try {
-					success = plugin.openResource(item, cancelled);
+					success = plugin.openResource(path, cancelled);
 					log.info("Plugin [{}] open took {} ms", plugin.getClass().getName(),
 							System.currentTimeMillis() - start);
 				} catch (Exception e) {
@@ -163,19 +150,18 @@ public class QuickViewPanel {
 
 				if (success) {
 					activeProvider = plugin;
-					String card = plugin.getClass().getName();
-					if (!isStale(myGen)) showCard(cards, card);
+					if (!isStale(myGen)) showCard(activeProvider);
 					return;
 				}
 			}
 
 			// All plugins failed — nothing to show
-			if (!isStale(myGen)) showNoProvider(path, cards);
+			if (!isStale(myGen)) showNoProvider(path);
 		});
 	}
 
 	public void stop() {
-		folderQuickViewPanel.stopScan();
+		folderQuickViewPlugin.stopScan();
 		// Signal the in-flight plugin to abort before interrupting the thread,
 		// so the plugin can react even if it is not sensitive to thread interrupts.
 		AtomicBoolean c = currentCancelled;
@@ -210,57 +196,23 @@ public class QuickViewPanel {
 		}
 	}
 
-	private void showNoProvider(Path path, CardLayout cards) {
+	private void showNoProvider(PathQuickViewItem path) {
 		if (SwingUtilities.isEventDispatchThread()) {
-			noQuickViewAvailablePanel.setPath(path);
-			showCard(cards, CARD_NO_PROVIDER);
+			noQuickViewAvailablePlugin.openResource(path, currentCancelled);
+			showCard(noQuickViewAvailablePlugin);
 			return;
 		}
 
-		SwingUtilities.invokeLater(() -> showNoProvider(path, cards));
+		SwingUtilities.invokeLater(() -> showNoProvider(path));
 	}
 
-	private void showCard(CardLayout cards, String card) {
+	private void showCard(NuclrPlugin plugin) {
 		if (SwingUtilities.isEventDispatchThread()) {
-			cards.show(panel, card);
+			panel.add(plugin.panel(), BorderLayout.CENTER);
 			panel.revalidate();
 			panel.repaint();
 			return;
 		}
-
-		SwingUtilities.invokeLater(() -> showCard(cards, card));
 	}
 
-	private static JPanel buildLoadingPanel() {
-		JPanel p = new JPanel();
-		p.setBackground(Color.BLACK);
-		JLabel label = new JLabel("Loading\u2026", SwingConstants.CENTER);
-		label.setForeground(new Color(140, 140, 140));
-		label.setFont(label.getFont().deriveFont(Font.PLAIN, 13f));
-		p.add(label);
-		return p;
-	}
-
-	private Object currentPluginTheme() {
-		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
-		Font defaultFont = UIManager.getFont("defaultFont");
-		String fontFamily = defaultFont != null ? defaultFont.getFamily() : Font.MONOSPACED;
-		int themeFontSize = defaultFont != null ? defaultFont.getSize() : 12;
-		try {
-			Class<?> themeClass = Class.forName("dev.nuclr.plugin.PluginTheme");
-			Constructor<?> constructor = themeClass.getConstructor(
-					String.class,
-					Map.class,
-					String.class,
-					int.class);
-			return constructor.newInstance(
-					scheme.name(),
-					scheme.uiDefaults(),
-					fontFamily,
-					themeFontSize);
-		} catch (Exception e) {
-			log.debug("PluginTheme is not available on the current classpath", e);
-			return null;
-		}
-	}
 }
