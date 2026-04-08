@@ -35,6 +35,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.plugin.PluginRegistry;
+import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.platform.Settings;
 import dev.nuclr.platform.events.NuclrEventBus;
@@ -54,6 +55,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private NuclrPlugin rightPlugin;
 	private double dividerRatio = 0.5;
 	private boolean quickViewActive = false;
+	private PathQuickViewItem selectedPath;
 
 	@Autowired
 	private QuickViewPanel quickViewPanel;
@@ -163,12 +165,18 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 
 	public void setLeftComponent(NuclrPlugin component) {
+		
+		assert component != null : "Left component cannot be null";
+		
 		this.leftPlugin = component;
 		this.mainSplitPane.setLeftComponent(component.panel());
 		updateSplitPane();
 	}
 
 	public void setRightComponent(NuclrPlugin component) {
+		
+		assert component != null : "Right component cannot be null";
+		
 		this.rightPlugin = component;
 		this.mainSplitPane.setRightComponent(component.panel());
 		updateSplitPane();
@@ -190,11 +198,18 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	@Override
 	public void handleMessage(String source, String type, Map<String, Object> event) {
+		
+		if (type.equals("fs.path.selected")) {
+			var path = (Path) event.get("path");
+			this.selectedPath = new PathQuickViewItem(path);
+			log.info("Selected path updated to: " + this.selectedPath);
+		}
+		
 	}
 
 	@Override
 	public boolean isMessageSupported(String type) {
-		return false;
+		return type.equals("fs.path.selected");
 	}
 	
 	public boolean switchFocus() {
@@ -224,14 +239,12 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		} else {
 			
 			log.info("Toggling Quick View: Activating");
-			
+			 
 			if (quickViewPanel.isInitialized() == false) {
 				quickViewPanel.init();
 			}
 			
-			var path = leftPlugin.isFocused() ? leftPlugin.getCurrentPath() : rightPlugin.getCurrentPath();
-			
-			quickViewPanel.show();
+			quickViewPanel.show(this.selectedPath.getPath());
 			
 			if (leftPlugin.isFocused()) {
 				setRightComponent(quickViewPanel.getActiveProvider());

@@ -230,8 +230,12 @@ public final class PluginRegistry {
 	}
 
 	public List<NuclrPlugin> getPluginByItem(PathQuickViewItem item) {
-		// TODO Auto-generated method stub
-		return null;
+		return pluginTemplates.stream()
+				.filter(plugin -> plugin.supports(item))
+				.sorted(Comparator.comparingInt(NuclrPlugin::priority))
+				.map(plugin -> getPluginInstance(plugin.id()))
+				.filter(java.util.Objects::nonNull)
+				.collect(Collectors.toList());
 	}
 
 	public NuclrPlugin getPluginByResource(NuclrResourcePath resource) {

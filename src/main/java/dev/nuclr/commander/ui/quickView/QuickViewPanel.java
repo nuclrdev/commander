@@ -28,16 +28,17 @@ import javax.swing.SwingUtilities;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.plugin.NuclrPlugin;
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
-@Lazy
 @Data
 public class QuickViewPanel {
 	
@@ -45,6 +46,9 @@ public class QuickViewPanel {
 	
 	private boolean initialized = false;
 
+	@Autowired
+	private TaskExecutor taskExecutor;
+	
 	@Autowired
 	private NoQuickViewAvailablePlugin noQuickViewAvailablePlugin;
 
@@ -72,27 +76,29 @@ public class QuickViewPanel {
 	 */
 	private final AtomicLong currentGeneration = new AtomicLong(0);
 
+	@PostConstruct
 	public void init() {
+
 		log.info("QuickViewPanel initialized");
 		panel.setLayout(new BorderLayout());
 		initialized = true;
 		setActiveProvider(loadingQuickViewPlugin);
+
 	}
 
 	public void show(Path p) {
-		
+
+		if (p == null) {
+			return;
+		}
+
 		var path = new PathQuickViewItem(p);
-		
+
 		// Claim the slot before stopping the old thread so that any in-flight
 		// thread sees its generation is stale as soon as we increment.
 		long myGen = currentGeneration.incrementAndGet();
 		
 		stop();
-
-		if (path == null) {
-			showNoProvider(path);
-			return;
-		}
 
 		if (Files.isDirectory(path.getPath())) {
 			this.folderQuickViewPlugin.openResource(path, currentCancelled);

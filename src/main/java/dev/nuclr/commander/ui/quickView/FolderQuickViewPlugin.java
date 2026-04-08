@@ -28,12 +28,18 @@ import dev.nuclr.platform.ThemeScheme;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.plugin.NuclrPlugin;
 import dev.nuclr.plugin.NuclrResourcePath;
+import jakarta.annotation.PostConstruct;
 
 @Lazy
 @Component
 public class FolderQuickViewPlugin implements NuclrPlugin {
 	
 	private FolderQuickViewPanel panel;
+	
+	@PostConstruct
+	public void init() {
+		panel();
+	}
 
 	@Override
 	public boolean onFocusGained() {
