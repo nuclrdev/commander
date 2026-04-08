@@ -168,6 +168,10 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		
 		assert component != null : "Left component cannot be null";
 		
+		if (component == null) {
+			return;
+		}
+		
 		this.leftPlugin = component;
 		this.mainSplitPane.setLeftComponent(component.panel());
 		updateSplitPane();
@@ -176,6 +180,10 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	public void setRightComponent(NuclrPlugin component) {
 		
 		assert component != null : "Right component cannot be null";
+		
+		if (component == null) {
+			return;
+		}
 		
 		this.rightPlugin = component;
 		this.mainSplitPane.setRightComponent(component.panel());
@@ -203,6 +211,11 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			var path = (Path) event.get("path");
 			this.selectedPath = new PathQuickViewItem(path);
 			log.info("Selected path updated to: " + this.selectedPath);
+			
+			if (quickViewActive) {
+				quickViewPanel.show(this.selectedPath.getPath());
+			}
+			
 		}
 		
 	}

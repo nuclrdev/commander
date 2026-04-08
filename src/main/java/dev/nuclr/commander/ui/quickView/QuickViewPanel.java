@@ -17,17 +17,14 @@
 */
 package dev.nuclr.commander.ui.quickView;
 
-import java.awt.BorderLayout;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 
@@ -41,8 +38,6 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 @Data
 public class QuickViewPanel {
-	
-	private JPanel panel = new JPanel();
 	
 	private boolean initialized = false;
 
@@ -80,7 +75,6 @@ public class QuickViewPanel {
 	public void init() {
 
 		log.info("QuickViewPanel initialized");
-		panel.setLayout(new BorderLayout());
 		initialized = true;
 		setActiveProvider(loadingQuickViewPlugin);
 
@@ -213,12 +207,7 @@ public class QuickViewPanel {
 	}
 
 	private void showCard(NuclrPlugin plugin) {
-		if (SwingUtilities.isEventDispatchThread()) {
-			panel.add(plugin.panel(), BorderLayout.CENTER);
-			panel.revalidate();
-			panel.repaint();
-			return;
-		}
+		this.activeProvider = plugin;
 	}
 
 }
