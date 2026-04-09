@@ -266,10 +266,10 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			quickViewPanel.show(this.selectedPath.getPath());
 
 			if (leftPlugin.isFocused()) {
-				preQuickViewPlugin = this.leftPlugin;
+				preQuickViewPlugin = this.rightPlugin;
 				setRightComponent(quickViewPanel.getActiveProvider());
 			} else {
-				preQuickViewPlugin = this.rightPlugin;
+				preQuickViewPlugin = this.leftPlugin;
 				setLeftComponent(quickViewPanel.getActiveProvider());
 			}
 
