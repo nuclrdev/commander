@@ -17,11 +17,13 @@
 */
 package dev.nuclr.commander.ui.quickView;
 
+import java.awt.BorderLayout;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,10 +70,17 @@ public class QuickViewPanel {
 	 */
 	private final AtomicLong currentGeneration = new AtomicLong(0);
 
+	private JPanel container;
+
 	@PostConstruct
 	public void init() {
 		log.info("QuickViewPanel initialized");
+		container = new JPanel(new BorderLayout());
 		setActiveProvider(loadingQuickViewPlugin);
+	}
+
+	public JPanel getPanel() {
+		return container;
 	}
 
 	public void show(Path p) {
@@ -220,6 +229,20 @@ public class QuickViewPanel {
 	private void setActiveProvider(NuclrPlugin plugin) {
 		this.activeProvider = plugin;
 		log.info("Set active provider to [{}]", this.activeProvider);
+		if (container == null || plugin == null) {
+			return;
+		}
+		Runnable swap = () -> {
+			container.removeAll();
+			container.add(plugin.panel(), BorderLayout.CENTER);
+			container.revalidate();
+			container.repaint();
+		};
+		if (SwingUtilities.isEventDispatchThread()) {
+			swap.run();
+		} else {
+			SwingUtilities.invokeLater(swap);
+		}
 	}
 
 	public NuclrPlugin getActiveProvider() {
