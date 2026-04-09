@@ -226,8 +226,4 @@ public class QuickViewPanel {
 		return this.activeProvider;
 	}
 
-	public void hide() {
-		
-	}
-
 }

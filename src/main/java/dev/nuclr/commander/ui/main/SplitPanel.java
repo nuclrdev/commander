@@ -56,9 +56,9 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private double dividerRatio = 0.5;
 	private boolean isQuickViewActive = false;
 	private PathQuickViewItem selectedPath;
-	
+
 	private NuclrPlugin preQuickViewPlugin;
-	
+
 	@Autowired
 	private QuickViewPanel quickViewPanel;
 
@@ -99,7 +99,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		this.add(mainSplitPane, java.awt.BorderLayout.CENTER);
 
 		loadDefaultPanels();
-		
+
 		// 2. Get the InputMap for the desired focus condition
 		var inputMap = this.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
 
@@ -108,10 +108,10 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 		// 4. Map the action name to an Action in the ActionMap
 		this.getActionMap().put("quickView", new AbstractAction() {
-		    @Override
-		    public void actionPerformed(ActionEvent e) {
-		    		toggleQuickView();
-		    }
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				toggleQuickView();
+			}
 		});
 
 	}
@@ -135,7 +135,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 
 	private void loadDefaultPanels() {
-		
+
 		var resource = new NuclrResourcePath();
 		resource.setPath(getDefaultDrivePath());
 
@@ -145,7 +145,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			plugin.openResource(resource, new AtomicBoolean(false));
 			setLeftComponent(plugin);
 		}
-		
+
 		// Right
 		{
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
@@ -153,7 +153,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			setRightComponent(plugin);
 			plugin.onFocusGained();
 		}
-		
+
 	}
 
 	private void saveDividerRatio(double ratio) {
@@ -167,22 +167,22 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 
 	public void setLeftComponent(NuclrPlugin component) {
-		
+
 		assert component != null : "Left component cannot be null";
-		
+
 		if (component == null) {
 			return;
 		}
-		
+
 		this.leftPlugin = component;
 		this.mainSplitPane.setLeftComponent(component.panel());
 		updateSplitPane();
 	}
 
 	public void setRightComponent(NuclrPlugin component) {
-		
+
 		assert component != null : "Right component cannot be null";
-		
+
 		if (component == null) {
 			return;
 		}
@@ -208,32 +208,32 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	@Override
 	public void handleMessage(String source, String type, Map<String, Object> event) {
-		
+
 		if (type.equals("fs.path.selected")) {
 			var path = (Path) event.get("path");
 			this.selectedPath = new PathQuickViewItem(path);
 			log.info("Selected path updated to: " + this.selectedPath);
-			
+
 			if (isQuickViewActive()) {
 				quickViewPanel.show(this.selectedPath.getPath());
 			}
-			
+
 		}
-		
+
 	}
 
 	@Override
 	public boolean isMessageSupported(String type) {
 		return type.equals("fs.path.selected");
 	}
-	
+
 	public boolean switchFocus() {
-		
+
 		if (leftPlugin == null && rightPlugin == null) {
 			log.info("No plugins to switch focus to.");
 			return false;
 		}
-		
+
 		if (leftPlugin.isFocused()) {
 			leftPlugin.onFocusLost();
 			rightPlugin.onFocusGained();
@@ -241,53 +241,51 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			leftPlugin.onFocusGained();
 			rightPlugin.onFocusLost();
 		}
-		
+
 		return true;
 	}
 
 	private void toggleQuickView() {
-		
+
 		if (isQuickViewActive()) {
-			
+
 			log.info("Toggling Quick View: Deactivating");
-			
-			quickViewPanel.hide();
-			
+
 			if (leftPlugin.isFocused()) {
 				setRightComponent(preQuickViewPlugin);
 			} else {
 				setLeftComponent(preQuickViewPlugin);
 			}
-			
+
 			preQuickViewPlugin = null;
-			
+
 		} else {
-			
+
 			log.info("Toggling Quick View: Activating");
-			 
+
 			quickViewPanel.show(this.selectedPath.getPath());
-			
-			preQuickViewPlugin = quickViewPanel.getActiveProvider();
-			
+
 			if (leftPlugin.isFocused()) {
+				preQuickViewPlugin = this.leftPlugin;
 				setRightComponent(quickViewPanel.getActiveProvider());
-				
 			} else {
+				preQuickViewPlugin = this.rightPlugin;
 				setLeftComponent(quickViewPanel.getActiveProvider());
 			}
-			
+
 		}
-		
+
 		setQuickViewActive(!isQuickViewActive());
+		
+		restoreMainDividerLocation();
 	}
-	
+
 	private boolean isQuickViewActive() {
 		return isQuickViewActive;
 	}
-	
+
 	private void setQuickViewActive(boolean active) {
 		isQuickViewActive = active;
 	}
-	
 
 }
