@@ -58,7 +58,7 @@ import dev.nuclr.commander.event.Events;
 import dev.nuclr.commander.ui.ConsolePanel;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
-import dev.nuclr.platform.Settings;
+import dev.nuclr.platform.NuclrSettings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
 import jakarta.annotation.PostConstruct;
@@ -90,7 +90,7 @@ public class MainWindow implements NuclrEventListener {
 	private boolean altDown;
 	
 	@Autowired
-	private Settings settings;
+	private NuclrSettings settings;
 	
 	@Autowired
 	private ConsolePanel consolePanel;
@@ -456,7 +456,7 @@ public class MainWindow implements NuclrEventListener {
 
 	private void applyThemeScheme() {
 		var scheme = themeSchemeStore.loadOrDefault().activeThemeScheme();
-		for (var entry : scheme.uiDefaults().entrySet()) {
+		for (var entry : scheme.getUiDefaults().entrySet()) {
 			try {
 				UIManager.put(entry.getKey(), Color.decode(entry.getValue()));
 			} catch (Exception ex) {

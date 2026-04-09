@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.common.FilenameUtils;
 import dev.nuclr.commander.service.PluginMarketplaceService;
-import dev.nuclr.platform.Settings;
+import dev.nuclr.platform.NuclrSettings;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -38,7 +38,7 @@ public class NoQuickViewAvailablePanel extends JPanel {
 	private static final String GITHUB_ISSUES_URL = "https://github.com/nuclrdev/commander/issues";
 
 	@Autowired
-	private Settings systemSettings;
+	private NuclrSettings systemSettings;
 
 	@Autowired
 	private PluginMarketplaceService pluginMarketplaceService;

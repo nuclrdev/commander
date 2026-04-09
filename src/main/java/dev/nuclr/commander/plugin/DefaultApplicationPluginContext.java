@@ -23,8 +23,8 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.nuclr.commander.common.ThemeSchemeStore;
-import dev.nuclr.platform.Settings;
-import dev.nuclr.platform.ThemeScheme;
+import dev.nuclr.platform.NuclrSettings;
+import dev.nuclr.platform.NuclrThemeScheme;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import lombok.Data;
@@ -40,7 +40,7 @@ public final class DefaultApplicationPluginContext implements NuclrPluginContext
 	private ObjectMapper objectMapper;
 
 	@Autowired
-	private Settings settings;
+	private NuclrSettings settings;
 
 	@Autowired
 	private ThemeSchemeStore themeSchemeStore;
@@ -50,12 +50,12 @@ public final class DefaultApplicationPluginContext implements NuclrPluginContext
 	}
 
 	@Override
-	public Settings getSettings() {
+	public NuclrSettings getSettings() {
 		return settings;
 	}
 
 	@Override
-	public ThemeScheme getTheme() {
+	public NuclrThemeScheme getTheme() {
 		return themeSchemeStore.loadOrDefault().activeThemeScheme();
 	}
 

@@ -24,7 +24,7 @@ import javax.swing.JComponent;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import dev.nuclr.platform.ThemeScheme;
+import dev.nuclr.platform.NuclrThemeScheme;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.plugin.NuclrPlugin;
 import dev.nuclr.plugin.NuclrResourcePath;
@@ -145,7 +145,7 @@ public class FolderQuickViewPlugin implements NuclrPlugin {
 	}
 
 	@Override
-	public void updateTheme(ThemeScheme themeScheme) {
+	public void updateTheme(NuclrThemeScheme themeScheme) {
 	}
 
 	public void stopScan() {

@@ -71,6 +71,11 @@ public class QuickViewPanel {
 	private final AtomicLong currentGeneration = new AtomicLong(0);
 
 	private JPanel container;
+	private Runnable onProviderChanged;
+
+	public void setOnProviderChanged(Runnable callback) {
+		this.onProviderChanged = callback;
+	}
 
 	@PostConstruct
 	public void init() {
@@ -237,6 +242,9 @@ public class QuickViewPanel {
 			container.add(plugin.panel(), BorderLayout.CENTER);
 			container.revalidate();
 			container.repaint();
+			if (onProviderChanged != null) {
+				onProviderChanged.run();
+			}
 		};
 		if (SwingUtilities.isEventDispatchThread()) {
 			swap.run();

@@ -43,13 +43,13 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.nuclr.platform.Settings;
+import dev.nuclr.platform.NuclrSettings;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
 /**
- * Persistent implementation of {@link Settings} backed by JSON files under the
+ * Persistent implementation of {@link NuclrSettings} backed by JSON files under the
  * local Nuclr data directory.
  *
  * <p>
@@ -67,7 +67,7 @@ import lombok.extern.slf4j.Slf4j;
  * provided fallback in that case.
  */
 @Component
-public class SystemSettings implements Settings {
+public class SystemSettings implements NuclrSettings {
 
 	private static final String SettingsFileName = "settings.json";
 	private static final String LockFileName = "settings.lock";

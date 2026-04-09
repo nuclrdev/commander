@@ -37,7 +37,7 @@ import org.springframework.stereotype.Component;
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
-import dev.nuclr.platform.Settings;
+import dev.nuclr.platform.NuclrSettings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.plugin.NuclrPlugin;
@@ -63,7 +63,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private QuickViewPanel quickViewPanel;
 
 	@Autowired
-	private Settings settings;
+	private NuclrSettings settings;
 
 	@Autowired
 	private NuclrEventBus eventBus;
@@ -251,6 +251,8 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 			log.info("Toggling Quick View: Deactivating");
 
+			quickViewPanel.setOnProviderChanged(null);
+
 			if (leftPlugin.isFocused()) {
 				setRightComponent(preQuickViewPlugin);
 			} else {
@@ -263,6 +265,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 			log.info("Toggling Quick View: Activating");
 
+			quickViewPanel.setOnProviderChanged(this::restoreMainDividerLocation);
 			quickViewPanel.show(this.selectedPath.getPath());
 
 			if (leftPlugin.isFocused()) {

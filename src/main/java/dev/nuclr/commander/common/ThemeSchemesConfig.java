@@ -2,14 +2,14 @@ package dev.nuclr.commander.common;
 
 import java.util.Map;
 
-import dev.nuclr.platform.ThemeScheme;
+import dev.nuclr.platform.NuclrThemeScheme;
 
 /**
  * JSON document containing a selectable set of named color schemes.
  */
 public record ThemeSchemesConfig(
 		String activeScheme,
-		Map<String, ThemeScheme> schemes) {
+		Map<String, NuclrThemeScheme> schemes) {
 
 	public ThemeSchemesConfig {
 		activeScheme = activeScheme != null && !activeScheme.isBlank()
@@ -20,7 +20,7 @@ public record ThemeSchemesConfig(
 				: Defaults.SCHEMES;
 	}
 
-	public ThemeScheme activeThemeScheme() {
+	public NuclrThemeScheme activeThemeScheme() {
 		return schemes.getOrDefault(activeScheme, Defaults.SCHEMES.get(Defaults.ACTIVE_SCHEME));
 	}
 
@@ -34,9 +34,9 @@ public record ThemeSchemesConfig(
 
 		public static final String ACTIVE_SCHEME = "farBlue";
 
-		public static final Map<String, ThemeScheme> SCHEMES = Map.of(
+		public static final Map<String, NuclrThemeScheme> SCHEMES = Map.of(
 				ACTIVE_SCHEME,
-				new ThemeScheme(
+				new NuclrThemeScheme(
 						"Far Blue",
 						Map.ofEntries(
 								Map.entry("Panel.background", "#0b2f59"),
