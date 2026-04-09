@@ -54,9 +54,11 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private NuclrPlugin leftPlugin;
 	private NuclrPlugin rightPlugin;
 	private double dividerRatio = 0.5;
-	private boolean quickViewActive = false;
+	private boolean isQuickViewActive = false;
 	private PathQuickViewItem selectedPath;
-
+	
+	private NuclrPlugin preQuickViewPlugin;
+	
 	@Autowired
 	private QuickViewPanel quickViewPanel;
 
@@ -184,7 +186,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		if (component == null) {
 			return;
 		}
-		
+
 		this.rightPlugin = component;
 		this.mainSplitPane.setRightComponent(component.panel());
 		updateSplitPane();
@@ -212,7 +214,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			this.selectedPath = new PathQuickViewItem(path);
 			log.info("Selected path updated to: " + this.selectedPath);
 			
-			if (quickViewActive) {
+			if (isQuickViewActive()) {
 				quickViewPanel.show(this.selectedPath.getPath());
 			}
 			
@@ -245,31 +247,47 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	private void toggleQuickView() {
 		
-		if (quickViewActive) {
+		if (isQuickViewActive()) {
 			
 			log.info("Toggling Quick View: Deactivating");
+			
+			quickViewPanel.hide();
+			
+			if (leftPlugin.isFocused()) {
+				setRightComponent(preQuickViewPlugin);
+			} else {
+				setLeftComponent(preQuickViewPlugin);
+			}
+			
+			preQuickViewPlugin = null;
 			
 		} else {
 			
 			log.info("Toggling Quick View: Activating");
 			 
-			if (quickViewPanel.isInitialized() == false) {
-				quickViewPanel.init();
-			}
-			
 			quickViewPanel.show(this.selectedPath.getPath());
+			
+			preQuickViewPlugin = quickViewPanel.getActiveProvider();
 			
 			if (leftPlugin.isFocused()) {
 				setRightComponent(quickViewPanel.getActiveProvider());
+				
 			} else {
 				setLeftComponent(quickViewPanel.getActiveProvider());
 			}
 			
 		}
 		
-		quickViewActive = !quickViewActive;
+		setQuickViewActive(!isQuickViewActive());
 	}
 	
+	private boolean isQuickViewActive() {
+		return isQuickViewActive;
+	}
+	
+	private void setQuickViewActive(boolean active) {
+		isQuickViewActive = active;
+	}
 	
 
 }

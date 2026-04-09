@@ -36,20 +36,17 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
-@Data
 public class QuickViewPanel {
-	
-	private boolean initialized = false;
 
 	@Autowired
 	private TaskExecutor taskExecutor;
-	
+
 	@Autowired
 	private NoQuickViewAvailablePlugin noQuickViewAvailablePlugin;
 
 	@Autowired
 	private FolderQuickViewPlugin folderQuickViewPlugin;
-	
+
 	@Autowired
 	private LoadingQuickViewPlugin loadingQuickViewPlugin;
 
@@ -65,19 +62,16 @@ public class QuickViewPanel {
 	private volatile NuclrPlugin activeProvider;
 
 	/**
-	 * Monotonically increasing counter. Each call to show() increments it.
-	 * Loading threads capture their generation at start and abandon work if the
-	 * counter has moved on — meaning a newer show() superseded them.
+	 * Monotonically increasing counter. Each call to show() increments it. Loading
+	 * threads capture their generation at start and abandon work if the counter has
+	 * moved on — meaning a newer show() superseded them.
 	 */
 	private final AtomicLong currentGeneration = new AtomicLong(0);
 
 	@PostConstruct
 	public void init() {
-
 		log.info("QuickViewPanel initialized");
-		initialized = true;
 		setActiveProvider(loadingQuickViewPlugin);
-
 	}
 
 	public void show(Path p) {
@@ -91,7 +85,7 @@ public class QuickViewPanel {
 		// Claim the slot before stopping the old thread so that any in-flight
 		// thread sees its generation is stale as soon as we increment.
 		long myGen = currentGeneration.incrementAndGet();
-		
+
 		stop();
 
 		if (Files.isDirectory(path.getPath())) {
@@ -103,6 +97,7 @@ public class QuickViewPanel {
 		var plugins = pluginRegistry.getPluginByItem(path);
 
 		if (plugins == null || plugins.isEmpty()) {
+			log.info("No providers found for: {}", path);
 			this.noQuickViewAvailablePlugin.openResource(path, currentCancelled);
 			showCard(noQuickViewAvailablePlugin);
 			return;
@@ -113,12 +108,10 @@ public class QuickViewPanel {
 			log.info("Found provider [{}] for: {}", plugin.getClass().getName(), path);
 			String pluginKey = plugin.getClass().getName();
 			/*
-			if (!loadedPlugins.containsKey(pluginKey)) {
-				var pluginPanel = plugin.panel();
-				loadedPlugins.put(pluginKey, plugin);
-				panel.add(pluginPanel, pluginKey);
-			}
-			*/
+			 * if (!loadedPlugins.containsKey(pluginKey)) { var pluginPanel =
+			 * plugin.panel(); loadedPlugins.put(pluginKey, plugin); panel.add(pluginPanel,
+			 * pluginKey); }
+			 */
 		}
 
 		// Show loading feedback immediately while the plugin opens the file
@@ -130,7 +123,8 @@ public class QuickViewPanel {
 		currentLoadThread = Thread.ofVirtual().start(() -> {
 			for (var plugin : plugins) {
 				// Bail out before every expensive operation
-				if (isStale(myGen)) return;
+				if (isStale(myGen))
+					return;
 
 				long start = System.currentTimeMillis();
 				boolean success;
@@ -150,14 +144,16 @@ public class QuickViewPanel {
 				}
 
 				if (success) {
-					activeProvider = plugin;
-					if (!isStale(myGen)) showCard(activeProvider);
+					setActiveProvider(plugin);
+					if (!isStale(myGen))
+						showCard(activeProvider);
 					return;
 				}
 			}
 
 			// All plugins failed — nothing to show
-			if (!isStale(myGen)) showNoProvider(path);
+			if (!isStale(myGen))
+				showNoProvider(path);
 		});
 	}
 
@@ -177,7 +173,7 @@ public class QuickViewPanel {
 		}
 		NuclrPlugin prev = activeProvider;
 		if (prev != null) {
-			activeProvider = null;
+			setActiveProvider(null);
 			closeQuietly(prev);
 		}
 	}
@@ -208,7 +204,30 @@ public class QuickViewPanel {
 	}
 
 	private void showCard(NuclrPlugin plugin) {
+
+		log.info("Attempting to show plugin, current one [{}]", this.activeProvider);
+
+		if (activeProvider != null && plugin.id().equals(this.activeProvider.id())) {
+			log.info("Plugin [{}] is already active, skipping showCard", plugin.getClass().getName());
+			setActiveProvider(plugin);
+		} else {
+			log.info("Showing new  plugin [{}]", plugin.getClass().getName());
+			setActiveProvider(plugin);
+		}
+
+	}
+
+	private void setActiveProvider(NuclrPlugin plugin) {
 		this.activeProvider = plugin;
+		log.info("Set active provider to [{}]", this.activeProvider);
+	}
+
+	public NuclrPlugin getActiveProvider() {
+		return this.activeProvider;
+	}
+
+	public void hide() {
+		
 	}
 
 }
