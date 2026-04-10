@@ -110,7 +110,7 @@ public class NoQuickViewAvailablePlugin implements NuclrPlugin {
 	}
 
 	@Override
-	public void load(NuclrPluginContext context) {
+	public void load(NuclrPluginContext context, boolean template) {
 
 	}
 

@@ -34,11 +34,17 @@ public final class DefaultPluginEventBus implements NuclrEventBus {
 	private List<NuclrEventListener> listeners = new CopyOnWriteArrayList<>();
 
 	@Override
-	public void emit(String source, String type, Map<String, Object> event) {
+	public void emit(Object source, String type, Map<String, Object> event) {
 		
 		log.info("Emitting event: " + type + " from source: " + source);
 		
 		for (NuclrEventListener listener : listeners) {
+			
+			// Ignore its own events 
+			if (listener == source) {
+				continue;
+			}
+			
 			try {
 				if (listener.isMessageSupported(type)) {
 					log.info("Handling event: " + type + " with listener: " + listener.getClass().getName());
@@ -53,6 +59,7 @@ public final class DefaultPluginEventBus implements NuclrEventBus {
 
 	@Override
 	public void subscribe(NuclrEventListener listener) {
+		log.info("Subscribing listener: " + listener.getClass().getName());
 		this.listeners.add(listener);
 	}
 

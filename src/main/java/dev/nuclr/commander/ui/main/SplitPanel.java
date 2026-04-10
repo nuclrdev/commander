@@ -100,19 +100,20 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 		loadDefaultPanels();
 
-		// 2. Get the InputMap for the desired focus condition
+		// Keyboard input for quick view toggle
 		var inputMap = this.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-
-		// 3. Map a KeyStroke to an action name (string key)
-		inputMap.put(KeyStroke.getKeyStroke("control pressed Q"), "quickView");
-
-		// 4. Map the action name to an Action in the ActionMap
-		this.getActionMap().put("quickView", new AbstractAction() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				toggleQuickView();
-			}
-		});
+		{
+			
+			// Ctrl + Q for quick view toggle
+			inputMap.put(KeyStroke.getKeyStroke("control pressed Q"), "quickView");
+			this.getActionMap().put("quickView", new AbstractAction() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					toggleQuickView();
+				}
+			});
+			
+		}
 
 	}
 
@@ -207,7 +208,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 
 	@Override
-	public void handleMessage(String source, String type, Map<String, Object> event) {
+	public void handleMessage(Object source, String type, Map<String, Object> event) {
 
 		if (type.equals("fs.path.selected")) {
 			var path = (Path) event.get("path");
@@ -243,6 +244,20 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		}
 
 		return true;
+	}
+
+	public NuclrPlugin getFocusedPlugin() {
+		if (leftPlugin != null && leftPlugin.isFocused()) {
+			return leftPlugin;
+		}
+		if (rightPlugin != null && rightPlugin.isFocused()) {
+			return rightPlugin;
+		}
+		return rightPlugin != null ? rightPlugin : leftPlugin;
+	}
+
+	public NuclrResourcePath getSelectedResource() {
+		return selectedPath;
 	}
 
 	private void toggleQuickView() {

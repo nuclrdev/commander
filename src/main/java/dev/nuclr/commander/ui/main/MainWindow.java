@@ -29,6 +29,8 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.swing.ImageIcon;
@@ -46,6 +48,7 @@ import javax.swing.UIManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
@@ -54,13 +57,18 @@ import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.common.ThemeSchemeStore;
+import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.commander.event.Events;
+import dev.nuclr.commander.plugin.PluginLoader;
 import dev.nuclr.commander.ui.ConsolePanel;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.platform.NuclrSettings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
+import dev.nuclr.platform.plugin.NuclrMenuResource;
+import dev.nuclr.platform.plugin.NuclrPlugin;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
@@ -71,6 +79,8 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @Slf4j
 public class MainWindow implements NuclrEventListener {
+
+    private final PluginLoader pluginLoader;
 
 	private static final String ConsolePanel = "ConsolePanel";
 	private static final String SplitPanel = "SplitPanel";
@@ -116,6 +126,10 @@ public class MainWindow implements NuclrEventListener {
 	private JComponent activeScreenComponent;
 	
 	private JPanel cardPanel;
+
+    MainWindow(PluginLoader pluginLoader) {
+        this.pluginLoader = pluginLoader;
+    }
 
 	@PostConstruct
 	public void init() {
@@ -277,13 +291,6 @@ public class MainWindow implements NuclrEventListener {
 				toggleConsole();
 				return true;
 			}
-/*
-			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_Q && e.isControlDown()
-					&& isVisible(splitPane)) {
-				splitPane.toggleQuickView();
-				return true;
-			}
-*/
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_F1 && e.isAltDown()
 					&& isVisible(splitPane)) {
 				eventBus.emit(Events.ShowChangeDriveLeftPopup);
@@ -399,10 +406,16 @@ public class MainWindow implements NuclrEventListener {
 			return;
 		}
 		
-		functionKeyBar.resetDefaultLabels();
-
-//		List<NuclrMenuResource> resources = focusedPanelState.provider().menuItems(focusedPanelState.currentResource());
-//		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
+		NuclrPlugin focusedPlugin = splitPane.getFocusedPlugin();
+		NuclrResourcePath selectedResource = splitPane.getSelectedResource();
+		List<NuclrMenuResource> resources = focusedPlugin != null
+				? focusedPlugin.menuItems(selectedResource)
+				: List.of();
+		if (resources.isEmpty()) {
+			functionKeyBar.resetDefaultLabels();
+			return;
+		}
+		functionKeyBar.setMenuResources(resources, shiftDown, ctrlDown, altDown);
 	}
 
 	private void applyFontSize(int size) {
@@ -466,14 +479,65 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	@Override
-	public void handleMessage(String source, String type, Map<String, Object> event) {
+	public void handleMessage(Object source, String type, Map<String, Object> event) {
 
 		if (type.equals(Events.ShowFilePanelsViewEvent)) {
 			onShowFilePanelsView();
 		} else if (type.equals(Events.ShowConsoleScreenEvent)) {
 			onShowConsoleScreen();
+		} else if (type.equals("fs.path.selected")) {
+			rebuildFunctionBar();
 		}
 
+	}
+
+	@EventListener
+	public void onFunctionKeyCommand(FunctionKeyCommandEvent event) {
+		if (event == null) {
+			return;
+		}
+
+		if (isWindowFunctionKey(event.getFunctionKeyNumber())) {
+			handleWindowFunctionKeyCommand(event.getFunctionKeyNumber());
+			return;
+		}
+
+		if (isVisible(splitPane) && dispatchPluginFunctionKeyCommand(event)) {
+			return;
+		}
+
+		handleWindowFunctionKeyCommand(event.getFunctionKeyNumber());
+	}
+
+	private boolean dispatchPluginFunctionKeyCommand(FunctionKeyCommandEvent event) {
+		NuclrMenuResource menuResource = event.getMenuResource();
+		if (menuResource == null || menuResource.getEventType() == null || menuResource.getEventType().isBlank()) {
+			return false;
+		}
+
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("label", event.getLabel());
+		NuclrResourcePath selectedResource = splitPane.getSelectedResource();
+		if (selectedResource != null) {
+			payload.put("resource", selectedResource);
+		}
+
+		eventBus.emit(this, menuResource.getEventType(), payload);
+		return true;
+	}
+
+	private void handleWindowFunctionKeyCommand(int functionKeyNumber) {
+		switch (functionKeyNumber) {
+		case 10 -> confirmAndExitApplication();
+		case 11 -> pluginManagementPopup.show(mainFrame);
+		case 12 -> toggleFullscreen();
+		default -> {
+		}
+		}
+	}
+
+	private boolean isWindowFunctionKey(int functionKeyNumber) {
+		return functionKeyNumber >= 10 && functionKeyNumber <= 12;
 	}
 
 	public void onShowConsoleScreen() {

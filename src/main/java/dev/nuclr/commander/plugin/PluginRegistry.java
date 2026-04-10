@@ -113,7 +113,7 @@ public final class PluginRegistry {
 
 			Class<? extends NuclrPlugin> pluginClass = rawClass.asSubclass(NuclrPlugin.class);
 			NuclrPlugin plugin = pluginClass.getDeclaredConstructor().newInstance();
-			plugin.load(pluginContext);
+			plugin.load(pluginContext, true);
 			pluginTemplates.add(plugin);
 
 			log.info("Loaded resource content provider [{}] with priority {}", plugin.id(), plugin.priority());
@@ -292,7 +292,7 @@ public final class PluginRegistry {
 		
 		try {
 			var instance = template.getClass().getDeclaredConstructor().newInstance();
-			instance.load(pluginContext);
+			instance.load(pluginContext, false);
 			
 			if (instance.singleton()) {
 				pluginInstanceCache.put(id, instance);

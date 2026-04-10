@@ -133,7 +133,7 @@ public class LoadingQuickViewPlugin implements NuclrPlugin {
 	}
 
 	@Override
-	public void load(NuclrPluginContext context) {
+	public void load(NuclrPluginContext context, boolean template) {
 	}
 
 	@Override
