@@ -11,7 +11,7 @@ import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
 
-import dev.nuclr.plugin.NuclrResourcePath;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 
 /**
  * Shows a popup menu listing change-drive resources for the active panel plugin.

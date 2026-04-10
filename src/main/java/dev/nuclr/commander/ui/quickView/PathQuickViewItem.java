@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.UUID;
 
-import dev.nuclr.plugin.NuclrResourcePath;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 import lombok.Data;
 
 /**

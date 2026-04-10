@@ -35,7 +35,7 @@ import javax.swing.JTextField;
 import javax.swing.UIManager;
 
 import dev.nuclr.commander.service.PanelTransferService;
-import dev.nuclr.plugin.NuclrResourcePath;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 
 public final class TransferConfirmationDialog {
 

@@ -25,9 +25,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.platform.NuclrThemeScheme;
+import dev.nuclr.platform.plugin.NuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
-import dev.nuclr.plugin.NuclrPlugin;
-import dev.nuclr.plugin.NuclrResourcePath;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 
 @Component
 public class NoQuickViewAvailablePlugin implements NuclrPlugin {
@@ -60,8 +60,8 @@ public class NoQuickViewAvailablePlugin implements NuclrPlugin {
 	}
 
 	@Override
-	public int version() {
-		return 0;
+	public String version() {
+		return "0";
 	}
 
 	@Override

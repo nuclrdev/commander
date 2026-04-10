@@ -2,7 +2,7 @@ package dev.nuclr.commander.event;
 
 import org.springframework.context.ApplicationEvent;
 
-import dev.nuclr.plugin.NuclrMenuResource;
+import dev.nuclr.platform.plugin.NuclrMenuResource;
 import lombok.Getter;
 
 @Getter

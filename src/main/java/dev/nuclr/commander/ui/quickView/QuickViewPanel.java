@@ -31,7 +31,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.plugin.PluginRegistry;
-import dev.nuclr.plugin.NuclrPlugin;
+import dev.nuclr.platform.plugin.NuclrPlugin;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;

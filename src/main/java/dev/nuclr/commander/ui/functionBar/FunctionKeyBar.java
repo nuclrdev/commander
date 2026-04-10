@@ -23,7 +23,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.event.FunctionKeyCommandEvent;
-import dev.nuclr.plugin.NuclrMenuResource;
+import dev.nuclr.platform.plugin.NuclrMenuResource;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 

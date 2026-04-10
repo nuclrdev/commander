@@ -41,7 +41,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import dev.nuclr.commander.plugin.PluginRegistry;
-import dev.nuclr.plugin.NuclrPlugin;
+import dev.nuclr.platform.plugin.NuclrPlugin;
 import lombok.extern.slf4j.Slf4j;
 
 @Service

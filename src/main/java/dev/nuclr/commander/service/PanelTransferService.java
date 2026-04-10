@@ -23,7 +23,7 @@ import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
 
-import dev.nuclr.plugin.NuclrResourcePath;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 
 @Service
 public class PanelTransferService {

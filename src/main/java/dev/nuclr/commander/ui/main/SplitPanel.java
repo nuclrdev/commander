@@ -40,8 +40,8 @@ import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.platform.NuclrSettings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
-import dev.nuclr.plugin.NuclrPlugin;
-import dev.nuclr.plugin.NuclrResourcePath;
+import dev.nuclr.platform.plugin.NuclrPlugin;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
