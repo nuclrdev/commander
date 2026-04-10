@@ -268,7 +268,15 @@ public final class PluginRegistry {
 		
 		var template = pluginTemplates
 				.stream()
-				.filter(plugin -> plugin.id().equals(id))
+				.filter(plugin -> {
+					
+					if (plugin.id() == null) {
+						log.error("Plugin [{}] has null id, skipping", plugin.getClass().getName());
+						return false;
+					}
+					
+					return plugin.id().equals(id);
+				})
 				.findFirst()
 				.orElse(null);
 		
