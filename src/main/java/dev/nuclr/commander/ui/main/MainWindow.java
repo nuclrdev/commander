@@ -32,6 +32,7 @@ import java.awt.event.KeyEvent;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
@@ -60,7 +61,9 @@ import dev.nuclr.commander.common.ThemeSchemeStore;
 import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.commander.event.Events;
 import dev.nuclr.commander.plugin.PluginLoader;
+import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.commander.ui.ConsolePanel;
+import dev.nuclr.commander.ui.ChangeDrivePopup;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.platform.NuclrSettings;
@@ -122,6 +125,9 @@ public class MainWindow implements NuclrEventListener {
 
 	@Autowired	
 	private SplitPanel splitPane;
+
+	@Autowired
+	private PluginRegistry pluginRegistry;
 
 	private JComponent activeScreenComponent;
 	
@@ -497,6 +503,10 @@ public class MainWindow implements NuclrEventListener {
 			onShowFilePanelsView();
 		} else if (type.equals(Events.ShowConsoleScreenEvent)) {
 			onShowConsoleScreen();
+		} else if (type.equals(Events.ShowChangeDriveLeftPopup)) {
+			showChangeDrivePopup(true);
+		} else if (type.equals(Events.ShowChangeDriveRightPopup)) {
+			showChangeDrivePopup(false);
 		} else if (type.equals("fs.path.selected")) {
 			rebuildFunctionBar();
 		}
@@ -588,6 +598,58 @@ public class MainWindow implements NuclrEventListener {
 	
 	public JFrame getMainFrame() {
 		return mainFrame;
+	}
+
+	private void showChangeDrivePopup(boolean leftSide) {
+		if (!isVisible(splitPane)) {
+			return;
+		}
+
+		List<ChangeDrivePopup.Entry> entries = collectChangeDriveEntries();
+		if (entries.isEmpty()) {
+			log.info("No change-drive resources available from loaded plugins");
+			return;
+		}
+
+		ChangeDrivePopup.show(
+				leftSide ? splitPane.getLeftAnchorComponent() : splitPane.getRightAnchorComponent(),
+				entries,
+				leftSide ? splitPane.getLeftResource() : splitPane.getRightResource(),
+				resource -> {
+					boolean opened = leftSide
+							? splitPane.openLeftResource(resource)
+							: splitPane.openRightResource(resource);
+					if (opened) {
+						rebuildFunctionBar();
+						mainFrame.revalidate();
+						mainFrame.repaint();
+					}
+				});
+	}
+
+	private List<ChangeDrivePopup.Entry> collectChangeDriveEntries() {
+		return pluginRegistry.getPluginTemplates().stream()
+				.flatMap(plugin -> {
+					List<NuclrResourcePath> resources = plugin.getChangeDriveResources();
+					if (resources == null || resources.isEmpty()) {
+						return java.util.stream.Stream.empty();
+					}
+					String section = plugin.name();
+					return resources.stream()
+							.filter(Objects::nonNull)
+							.map(resource -> new ChangeDrivePopup.Entry(section, displayLabel(resource), resource));
+				})
+				.toList();
+	}
+
+	private String displayLabel(NuclrResourcePath resource) {
+		if (resource.getName() != null && !resource.getName().isBlank()) {
+			return resource.getName();
+		}
+		if (resource.getPath() != null) {
+			return resource.getPath().toString();
+		}
+		return "(unnamed resource)";
 	}
 
 }

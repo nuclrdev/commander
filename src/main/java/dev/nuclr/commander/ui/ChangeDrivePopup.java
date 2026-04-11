@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JSeparator;
 import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
@@ -18,24 +19,44 @@ import dev.nuclr.platform.plugin.NuclrResourcePath;
  */
 public class ChangeDrivePopup {
 
+    public record Entry(String section, String label, NuclrResourcePath resource) {
+    }
+
     public static void show(
             Component anchorComponent,
-            List<? extends NuclrResourcePath> resources,
+            List<Entry> entries,
             NuclrResourcePath currentResource,
             Consumer<NuclrResourcePath> onSelect) {
         JPopupMenu popup = new JPopupMenu("Change Drive");
 
         JMenuItem currentItem = null;
+        String currentSection = null;
 
-        for (NuclrResourcePath root : resources) {
-            String label = root.getName();
+        for (Entry entry : entries) {
+            if (entry == null || entry.resource() == null) {
+                continue;
+            }
+
+            if (!Objects.equals(currentSection, entry.section())) {
+                if (currentSection != null) {
+                    popup.add(new JSeparator());
+                }
+                if (entry.section() != null && !entry.section().isBlank()) {
+                    JMenuItem header = new JMenuItem(entry.section());
+                    header.setEnabled(false);
+                    popup.add(header);
+                }
+                currentSection = entry.section();
+            }
+
+            String label = entry.label() != null ? entry.label() : "";
             JMenuItem item = new JMenuItem(label);
-            item.addActionListener(e -> onSelect.accept(root));
+            item.addActionListener(e -> onSelect.accept(entry.resource()));
             if (!label.isEmpty()) {
                 item.setMnemonic(Character.toUpperCase(label.charAt(0)));
             }
             popup.add(item);
-            if (sameResource(root, currentResource)) {
+            if (sameResource(entry.resource(), currentResource)) {
                 currentItem = item;
             }
         }

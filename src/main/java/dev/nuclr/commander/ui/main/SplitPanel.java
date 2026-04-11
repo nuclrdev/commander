@@ -57,6 +57,8 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private JSplitPane mainSplitPane;
 	private NuclrPlugin leftPlugin;
 	private NuclrPlugin rightPlugin;
+	private NuclrResourcePath leftResource;
+	private NuclrResourcePath rightResource;
 	private boolean isQuickViewActive = false;
 	private PathQuickViewItem selectedPath;
 
@@ -154,6 +156,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
 			plugin.openResource(resource, new AtomicBoolean(false));
 			setLeftComponent(plugin);
+			leftResource = resource;
 		}
 
 		// Right
@@ -161,6 +164,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			var plugin = pluginRegistry.getPluginInstance("dev.nuclr.plugin.core.panel.fs");
 			plugin.openResource(resource, new AtomicBoolean(false));
 			setRightComponent(plugin);
+			rightResource = resource;
 			plugin.onFocusGained();
 		}
 
@@ -256,6 +260,30 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		return selectedPath;
 	}
 
+	public NuclrResourcePath getLeftResource() {
+		return leftResource;
+	}
+
+	public NuclrResourcePath getRightResource() {
+		return rightResource;
+	}
+
+	public JComponent getLeftAnchorComponent() {
+		return leftPlugin != null ? leftPlugin.panel() : this;
+	}
+
+	public JComponent getRightAnchorComponent() {
+		return rightPlugin != null ? rightPlugin.panel() : this;
+	}
+
+	public boolean openLeftResource(NuclrResourcePath resource) {
+		return openResourceOnSide(resource, true);
+	}
+
+	public boolean openRightResource(NuclrResourcePath resource) {
+		return openResourceOnSide(resource, false);
+	}
+
 	private void toggleQuickView() {
 
 		if (isQuickViewActive()) {
@@ -344,6 +372,42 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 		mainSplitPane.setDividerLocation(newLocation);
 		saveDividerLocation(newLocation);
+	}
+
+	private boolean openResourceOnSide(NuclrResourcePath resource, boolean leftSide) {
+		if (resource == null) {
+			return false;
+		}
+
+		NuclrPlugin template = pluginRegistry.getPluginByResource(resource);
+		if (template == null || template.id() == null) {
+			log.warn("No plugin supports change-drive resource: {}", resource.getName());
+			return false;
+		}
+
+		NuclrPlugin plugin = pluginRegistry.getPluginInstance(template.id());
+		if (plugin == null || !plugin.openResource(resource, new AtomicBoolean(false))) {
+			log.warn("Failed to open change-drive resource [{}] with plugin [{}]", resource.getName(), template.id());
+			return false;
+		}
+
+		if (leftSide) {
+			if (rightPlugin != null) {
+				rightPlugin.onFocusLost();
+			}
+			setLeftComponent(plugin);
+			leftResource = resource;
+			plugin.onFocusGained();
+		} else {
+			if (leftPlugin != null) {
+				leftPlugin.onFocusLost();
+			}
+			setRightComponent(plugin);
+			rightResource = resource;
+			plugin.onFocusGained();
+		}
+
+		return true;
 	}
 
 }
