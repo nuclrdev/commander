@@ -1,7 +1,7 @@
 package dev.nuclr.commander.ui.common;
 
-import java.awt.Color;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.FlowLayout;
@@ -22,9 +22,9 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
-import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -35,7 +35,7 @@ import javax.swing.JTextField;
 import javax.swing.UIManager;
 
 import dev.nuclr.commander.service.PanelTransferService;
-import dev.nuclr.plugin.PluginPathResource;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 
 public final class TransferConfirmationDialog {
 
@@ -190,7 +190,7 @@ public final class TransferConfirmationDialog {
 		return panel;
 	}
 
-	private static JPanel buildSummaryPanel(List<PluginPathResource> sources) {
+	private static JPanel buildSummaryPanel(List<NuclrResourcePath> sources) {
 		JPanel panel = new JPanel(new BorderLayout(0, 6));
 		panel.add(new JLabel(sources.size() == 1 ? "Selected item" : "Selected items"), BorderLayout.NORTH);
 
@@ -257,11 +257,11 @@ public final class TransferConfirmationDialog {
 		return panel;
 	}
 
-	private static List<String> summarizeEntries(List<PluginPathResource> sources) {
+	private static List<String> summarizeEntries(List<NuclrResourcePath> sources) {
 		List<String> lines = new ArrayList<>();
 		int limit = Math.min(sources.size(), 10);
 		for (int i = 0; i < limit; i++) {
-			PluginPathResource source = sources.get(i);
+			NuclrResourcePath source = sources.get(i);
 			Path path = source != null ? source.getPath() : null;
 			boolean directory = path != null && Files.isDirectory(path);
 			String prefix = directory ? "[Folder] " : "[File] ";
@@ -302,7 +302,7 @@ public final class TransferConfirmationDialog {
 			String title,
 			String destinationLabel,
 			Path initialDestination,
-			List<PluginPathResource> sources,
+			List<NuclrResourcePath> sources,
 			PanelTransferService.ConflictResolution initialConflictResolution,
 			String confirmButtonLabel,
 			PanelTransferService.AccessPolicy initialAccessPolicy,

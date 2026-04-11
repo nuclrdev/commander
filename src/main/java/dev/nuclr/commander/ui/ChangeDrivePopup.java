@@ -7,35 +7,56 @@ import java.util.function.Consumer;
 
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JSeparator;
 import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
 
-import dev.nuclr.plugin.PluginPathResource;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 
 /**
  * Shows a popup menu listing change-drive resources for the active panel plugin.
  */
 public class ChangeDrivePopup {
 
+    public record Entry(String section, String label, NuclrResourcePath resource) {
+    }
+
     public static void show(
             Component anchorComponent,
-            List<? extends PluginPathResource> resources,
-            PluginPathResource currentResource,
-            Consumer<PluginPathResource> onSelect) {
+            List<Entry> entries,
+            NuclrResourcePath currentResource,
+            Consumer<NuclrResourcePath> onSelect) {
         JPopupMenu popup = new JPopupMenu("Change Drive");
 
         JMenuItem currentItem = null;
+        String currentSection = null;
 
-        for (PluginPathResource root : resources) {
-            String label = root.getName();
+        for (Entry entry : entries) {
+            if (entry == null || entry.resource() == null) {
+                continue;
+            }
+
+            if (!Objects.equals(currentSection, entry.section())) {
+                if (currentSection != null) {
+                    popup.add(new JSeparator());
+                }
+                if (entry.section() != null && !entry.section().isBlank()) {
+                    JMenuItem header = new JMenuItem(entry.section());
+                    header.setEnabled(false);
+                    popup.add(header);
+                }
+                currentSection = entry.section();
+            }
+
+            String label = entry.label() != null ? entry.label() : "";
             JMenuItem item = new JMenuItem(label);
-            item.addActionListener(e -> onSelect.accept(root));
+            item.addActionListener(e -> onSelect.accept(entry.resource()));
             if (!label.isEmpty()) {
                 item.setMnemonic(Character.toUpperCase(label.charAt(0)));
             }
             popup.add(item);
-            if (sameResource(root, currentResource)) {
+            if (sameResource(entry.resource(), currentResource)) {
                 currentItem = item;
             }
         }
@@ -54,7 +75,7 @@ public class ChangeDrivePopup {
         }
     }
 
-    private static boolean sameResource(PluginPathResource left, PluginPathResource right) {
+    private static boolean sameResource(NuclrResourcePath left, NuclrResourcePath right) {
         if (left == right) {
             return true;
         }

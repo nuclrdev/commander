@@ -2,7 +2,6 @@ package dev.nuclr.commander;
 
 import java.io.IOException;
 
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import dev.nuclr.commander.common.MacOSIntegration;

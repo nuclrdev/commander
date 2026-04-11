@@ -23,7 +23,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.event.FunctionKeyCommandEvent;
-import dev.nuclr.plugin.MenuResource;
+import dev.nuclr.platform.plugin.NuclrMenuResource;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 
@@ -53,7 +53,7 @@ public class FunctionKeyBar {
 	private final List<JButton> buttons = new ArrayList<>();
 	private final Map<Integer, String> defaultLabels = new HashMap<>();
 	private final Map<Integer, String> currentLabels = new HashMap<>();
-	private final Map<Integer, MenuResource> currentMenuResources = new HashMap<>();
+	private final Map<Integer, NuclrMenuResource> currentMenuResources = new HashMap<>();
 
 	@PostConstruct
 	public void init() {
@@ -72,7 +72,7 @@ public class FunctionKeyBar {
 
 	public void publish(int functionKeyNumber) {
 		String label = currentLabels.getOrDefault(functionKeyNumber, "");
-		MenuResource menuResource = currentMenuResources.get(functionKeyNumber);
+		NuclrMenuResource menuResource = currentMenuResources.get(functionKeyNumber);
 		applicationEventPublisher.publishEvent(
 				new FunctionKeyCommandEvent(this, functionKeyNumber, label, menuResource));
 	}
@@ -88,13 +88,13 @@ public class FunctionKeyBar {
 		}
 	}
 
-	public void setMenuResources(List<MenuResource> resources, boolean shiftDown, boolean ctrlDown, boolean altDown) {
-		List<MenuResource> safeResources = resources != null ? resources : List.of();
+	public void setMenuResources(List<NuclrMenuResource> resources, boolean shiftDown, boolean ctrlDown, boolean altDown) {
+		List<NuclrMenuResource> safeResources = resources != null ? resources : List.of();
 		currentMenuResources.clear();
 
 		for (int key = 1; key <= ITEMS.length; key++) {
 			final int functionKeyNumber = key;
-			MenuResource resource = safeResources.stream()
+			NuclrMenuResource resource = safeResources.stream()
 					.filter(item -> matches(item, functionKeyNumber, shiftDown, ctrlDown, altDown))
 					.findFirst()
 					.orElse(null);
@@ -148,7 +148,7 @@ public class FunctionKeyBar {
 		}
 	}
 
-	private static boolean matches(MenuResource resource, int functionKeyNumber, boolean shiftDown, boolean ctrlDown, boolean altDown) {
+	private static boolean matches(NuclrMenuResource resource, int functionKeyNumber, boolean shiftDown, boolean ctrlDown, boolean altDown) {
 		KeyBinding binding = parse(resource.getKeyStroke());
 		return binding != null
 				&& binding.functionKeyNumber() == functionKeyNumber

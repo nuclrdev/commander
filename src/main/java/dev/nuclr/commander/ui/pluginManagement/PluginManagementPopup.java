@@ -1,3 +1,20 @@
+/*
+
+	Copyright 2026 Sergio, Nuclr (https://nuclr.dev)
+	
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+	
+	http://www.apache.org/licenses/LICENSE-2.0
+	
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	See the License for the specific language governing permissions and
+	limitations under the License.
+
+*/
 package dev.nuclr.commander.ui.pluginManagement;
 
 import java.awt.BorderLayout;
@@ -23,8 +40,8 @@ import javax.swing.JScrollPane;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import dev.nuclr.commander.plugin.PluginDescriptor;
-import dev.nuclr.commander.service.PluginRegistry;
+import dev.nuclr.commander.plugin.PluginRegistry;
+import dev.nuclr.platform.plugin.NuclrPlugin;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -35,6 +52,7 @@ public class PluginManagementPopup {
 	private PluginRegistry pluginRegistry;
 
 	public void show(JFrame parent) {
+		
 		var dialog = new JDialog(parent, "Plugin Management", true);
 		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
@@ -44,14 +62,15 @@ public class PluginManagementPopup {
 		JPanel listPanel = new JPanel();
 		listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
 
-		var plugins = pluginRegistry.getLoadedPlugins();
+		var plugins = pluginRegistry.getPluginTemplates();
+		
 		if (plugins.isEmpty()) {
 			var emptyLabel = new JLabel("No plugins loaded.");
 			emptyLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 			listPanel.add(emptyLabel);
 		} else {
 			for (var plugin : plugins) {
-				listPanel.add(buildPluginCard(plugin.getPluginInfo()));
+				listPanel.add(buildPluginCard(plugin));
 				listPanel.add(Box.createVerticalStrut(8));
 			}
 		}
@@ -75,19 +94,20 @@ public class PluginManagementPopup {
 		dialog.setVisible(true);
 	}
 
-	private JPanel buildPluginCard(PluginDescriptor info) {
-		String name = info != null && info.getName() != null ? info.getName() : "Unnamed Plugin";
-		String version = info != null && info.getVersion() != null ? info.getVersion() : "unknown";
-		String author = info != null && info.getAuthor() != null ? info.getAuthor() : "Unknown author";
-		String type = info != null && info.getType() != null ? info.getType() : "Unknown type";
-		String license = info != null && info.getLicense() != null ? info.getLicense() : "Unknown license";
-		String url = info != null && info.getPageUrl() != null && !info.getPageUrl().isBlank()
-				? info.getPageUrl()
-				: info != null && info.getWebsite() != null && !info.getWebsite().isBlank()
-						? info.getWebsite()
+	private JPanel buildPluginCard(NuclrPlugin info) {
+		
+		String name = info != null && info.name() != null ? info.name() : "Unnamed Plugin";
+		String version = info != null ? info.version() + "" : "unknown";
+		String author = info != null && info.author() != null ? info.author() : "Unknown author";
+		String type = info != null && info.type() != null ? info.type().name() : "Unknown type";
+		String license = info != null && info.license() != null ? info.license() : "Unknown license";
+		String url = info != null && info.pageUrl() != null && !info.pageUrl().isBlank()
+				? info.pageUrl()
+				: info != null && info.website() != null && !info.website().isBlank()
+						? info.website()
 						: "No URL provided";
-		String description = info != null && info.getDescription() != null
-				? info.getDescription()
+		String description = info != null && info.description() != null
+				? info.description()
 				: "No description provided.";
 
 		JPanel card = new JPanel(new BorderLayout(12, 0));

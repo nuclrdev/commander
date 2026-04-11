@@ -10,13 +10,10 @@
 	<properties>
 		<maven.compiler.source>21</maven.compiler.source>
 		<maven.compiler.target>21</maven.compiler.target>
-		<platform.sdk.dir>C:/nuclr/sources/platform-sdk</platform.sdk.dir>
+		<platform.sdk.version>2.0.3</platform.sdk.version>
 	</properties>
-
 	<dependencies>
 
-		<!-- Source:
-		https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
 		<dependency>
 			<groupId>com.github.ben-manes.caffeine</groupId>
 			<artifactId>caffeine</artifactId>
@@ -24,8 +21,6 @@
 			<scope>compile</scope>
 		</dependency>
 
-		<!-- Source:
-		https://mvnrepository.com/artifact/com.fasterxml.jackson.datatype/jackson-datatype-jsr310 -->
 		<dependency>
 			<groupId>com.fasterxml.jackson.datatype</groupId>
 			<artifactId>jackson-datatype-jsr310</artifactId>
@@ -36,11 +31,9 @@
 		<dependency>
 			<groupId>dev.nuclr</groupId>
 			<artifactId>platform-sdk</artifactId>
-			<version>2.0.1</version>
+			<version>2.0.3</version>
 		</dependency>
-
-		<!-- Source:
-		https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind -->
+		
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
@@ -86,8 +79,7 @@
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-context</artifactId>
-			<version>7.0.3</version>
-			<scope>compile</scope>
+			<version>7.0.6</version>
 		</dependency>
 
 		<dependency>
