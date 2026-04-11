@@ -19,6 +19,8 @@ package dev.nuclr.commander.ui.main;
 
 import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,6 +32,7 @@ import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.plaf.basic.BasicSplitPaneDivider;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -53,7 +56,6 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private JSplitPane mainSplitPane;
 	private NuclrPlugin leftPlugin;
 	private NuclrPlugin rightPlugin;
-	private double dividerRatio = 0.5;
 	private boolean isQuickViewActive = false;
 	private PathQuickViewItem selectedPath;
 
@@ -81,20 +83,22 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 		eventBus.subscribe(this);
 
-		dividerRatio = settings.getOrDefault(SettingsNamespace + "splitPanel", "dividerRatio", 0.5);
-
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, placeholder("Loading plugins..."),
 				placeholder("Loading plugins..."));
 
-		mainSplitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
-			int loc = (int) evt.getNewValue();
-			int paneWidth = mainSplitPane.getWidth();
-			if (paneWidth > 0) {
-				dividerRatio = Math.max(0.01, Math.min(0.99, loc / (double) paneWidth));
-				saveDividerRatio(dividerRatio);
-			}
-		});
-
+		for (var c : mainSplitPane.getComponents()) {
+		    if (c instanceof BasicSplitPaneDivider divider) {
+		        divider.addMouseListener(new MouseAdapter() {
+		            @Override
+		            public void mouseReleased(MouseEvent e) {
+		                log.info("User finished dragging: " 
+		                    + mainSplitPane.getDividerLocation());
+		                saveDividerLocation(mainSplitPane.getDividerLocation()); // Save the new location
+		            }
+		        });
+		    }
+		}
+		
 		this.setLayout(new java.awt.BorderLayout());
 		this.add(mainSplitPane, java.awt.BorderLayout.CENTER);
 
@@ -114,6 +118,10 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			});
 			
 		}
+		
+		SwingUtilities.invokeLater(() -> {
+			restoreMainDividerLocation();
+		});
 
 	}
 
@@ -157,10 +165,6 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	}
 
-	private void saveDividerRatio(double ratio) {
-		settings.set(SettingsNamespace + "splitPanel", "dividerRatio", ratio);
-	}
-
 	private JLabel placeholder(String text) {
 		JLabel label = new JLabel(text, JLabel.CENTER);
 		label.setFont(label.getFont().deriveFont(Font.PLAIN, 14f));
@@ -196,15 +200,6 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private void updateSplitPane() {
 		this.revalidate();
 		this.repaint();
-	}
-
-	private void restoreMainDividerLocation() {
-		SwingUtilities.invokeLater(() -> {
-			if (mainSplitPane.getLeftComponent() == null || mainSplitPane.getRightComponent() == null) {
-				return;
-			}
-			mainSplitPane.setDividerLocation(dividerRatio);
-		});
 	}
 
 	@Override
@@ -304,6 +299,24 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	private void setQuickViewActive(boolean active) {
 		isQuickViewActive = active;
+	}
+	
+	private void restoreMainDividerLocation() {
+		SwingUtilities.invokeLater(() -> {
+			mainSplitPane.setDividerLocation(getDividerLocation());
+			log.info("Restored main divider location: " + getDividerLocation());
+		});
+	}
+	
+	private int getDividerLocation() {
+		var divider = settings.getOrDefault(SettingsNamespace + "splitPanel", "dividerLocation", (int) ( this.mainSplitPane.getWidth() / 2));
+		log.info("Loaded main divider location ratio: " + divider);
+		return divider;
+	}
+
+	private void saveDividerLocation(int dividerLocation) {
+		settings.set(SettingsNamespace + "splitPanel", "dividerLocation", dividerLocation);
+		log.info("Saved main divider location: " + dividerLocation);
 	}
 
 }
