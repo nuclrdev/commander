@@ -325,6 +325,18 @@ public class MainWindow implements NuclrEventListener {
 				return true;
 			}
 
+			if (e.getID() == KeyEvent.KEY_PRESSED && isVisible(splitPane)
+					&& e.isControlDown() && !e.isAltDown() && e.getKeyCode() == KeyEvent.VK_LEFT) {
+				splitPane.moveDividerLeft();
+				return true;
+			}
+
+			if (e.getID() == KeyEvent.KEY_PRESSED && isVisible(splitPane)
+					&& e.isControlDown() && !e.isAltDown() && e.getKeyCode() == KeyEvent.VK_RIGHT) {
+				splitPane.moveDividerRight();
+				return true;
+			}
+
 			if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown() && !e.isAltDown()
 					&& (e.getKeyCode() == KeyEvent.VK_EQUALS || e.getKeyCode() == KeyEvent.VK_PLUS
 							|| e.getKeyCode() == KeyEvent.VK_ADD)) {

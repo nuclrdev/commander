@@ -52,6 +52,7 @@ import lombok.extern.slf4j.Slf4j;
 public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	public static final String SettingsNamespace = MainWindow.SettingsNamespace + ".SplitPanel.";
+	private static final int DIVIDER_STEP_PIXELS = 30;
 
 	private JSplitPane mainSplitPane;
 	private NuclrPlugin leftPlugin;
@@ -116,7 +117,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 					toggleQuickView();
 				}
 			});
-			
+
 		}
 		
 		SwingUtilities.invokeLater(() -> {
@@ -317,6 +318,32 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private void saveDividerLocation(int dividerLocation) {
 		settings.set(SettingsNamespace + "splitPanel", "dividerLocation", dividerLocation);
 		log.info("Saved main divider location: " + dividerLocation);
+	}
+
+	public void moveDividerLeft() {
+		moveDividerBy(-DIVIDER_STEP_PIXELS);
+	}
+
+	public void moveDividerRight() {
+		moveDividerBy(DIVIDER_STEP_PIXELS);
+	}
+
+	private void moveDividerBy(int delta) {
+		if (mainSplitPane == null) {
+			return;
+		}
+
+		int currentLocation = mainSplitPane.getDividerLocation();
+		if (currentLocation <= 0) {
+			currentLocation = getDividerLocation();
+		}
+
+		int minimumLocation = mainSplitPane.getMinimumDividerLocation();
+		int maximumLocation = mainSplitPane.getMaximumDividerLocation();
+		int newLocation = Math.max(minimumLocation, Math.min(maximumLocation, currentLocation + delta));
+
+		mainSplitPane.setDividerLocation(newLocation);
+		saveDividerLocation(newLocation);
 	}
 
 }
