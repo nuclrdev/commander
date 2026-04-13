@@ -23,6 +23,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.AbstractAction;
@@ -38,6 +39,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.plugin.PluginRegistry;
+import dev.nuclr.commander.service.FileSystemService;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
 import dev.nuclr.commander.ui.quickView.QuickViewPanel;
 import dev.nuclr.platform.NuclrSettings;
@@ -75,6 +77,9 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
+	
+	@Autowired
+	private FileSystemService fileSystemService;
 
 	private static enum Side {
 		Left, Right, Fullscreen
@@ -211,21 +216,35 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	public void handleMessage(Object source, String type, Map<String, Object> event) {
 
 		if (type.equals("fs.path.selected")) {
+			
 			var path = (Path) event.get("path");
+			
 			this.selectedPath = new PathQuickViewItem(path);
+			
 			log.info("Selected path updated to: " + this.selectedPath);
 
 			if (isQuickViewActive()) {
 				quickViewPanel.show(this.selectedPath.getPath());
 			}
 
+		} else if (type.equals("fs.path.opened")) {
+			
+			var path = (Path) event.get("path");
+			
+			this.selectedPath = new PathQuickViewItem(path);
+			
+			log.info("Opened path updated to: " + this.selectedPath);
+
+			fileSystemService.open(path);
 		}
 
 	}
 
+	private Set<String> supportedMessages = Set.of("fs.path.selected", "fs.path.opened");
+
 	@Override
 	public boolean isMessageSupported(String type) {
-		return type.equals("fs.path.selected");
+		return supportedMessages.contains(type);
 	}
 
 	public boolean switchFocus() {

@@ -158,9 +158,8 @@ public class QuickViewPanel {
 				}
 
 				if (success) {
-					setActiveProvider(plugin);
 					if (!isStale(myGen))
-						showCard(activeProvider);
+						setActiveProvider(plugin);
 					return;
 				}
 			}
