@@ -448,10 +448,22 @@ public class MainWindow implements NuclrEventListener {
 	}
 
 	private void toggleFullscreen() {
+		
+		final var dividerRatio = this.splitPane.getMainSplitPane().getDividerLocation() 
+				/ (float) this.splitPane.getMainSplitPane().getWidth();
+				
 		if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0) {
 			mainFrame.setExtendedState(JFrame.NORMAL);
+			 SwingUtilities.invokeLater(() -> {
+				 int newDividerLocation = (int) (mainFrame.getWidth() * dividerRatio);
+				 this.splitPane.getMainSplitPane().setDividerLocation(newDividerLocation);
+			 });
 		} else {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+			 SwingUtilities.invokeLater(() -> {
+				 int newDividerLocation = (int) (mainFrame.getWidth() * dividerRatio);
+				 this.splitPane.getMainSplitPane().setDividerLocation(newDividerLocation);
+			 });
 		}
 	}
 
