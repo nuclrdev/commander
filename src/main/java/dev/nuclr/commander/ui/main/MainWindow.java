@@ -58,12 +58,12 @@ import dev.nuclr.commander.Nuclr;
 import dev.nuclr.commander.common.LocalSettingsStore;
 import dev.nuclr.commander.common.SystemUtils;
 import dev.nuclr.commander.common.ThemeSchemeStore;
-import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.commander.event.Events;
+import dev.nuclr.commander.event.FunctionKeyCommandEvent;
 import dev.nuclr.commander.plugin.PluginLoader;
 import dev.nuclr.commander.plugin.PluginRegistry;
-import dev.nuclr.commander.ui.ConsolePanel;
 import dev.nuclr.commander.ui.ChangeDrivePopup;
+import dev.nuclr.commander.ui.ConsolePanel;
 import dev.nuclr.commander.ui.functionBar.FunctionKeyBar;
 import dev.nuclr.commander.ui.pluginManagement.PluginManagementPopup;
 import dev.nuclr.platform.NuclrSettings;
@@ -201,7 +201,7 @@ public class MainWindow implements NuclrEventListener {
 		}
 
 		this.cardPanel = new JPanel(cardLayout);
-		this.cardPanel.add(this.splitPane, SplitPanel);
+		this.cardPanel.add(this.splitPane.getContainer(), SplitPanel);
 		
 		this.mainFrame.setJMenuBar(buildMenuBar());
 		
@@ -231,7 +231,7 @@ public class MainWindow implements NuclrEventListener {
 		
 		this.splitPane.init();
 
-		setActiveScreenComponent( this.splitPane);
+		setActiveScreenComponent(this.splitPane.getContainer());
 
 		mainFrame.setVisible(true);
 
@@ -374,14 +374,14 @@ public class MainWindow implements NuclrEventListener {
 	private void makeCardVisible(String cardName) {
 		this.cardLayout.show(this.cardPanel, cardName);
 		if (cardName.equals(SplitPanel)) {
-			this.activeScreenComponent = this.splitPane;
+			this.activeScreenComponent = this.splitPane.getContainer();
 		} else if (cardName.equals(ConsolePanel)) {
 			this.activeScreenComponent = this.consolePanel.getConsolePanel();
 		}
 	}
 
 	private boolean isVisible(SplitPanel c) {
-		return this.activeScreenComponent == c;
+		return this.activeScreenComponent == c.getContainer();
 	}
 
 	private boolean transferPanelFocus() {

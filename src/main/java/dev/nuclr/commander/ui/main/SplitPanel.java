@@ -54,11 +54,13 @@ import lombok.extern.slf4j.Slf4j;
 @Data
 @Slf4j
 @Component
-public class SplitPanel extends JPanel implements NuclrEventListener {
+public class SplitPanel implements NuclrEventListener {
 
 	public static final String SettingsNamespace = MainWindow.SettingsNamespace + ".SplitPanel.";
 	private static final int DIVIDER_STEP_PIXELS = 30;
 
+	private JPanel container;
+	
 	private JSplitPane mainSplitPane;
 	private NuclrPlugin leftPlugin;
 	private NuclrPlugin rightPlugin;
@@ -87,11 +89,15 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	private static enum Side {
 		Left, Right, Fullscreen
 	}
+	
+	public SplitPanel() {
+		this.container = new JPanel();
+	}
 
 	public void init() {
 
 		log.info("Initializing FilePanel");
-
+		
 		eventBus.subscribe(this);
 
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, placeholder("Loading plugins..."),
@@ -110,18 +116,18 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		    }
 		}
 		
-		this.setLayout(new java.awt.BorderLayout());
-		this.add(mainSplitPane, java.awt.BorderLayout.CENTER);
+		this.container.setLayout(new java.awt.BorderLayout());
+		this.container.add(mainSplitPane, java.awt.BorderLayout.CENTER);
 
 		loadDefaultPanels();
 
 		// Keyboard input for quick view toggle
-		var inputMap = this.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+		var inputMap = this.container.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
 		{
 			
 			// Ctrl + Q for quick view toggle
 			inputMap.put(KeyStroke.getKeyStroke("control pressed Q"), "quickView");
-			this.getActionMap().put("quickView", new AbstractAction() {
+			this.container.getActionMap().put("quickView", new AbstractAction() {
 				@Override
 				public void actionPerformed(ActionEvent e) {
 					toggleQuickView();
@@ -211,8 +217,8 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 
 	private void updateSplitPane() {
-		this.revalidate();
-		this.repaint();
+		this.container.revalidate();
+		this.container.repaint();
 	}
 
 	public boolean switchFocus() {
@@ -256,11 +262,11 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	}
 
 	public JComponent getLeftAnchorComponent() {
-		return leftPlugin != null ? leftPlugin.panel() : this;
+		return leftPlugin != null ? leftPlugin.panel() : this.container;
 	}
 
 	public JComponent getRightAnchorComponent() {
-		return rightPlugin != null ? rightPlugin.panel() : this;
+		return rightPlugin != null ? rightPlugin.panel() : this.container;
 	}
 
 	public boolean openLeftResource(NuclrResourcePath resource) {
@@ -422,6 +428,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			log.info("Opened path updated to: " + this.selectedPath);
 
 			fileSystemService.open(path);
+		
 		}
 
 	}
@@ -431,6 +438,18 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 	@Override
 	public boolean isMessageSupported(String type) {
 		return supportedMessages.contains(type);
+	}
+
+	public void replacePanel(NuclrPlugin pluginToOpen, NuclrResourcePath nuclrPath) {
+		
+		pluginToOpen.openResource(nuclrPath, new AtomicBoolean(false));
+
+		if (leftPlugin.isFocused()) {
+			setLeftComponent(pluginToOpen);
+		} else {
+			setRightComponent(pluginToOpen);
+		}
+		
 	}
 
 }

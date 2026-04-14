@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
+import dev.nuclr.commander.ui.main.SplitPanel;
 import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,9 @@ public class FileSystemService {
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
+	
+	@Autowired
+	private SplitPanel splitPanel;
 
 	public void open(Path path) {
 
@@ -52,7 +56,18 @@ public class FileSystemService {
 		var pluginToOpen = pluginRegistry.getPluginByResource(nuclrPath, NuclrPluginRole.FilePanel);
 
 		if (pluginToOpen != null) {
+			
 			log.info("Found plugin \"{}\" to open file {}", pluginToOpen.name(), path);
+			
+			// replace the current panel with the new plugin view
+			// TODO
+			
+			splitPanel.replacePanel(pluginToOpen, nuclrPath);
+			
+			pluginToOpen.onFocusGained();
+			
+			return;
+			
 		}
 
 		if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {

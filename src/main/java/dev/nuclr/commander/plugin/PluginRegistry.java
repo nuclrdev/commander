@@ -46,6 +46,7 @@ import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -64,8 +65,33 @@ public final class PluginRegistry {
 
 	private final List<URLClassLoader> pluginClassLoaders = new CopyOnWriteArrayList<>();
 
+	private Map<String, NuclrPlugin> pluginInstanceCache = new ConcurrentHashMap<>();
+	
 	@PostConstruct
 	public void init() {
+	}
+	
+	@PreDestroy
+	public void destroy() {
+		
+		// Close all plugin class loaders to release file locks on Windows
+		for (var classLoader : pluginClassLoaders) {
+			try {
+				classLoader.close();
+			} catch (IOException e) {
+				log.warn("Failed to close plugin class loader: {}", e.getMessage(), e);
+			}
+		}
+		
+		pluginInstanceCache.forEach((id, plugin) -> {
+			try {
+				log.info("Unloading plugin instance [{}]", id);
+				plugin.unload();
+			} catch (Exception e) {
+				log.warn("Failed to unload plugin instance [{}]: {}", id, e.getMessage(), e);
+			}
+		});
+		
 	}
 
 	public void loadPlugin(File zipFile) {
@@ -265,8 +291,6 @@ public final class PluginRegistry {
 		return List.copyOf(pluginTemplates);
 	}
 	
-	private Map<String, NuclrPlugin> pluginInstanceCache = new ConcurrentHashMap<>();
-
 	public NuclrPlugin getPluginInstance(String id) {
 		
 		var template = pluginTemplates
@@ -303,6 +327,7 @@ public final class PluginRegistry {
 			}
 			
 			return instance;
+			
 		} catch (Exception e) {
 			log.error("Failed to create plugin instance for id [{}]: {}", id, e.getMessage(), e);
 			return null;

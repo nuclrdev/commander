@@ -28,6 +28,7 @@ public final class Nuclr {
 	}
 
 	public static void exit() {
+		log.info("Shutting down the application...");
 		try {
 			ctx.stop();
 			ctx.close();
