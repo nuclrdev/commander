@@ -164,4 +164,14 @@ public class LoadingQuickViewPlugin implements NuclrPlugin {
 		return null;
 	}
 
+	@Override
+	public NuclrResourcePath getCurrentResource() {
+		return null;
+	}
+
+	@Override
+	public String uuid() {
+		return id();
+	}
+
 }

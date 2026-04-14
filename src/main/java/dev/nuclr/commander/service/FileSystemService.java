@@ -19,13 +19,14 @@ package dev.nuclr.commander.service;
 
 import java.awt.Desktop;
 import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.JOptionPane;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import dev.nuclr.commander.plugin.DefaultApplicationPluginContext;
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
 import dev.nuclr.commander.ui.main.SplitPanel;
@@ -37,34 +38,40 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class FileSystemService {
 
+    private final DefaultApplicationPluginContext defaultApplicationPluginContext;
+
 	@Autowired
 	private PluginRegistry pluginRegistry;
 	
 	@Autowired
 	private SplitPanel splitPanel;
 
-	public void open(Path path) {
+    FileSystemService(DefaultApplicationPluginContext defaultApplicationPluginContext) {
+        this.defaultApplicationPluginContext = defaultApplicationPluginContext;
+    }
 
-		if (path == null || !Files.exists(path)) {
+	public void open(NuclrResourcePath nuclrPath) {
+
+		if (nuclrPath == null || nuclrPath.getPath() == null || !Files.exists(nuclrPath.getPath())) {
 			return;
 		}
 
-		var nuclrPath = new NuclrResourcePath(path);
-
 		// First step check if there is a plugin that supports opening this file type,
 		// if so use it, otherwise use the system default application
-		var pluginToOpen = pluginRegistry.getPluginByResource(nuclrPath, NuclrPluginRole.FilePanel);
+		var pluginTemplate = pluginRegistry.getPluginByResource(nuclrPath, NuclrPluginRole.FilePanel);
 
-		if (pluginToOpen != null) {
+		if (pluginTemplate != null) {
 			
-			log.info("Found plugin \"{}\" to open file {}", pluginToOpen.name(), path);
+			log.info("Found plugin \"{}\" to open file {}", pluginTemplate.name(), nuclrPath.getPath());
 			
 			// replace the current panel with the new plugin view
 			// TODO
+			var pluginInstance = pluginRegistry.getPluginInstance(pluginTemplate.id());
+			pluginInstance.openResource(nuclrPath, new AtomicBoolean(false));
 			
-			splitPanel.replacePanel(pluginToOpen, nuclrPath);
+			this.splitPanel.setPluginToActivePanel(pluginInstance);
 			
-			pluginToOpen.onFocusGained();
+			pluginInstance.onFocusGained();
 			
 			return;
 			
@@ -77,9 +84,9 @@ public class FileSystemService {
 			return;
 		}
 		try {
-			Desktop.getDesktop().open(path.toFile());
+			Desktop.getDesktop().open(nuclrPath.getPath().toFile());
 		} catch (Exception ex) {
-			Alerts.showMessageDialog(null, "Cannot open item " + path.toFile(), "Error", JOptionPane.ERROR_MESSAGE);
+			Alerts.showMessageDialog(null, "Cannot open item " + nuclrPath.getPath().toFile(), "Error", JOptionPane.ERROR_MESSAGE);
 		}
 
 	}

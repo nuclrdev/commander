@@ -334,4 +334,26 @@ public final class PluginRegistry {
 		}
 	}
 
+	public void unloadSingletonPluginInstance(String uuid) {
+		
+		var matchedPlugin = pluginInstanceCache.values().stream()
+				.filter(plugin -> plugin.id().equals(uuid))
+				.findFirst()
+				.orElse(null);
+		
+		if (matchedPlugin == null) {
+			log.warn("No loaded plugin instance found with id: {}", uuid);
+			return;
+		}
+		
+		try {
+			matchedPlugin.unload();
+			pluginInstanceCache.remove(uuid);
+			log.info("Unloaded singleton lugin instance with id: {}", uuid);
+		} catch (Exception e) {
+			log.info("Failed to unload plugin instance with id [{}]: {}", uuid, e.getMessage(), e);
+		}
+				
+	}
+
 }
