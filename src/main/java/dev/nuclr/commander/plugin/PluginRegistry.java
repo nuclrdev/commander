@@ -43,6 +43,7 @@ import org.springframework.stereotype.Service;
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
 import dev.nuclr.platform.plugin.NuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
+import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -229,20 +230,22 @@ public final class PluginRegistry {
 		}
 	}
 
-	public List<NuclrPlugin> getPluginByItem(PathQuickViewItem item) {
+	public List<NuclrPlugin> getPluginByItem(PathQuickViewItem item, NuclrPluginRole role) {
 		return pluginTemplates.stream()
 				.filter(plugin -> plugin.supports(item))
+				.filter(plugin -> plugin.role().equals(role))
 				.sorted(Comparator.comparingInt(NuclrPlugin::priority))
 				.map(plugin -> getPluginInstance(plugin.id()))
 				.filter(java.util.Objects::nonNull)
 				.collect(Collectors.toList());
 	}
 
-	public NuclrPlugin getPluginByResource(NuclrResourcePath resource) {
+	public NuclrPlugin getPluginByResource(NuclrResourcePath resource, NuclrPluginRole role) {
 		return this
 				.pluginTemplates
 				.stream()
 				.filter(plugin -> plugin.supports(resource))
+				.filter(plugin -> plugin.role().equals(role))
 				.findFirst()
 				.orElse(null);
 	}

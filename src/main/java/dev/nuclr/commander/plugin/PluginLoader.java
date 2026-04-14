@@ -50,9 +50,8 @@ public class PluginLoader {
 			this.excludedPlugins.add(latest);
 		    this.loadFile(latest);
 		} else {
+			Alerts.showMessageDialog(null, "No file panel plugin found in directory: " + pluginsFolder, "Error", JOptionPane.ERROR_MESSAGE);
 		    log.error("No file panel plugin found in directory: [{}]", pluginsFolder);
-		    Alerts.showMessageDialog(null, "No file panel plugin found in directory: " + pluginsFolder, "Error", JOptionPane.ERROR_MESSAGE);
-		    System.exit(1);
 		}
 		
 		taskExecutor.execute(new Runnable() {

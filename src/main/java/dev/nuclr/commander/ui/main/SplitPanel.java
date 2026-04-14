@@ -46,6 +46,7 @@ import dev.nuclr.platform.NuclrSettings;
 import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.platform.plugin.NuclrPlugin;
+import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -214,41 +215,6 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		this.repaint();
 	}
 
-	@Override
-	public void handleMessage(Object source, String type, Map<String, Object> event) {
-
-		if (type.equals("fs.path.selected")) {
-			
-			var path = (Path) event.get("path");
-			
-			this.selectedPath = new PathQuickViewItem(path);
-			
-			log.info("Selected path updated to: " + this.selectedPath);
-
-			if (isQuickViewActive()) {
-				quickViewPanel.show(this.selectedPath.getPath());
-			}
-
-		} else if (type.equals("fs.path.opened")) {
-			
-			var path = (Path) event.get("path");
-			
-			this.selectedPath = new PathQuickViewItem(path);
-			
-			log.info("Opened path updated to: " + this.selectedPath);
-
-			fileSystemService.open(path);
-		}
-
-	}
-
-	private Set<String> supportedMessages = Set.of("fs.path.selected", "fs.path.opened");
-
-	@Override
-	public boolean isMessageSupported(String type) {
-		return supportedMessages.contains(type);
-	}
-
 	public boolean switchFocus() {
 
 		if (leftPlugin == null && rightPlugin == null) {
@@ -400,7 +366,7 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 			return false;
 		}
 
-		NuclrPlugin template = pluginRegistry.getPluginByResource(resource);
+		NuclrPlugin template = pluginRegistry.getPluginByResource(resource, NuclrPluginRole.FilePanel);
 		if (template == null || template.id() == null) {
 			log.warn("No plugin supports change-drive resource: {}", resource.getName());
 			return false;
@@ -429,6 +395,42 @@ public class SplitPanel extends JPanel implements NuclrEventListener {
 		}
 
 		return true;
+	}
+
+
+	@Override
+	public void handleMessage(Object source, String type, Map<String, Object> event) {
+
+		if (type.equals("fs.path.selected")) {
+			
+			var path = (Path) event.get("path");
+			
+			this.selectedPath = new PathQuickViewItem(path);
+			
+			log.info("Selected path updated to: " + this.selectedPath);
+
+			if (isQuickViewActive()) {
+				quickViewPanel.show(this.selectedPath.getPath());
+			}
+
+		} else if (type.equals("fs.path.opened")) {
+			
+			var path = (Path) event.get("path");
+			
+			this.selectedPath = new PathQuickViewItem(path);
+			
+			log.info("Opened path updated to: " + this.selectedPath);
+
+			fileSystemService.open(path);
+		}
+
+	}
+
+	private Set<String> supportedMessages = Set.of("fs.path.selected", "fs.path.opened");
+
+	@Override
+	public boolean isMessageSupported(String type) {
+		return supportedMessages.contains(type);
 	}
 
 }

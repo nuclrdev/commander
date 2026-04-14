@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component;
 import dev.nuclr.platform.NuclrThemeScheme;
 import dev.nuclr.platform.plugin.NuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
+import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import jakarta.annotation.PostConstruct;
 
@@ -150,6 +151,11 @@ public class FolderQuickViewPlugin implements NuclrPlugin {
 
 	public void stopScan() {
 		this.panel.stopScan();
+	}
+
+	@Override
+	public NuclrPluginRole role() {
+		return null;
 	}
 
 

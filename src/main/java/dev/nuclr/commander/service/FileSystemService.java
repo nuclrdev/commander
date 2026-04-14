@@ -23,20 +23,38 @@ import java.nio.file.Path;
 
 import javax.swing.JOptionPane;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.commander.ui.common.Alerts;
+import dev.nuclr.platform.plugin.NuclrPluginRole;
+import dev.nuclr.platform.plugin.NuclrResourcePath;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
 public class FileSystemService {
 
+	@Autowired
+	private PluginRegistry pluginRegistry;
+
 	public void open(Path path) {
 
 		if (path == null || !Files.exists(path)) {
 			return;
 		}
+
+		var nuclrPath = new NuclrResourcePath(path);
+
+		// First step check if there is a plugin that supports opening this file type,
+		// if so use it, otherwise use the system default application
+		var pluginToOpen = pluginRegistry.getPluginByResource(nuclrPath, NuclrPluginRole.FilePanel);
+
+		if (pluginToOpen != null) {
+			log.info("Found plugin \"{}\" to open file {}", pluginToOpen.name(), path);
+		}
+
 		if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
 			Alerts.showMessageDialog(null,
 					"Opening items with the system default application is not supported on this platform.", "Error",

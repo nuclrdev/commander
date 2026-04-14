@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component;
 import dev.nuclr.platform.NuclrThemeScheme;
 import dev.nuclr.platform.plugin.NuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
+import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 
 @Component
@@ -137,6 +138,11 @@ public class NoQuickViewAvailablePlugin implements NuclrPlugin {
 	@Override
 	public void updateTheme(NuclrThemeScheme themeScheme) {
 
+	}
+
+	@Override
+	public NuclrPluginRole role() {
+		return null;
 	}
 
 }

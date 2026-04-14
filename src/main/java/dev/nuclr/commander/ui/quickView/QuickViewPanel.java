@@ -32,6 +32,7 @@ import org.springframework.stereotype.Component;
 
 import dev.nuclr.commander.plugin.PluginRegistry;
 import dev.nuclr.platform.plugin.NuclrPlugin;
+import dev.nuclr.platform.plugin.NuclrPluginRole;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -108,7 +109,7 @@ public class QuickViewPanel {
 			return;
 		}
 
-		var plugins = pluginRegistry.getPluginByItem(path);
+		var plugins = pluginRegistry.getPluginByItem(path, NuclrPluginRole.QuickViewer);
 
 		if (plugins == null || plugins.isEmpty()) {
 			log.info("No providers found for: {}", path);
