@@ -24,86 +24,19 @@ import javax.swing.JComponent;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import dev.nuclr.platform.NuclrThemeScheme;
-import dev.nuclr.platform.plugin.NuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
-import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import jakarta.annotation.PostConstruct;
 
 @Lazy
 @Component
-public class FolderQuickViewPlugin implements NuclrPlugin {
-	
+public class FolderQuickViewPlugin extends InternalPlugin {
+
 	private FolderQuickViewPanel panel;
-	
+
 	@PostConstruct
 	public void init() {
 		panel();
-	}
-
-	@Override
-	public boolean onFocusGained() {
-		return false;
-	}
-
-	@Override
-	public void onFocusLost() {
-	}
-
-	@Override
-	public boolean isFocused() {
-		return false;
-	}
-
-	@Override
-	public String id() {
-		return null;
-	}
-
-	@Override
-	public String name() {
-		return null;
-	}
-
-	@Override
-	public String version() {
-		return "0";
-	}
-
-	@Override
-	public String description() {
-		return null;
-	}
-
-	@Override
-	public String author() {
-		return null;
-	}
-
-	@Override
-	public String license() {
-		return null;
-	}
-
-	@Override
-	public String website() {
-		return null;
-	}
-
-	@Override
-	public String pageUrl() {
-		return null;
-	}
-
-	@Override
-	public String docUrl() {
-		return null;
-	}
-
-	@Override
-	public Developer type() {
-		return null;
 	}
 
 	@Override
@@ -121,32 +54,12 @@ public class FolderQuickViewPlugin implements NuclrPlugin {
 
 	@Override
 	public void load(NuclrPluginContext context, boolean template) {
-		
 	}
 
-	@Override
-	public void unload() {
-		
-	}
-
-	@Override
 	public boolean openResource(NuclrResourcePath resource, AtomicBoolean cancelled) {
 		this.panel.show(resource.getPath());
+		this.currentResource = resource;
 		return false;
-	}
-
-	@Override
-	public void closeResource() {
-		
-	}
-
-	@Override
-	public int priority() {
-		return 1;
-	}
-
-	@Override
-	public void updateTheme(NuclrThemeScheme themeScheme) {
 	}
 
 	public void stopScan() {
@@ -154,18 +67,8 @@ public class FolderQuickViewPlugin implements NuclrPlugin {
 	}
 
 	@Override
-	public NuclrPluginRole role() {
-		return null;
-	}
-
-	@Override
-	public NuclrResourcePath getCurrentResource() {
-		return null;
-	}
-
-	@Override
-	public String uuid() {
-		return id();
+	public String id() {
+		return "FolderQuickViewPlugin";
 	}
 
 }

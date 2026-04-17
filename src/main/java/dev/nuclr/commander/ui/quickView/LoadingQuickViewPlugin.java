@@ -29,82 +29,20 @@ import javax.swing.SwingConstants;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import dev.nuclr.platform.NuclrThemeScheme;
-import dev.nuclr.platform.plugin.NuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
-import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import lombok.Data;
 
 @Data
 @Component
 @Lazy
-public class LoadingQuickViewPlugin implements NuclrPlugin {
+public class LoadingQuickViewPlugin extends InternalPlugin {
 
 	private JPanel panel;
 
 	@Override
-	public boolean onFocusGained() {
-		return false;
-	}
-
-	@Override
-	public void onFocusLost() {
-	}
-
-	@Override
-	public boolean isFocused() {
-		return false;
-	}
-
-	@Override
 	public String id() {
-		return null;
-	}
-
-	@Override
-	public String name() {
-		return null;
-	}
-
-	@Override
-	public String version() {
-		return "0";
-	}
-
-	@Override
-	public String description() {
-		return null;
-	}
-
-	@Override
-	public String author() {
-		return null;
-	}
-
-	@Override
-	public String license() {
-		return null;
-	}
-
-	@Override
-	public String website() {
-		return null;
-	}
-
-	@Override
-	public String pageUrl() {
-		return null;
-	}
-
-	@Override
-	public String docUrl() {
-		return null;
-	}
-
-	@Override
-	public Developer type() {
-		return null;
+		return "LoadingQuickViewPlugin";
 	}
 
 	@Override
@@ -138,40 +76,12 @@ public class LoadingQuickViewPlugin implements NuclrPlugin {
 	}
 
 	@Override
-	public void unload() {
-	}
-
-	@Override
 	public boolean openResource(NuclrResourcePath resource, AtomicBoolean cancelled) {
 		return false;
 	}
 
 	@Override
 	public void closeResource() {
-	}
-
-	@Override
-	public int priority() {
-		return 0;
-	}
-
-	@Override
-	public void updateTheme(NuclrThemeScheme themeScheme) {
-	}
-
-	@Override
-	public NuclrPluginRole role() {
-		return null;
-	}
-
-	@Override
-	public NuclrResourcePath getCurrentResource() {
-		return null;
-	}
-
-	@Override
-	public String uuid() {
-		return id();
 	}
 
 }
