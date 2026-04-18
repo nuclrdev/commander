@@ -224,9 +224,16 @@ public class SplitPanel implements NuclrEventListener {
 	}
 
 	private void updateSplitPane(int dividerLocation) {
-		this.container.revalidate();
-		this.container.repaint();
-		restoreMainDividerLocation(dividerLocation);
+		Runnable update = () -> {
+			this.container.revalidate();
+			mainSplitPane.setDividerLocation(dividerLocation);
+			this.container.repaint();
+		};
+		if (SwingUtilities.isEventDispatchThread()) {
+			update.run();
+		} else {
+			SwingUtilities.invokeLater(update);
+		}
 	}
 	
 	private NuclrPlugin getCurrentLeftPlugin() {
