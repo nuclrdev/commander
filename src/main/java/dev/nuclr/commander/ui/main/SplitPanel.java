@@ -198,9 +198,10 @@ public class SplitPanel implements NuclrEventListener {
 			return;
 		}
 
+		int dividerLocation = getCurrentOrSavedDividerLocation();
 		this.mainSplitPane.setLeftComponent(plugin.panel());
 		
-		updateSplitPane();
+		updateSplitPane(dividerLocation);
 		
 		leftViewStack.push(plugin);
 		
@@ -214,16 +215,18 @@ public class SplitPanel implements NuclrEventListener {
 			return;
 		}
 
+		int dividerLocation = getCurrentOrSavedDividerLocation();
 		this.mainSplitPane.setRightComponent(plugin.panel());
 		
-		updateSplitPane();
+		updateSplitPane(dividerLocation);
 		
 		rightViewStack.push(plugin);
 	}
 
-	private void updateSplitPane() {
+	private void updateSplitPane(int dividerLocation) {
 		this.container.revalidate();
 		this.container.repaint();
+		restoreMainDividerLocation(dividerLocation);
 	}
 	
 	private NuclrPlugin getCurrentLeftPlugin() {
@@ -352,10 +355,22 @@ public class SplitPanel implements NuclrEventListener {
 	}
 	
 	private void restoreMainDividerLocation() {
+		restoreMainDividerLocation(getDividerLocation());
+	}
+
+	private void restoreMainDividerLocation(int dividerLocation) {
 		SwingUtilities.invokeLater(() -> {
-			mainSplitPane.setDividerLocation(getDividerLocation());
-			log.info("Restored main divider location: " + getDividerLocation());
+			mainSplitPane.setDividerLocation(dividerLocation);
+			log.info("Restored main divider location: " + dividerLocation);
 		});
+	}
+
+	private int getCurrentOrSavedDividerLocation() {
+		int dividerLocation = mainSplitPane.getDividerLocation();
+		if (dividerLocation <= 0) {
+			return getDividerLocation();
+		}
+		return dividerLocation;
 	}
 	
 	private int getDividerLocation() {
