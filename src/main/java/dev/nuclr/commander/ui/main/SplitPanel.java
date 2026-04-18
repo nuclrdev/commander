@@ -311,6 +311,7 @@ public class SplitPanel implements NuclrEventListener {
 			log.info("Toggling Quick View: Deactivating");
 
 			quickViewPanel.setOnProviderChanged(null);
+			quickViewPanel.stop();
 
 			if (leftPlugin.isFocused()) {
 				setRightComponent(preQuickViewPlugin);

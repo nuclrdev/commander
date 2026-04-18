@@ -20,6 +20,7 @@ package dev.nuclr.commander.ui.quickView;
 import java.awt.BorderLayout;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -221,7 +222,7 @@ public class QuickViewPanel {
 
 		log.info("Attempting to show plugin, current one [{}]", this.activeProvider);
 
-		if (activeProvider != null && plugin.id().equals(this.activeProvider.id())) {
+		if (activeProvider != null && Objects.equals(plugin.id(), this.activeProvider.id())) {
 			log.info("Plugin [{}] is already active, skipping showCard", plugin.getClass().getName());
 			setActiveProvider(plugin);
 		} else {
