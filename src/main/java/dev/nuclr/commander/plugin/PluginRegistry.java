@@ -41,6 +41,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import dev.nuclr.commander.ui.quickView.PathQuickViewItem;
+import dev.nuclr.platform.NuclrThemeScheme;
 import dev.nuclr.platform.plugin.NuclrPlugin;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrPluginRole;
@@ -354,6 +355,22 @@ public final class PluginRegistry {
 			log.info("Failed to unload plugin instance with id [{}]: {}", uuid, e.getMessage(), e);
 		}
 				
+	}
+
+	public void broadcastThemeUpdate(NuclrThemeScheme themeScheme) {
+		pluginTemplates.forEach(plugin -> applyThemeUpdate(plugin, themeScheme));
+		pluginInstanceCache.values().forEach(plugin -> applyThemeUpdate(plugin, themeScheme));
+	}
+
+	private void applyThemeUpdate(NuclrPlugin plugin, NuclrThemeScheme themeScheme) {
+		if (plugin == null || themeScheme == null) {
+			return;
+		}
+		try {
+			plugin.updateTheme(themeScheme);
+		} catch (Exception e) {
+			log.warn("Failed to update theme for plugin [{}]: {}", plugin.id(), e.getMessage(), e);
+		}
 	}
 
 }

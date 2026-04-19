@@ -439,7 +439,9 @@ public class MainWindow implements NuclrEventListener {
 	private void applyFontSize(int size) {
 		fontSize = size;
 		UIManager.put("defaultFont", new Font("JetBrains Mono", Font.PLAIN, fontSize));
+		UIManager.put("Button.font", UIManager.getFont("defaultFont"));
 		SwingUtilities.updateComponentTreeUI(mainFrame);
+		pluginRegistry.broadcastThemeUpdate(themeSchemeStore.loadOrDefault().activeThemeScheme());
 		saveFontSize(fontSize);
 	}
 
