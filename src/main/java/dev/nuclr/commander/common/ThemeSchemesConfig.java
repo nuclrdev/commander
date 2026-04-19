@@ -1,6 +1,7 @@
 package dev.nuclr.commander.common;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import dev.nuclr.platform.NuclrThemeScheme;
 
@@ -16,7 +17,7 @@ public record ThemeSchemesConfig(
 				? activeScheme
 				: Defaults.ACTIVE_SCHEME;
 		schemes = schemes != null && !schemes.isEmpty()
-				? Map.copyOf(schemes)
+				? normalizeSchemes(schemes)
 				: Defaults.SCHEMES;
 	}
 
@@ -38,7 +39,7 @@ public record ThemeSchemesConfig(
 				ACTIVE_SCHEME,
 				new NuclrThemeScheme(
 						"Far Blue",
-						Map.ofEntries(
+						FileNameHighlighter.mergeThemeEntries(Map.ofEntries(
 								Map.entry("Panel.background", "#0b2f59"),
 								Map.entry("Panel.foreground", "#d7e8ff"),
 								Map.entry("Viewport.background", "#0b2f59"),
@@ -75,7 +76,21 @@ public record ThemeSchemesConfig(
 								Map.entry("TitlePane.inactiveBackground", "#0f2f54"),
 								Map.entry("TitlePane.inactiveForeground", "#a8bfd8"),
 								Map.entry("TitlePane.embeddedForeground", "#e8f1ff")
-						))
+						)))
 				);
 		}
+
+	private static Map<String, NuclrThemeScheme> normalizeSchemes(Map<String, NuclrThemeScheme> schemes) {
+		return schemes.entrySet().stream()
+				.collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry -> normalizeScheme(entry.getValue())));
 	}
+
+	private static NuclrThemeScheme normalizeScheme(NuclrThemeScheme scheme) {
+		if (scheme == null) {
+			return Defaults.SCHEMES.get(Defaults.ACTIVE_SCHEME);
+		}
+		return new NuclrThemeScheme(
+				scheme.getName(),
+				FileNameHighlighter.mergeThemeEntries(scheme.getUiDefaults()));
+	}
+}
