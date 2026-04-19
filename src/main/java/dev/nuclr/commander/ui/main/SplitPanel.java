@@ -294,13 +294,29 @@ public class SplitPanel implements NuclrEventListener {
 	}
 
 	public JComponent getLeftAnchorComponent() {
-		var leftPlugin = getCurrentLeftPlugin();
-		return leftPlugin != null ? leftPlugin.panel() : this.container;
+		return resolveAnchorComponent(Side.Left);
 	}
 
 	public JComponent getRightAnchorComponent() {
-		var rightPlugin = getCurrentRightPlugin();
-		return rightPlugin != null ? rightPlugin.panel() : this.container;
+		return resolveAnchorComponent(Side.Right);
+	}
+
+	private JComponent resolveAnchorComponent(Side side) {
+		java.awt.Component visibleComponent = side == Side.Left
+				? mainSplitPane.getLeftComponent()
+				: mainSplitPane.getRightComponent();
+		if (visibleComponent instanceof JComponent visible && visible.isShowing()) {
+			return visible;
+		}
+
+		NuclrPlugin plugin = side == Side.Left ? getCurrentLeftPlugin() : getCurrentRightPlugin();
+		if (plugin != null) {
+			JComponent panel = plugin.panel();
+			if (panel != null && panel.isShowing()) {
+				return panel;
+			}
+		}
+		return container;
 	}
 
 	public boolean openLeftResource(NuclrResourcePath resource) {
@@ -383,6 +399,13 @@ public class SplitPanel implements NuclrEventListener {
 	private int getDividerLocation() {
 		var divider = settings.getOrDefault(SettingsNamespace + "splitPanel", "dividerLocation", (int) ( this.mainSplitPane.getWidth() / 2));
 		log.info("Loaded main divider location ratio: " + divider);
+		
+		// If divider location is off the window size, just make it in the middle of the window
+		if (divider <= 0 || divider >= this.mainSplitPane.getWidth()) {
+			divider = this.mainSplitPane.getWidth() / 2;
+			log.info("Saved divider location was out of bounds, defaulting to: " + divider);
+		}
+		
 		return divider;
 	}
 
