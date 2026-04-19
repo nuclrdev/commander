@@ -69,7 +69,7 @@ public class FolderQuickViewPanel extends JPanel {
 		centerPanel = new JPanel();
 		centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
 		centerPanel.setBackground(uiColor("Panel.background", centerPanel.getBackground()));
-		centerPanel.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+		centerPanel.setBorder(BorderFactory.createEmptyBorder(28, 28, 28, 28));
 
 		iconLabel = new JLabel("\uD83D\uDCC1", SwingConstants.CENTER);
 		iconLabel.setFont(uiFontRelative(Font.PLAIN, 4.0f, 20));
@@ -109,11 +109,11 @@ public class FolderQuickViewPanel extends JPanel {
 
 		centerPanel.add(Box.createVerticalGlue());
 		centerPanel.add(iconLabel);
-		centerPanel.add(Box.createVerticalStrut(10));
+		centerPanel.add(Box.createVerticalStrut(14));
 		centerPanel.add(nameLabel);
-		centerPanel.add(Box.createVerticalStrut(12));
+		centerPanel.add(Box.createVerticalStrut(18));
 		centerPanel.add(separatorPanel);
-		centerPanel.add(Box.createVerticalStrut(12));
+		centerPanel.add(Box.createVerticalStrut(18));
 		centerPanel.add(infoPanel);
 		centerPanel.add(Box.createVerticalGlue());
 
@@ -122,11 +122,12 @@ public class FolderQuickViewPanel extends JPanel {
 	}
 
 	private JPanel makeRow(String key, JLabel valueLabel) {
-		JPanel row = new JPanel(new GridLayout(1, 2, 8, 0));
+		JPanel row = new JPanel(new GridLayout(1, 2, 16, 0));
 		row.setBackground(uiColor("Panel.background", row.getBackground()));
 		row.setAlignmentX(CENTER_ALIGNMENT);
-		row.setMaximumSize(new Dimension(INFO_PANEL_WIDTH, 18));
-		row.setPreferredSize(new Dimension(INFO_PANEL_WIDTH, 18));
+		row.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+		row.setMaximumSize(new Dimension(INFO_PANEL_WIDTH, 24));
+		row.setPreferredSize(new Dimension(INFO_PANEL_WIDTH, 24));
 
 		JLabel keyLabel = new JLabel(key);
 		keyLabel.setFont(uiFontRelative(Font.PLAIN, 1.0f, 11));
