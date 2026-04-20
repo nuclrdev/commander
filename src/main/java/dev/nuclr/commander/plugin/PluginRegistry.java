@@ -257,14 +257,15 @@ public final class PluginRegistry {
 		}
 	}
 
-	public List<NuclrPlugin> getPluginByItem(PathQuickViewItem item, NuclrPluginRole role) {
+	public NuclrPlugin getPluginByItem(PathQuickViewItem item, NuclrPluginRole role) {
 		return pluginTemplates.stream()
 				.filter(plugin -> plugin.supports(item))
 				.filter(plugin -> plugin.role().equals(role))
 				.sorted(Comparator.comparingInt(NuclrPlugin::priority))
 				.map(plugin -> getPluginInstance(plugin.id()))
 				.filter(java.util.Objects::nonNull)
-				.collect(Collectors.toList());
+				.findFirst()
+				.orElse(null);
 	}
 
 	public NuclrPlugin getPluginByResource(NuclrResourcePath resource, NuclrPluginRole role) {

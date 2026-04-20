@@ -110,24 +110,13 @@ public class QuickViewPanel {
 			return;
 		}
 
-		var plugins = pluginRegistry.getPluginByItem(path, NuclrPluginRole.QuickViewer);
+		final var plugin = pluginRegistry.getPluginByItem(path, NuclrPluginRole.QuickViewer);
 
-		if (plugins == null || plugins.isEmpty()) {
+		if (plugin == null) {
 			log.info("No providers found for: {}", path);
 			this.noQuickViewAvailablePlugin.openResource(path, currentCancelled);
 			showCard(noQuickViewAvailablePlugin);
 			return;
-		}
-
-		// Initialise plugin panels on the EDT before going async
-		for (var plugin : plugins) {
-			log.info("Found provider [{}] for: {}", plugin.getClass().getName(), path);
-			String pluginKey = plugin.getClass().getName();
-			/*
-			 * if (!loadedPlugins.containsKey(pluginKey)) { var pluginPanel =
-			 * plugin.panel(); loadedPlugins.put(pluginKey, plugin); panel.add(pluginPanel,
-			 * pluginKey); }
-			 */
 		}
 
 		// Show loading feedback immediately while the plugin opens the file
@@ -137,38 +126,41 @@ public class QuickViewPanel {
 		currentCancelled = cancelled;
 
 		currentLoadThread = Thread.ofVirtual().start(() -> {
-			for (var plugin : plugins) {
-				// Bail out before every expensive operation
-				if (isStale(myGen))
-					return;
+			
+			// Bail out before every expensive operation
+			if (isStale(myGen))
+				return;
 
-				long start = System.currentTimeMillis();
-				boolean success;
-				try {
-					success = plugin.openResource(path, cancelled);
-					log.info("Plugin [{}] open took {} ms", plugin.getClass().getName(),
-							System.currentTimeMillis() - start);
-				} catch (Exception e) {
-					log.error("Error in plugin [{}]: {}", plugin.getClass().getName(), e.getMessage(), e);
-					continue;
-				}
+			long start = System.currentTimeMillis();
+			
+			boolean success;
+			
+			try {
+				success = plugin.openResource(path, cancelled);
+				log.info("Plugin [{}] open took {} ms", plugin.getClass().getName(),
+						System.currentTimeMillis() - start);
+			} catch (Exception e) {
+				log.error("Error in plugin [{}]: {}", plugin.getClass().getName(), e.getMessage(), e);
+				return;
+			}
 
-				// If superseded while plugin was opening, close what we just opened
-				if (isStale(myGen)) {
-					closeQuietly(plugin);
-					return;
-				}
+			// If superseded while plugin was opening, close what we just opened
+			if (isStale(myGen)) {
+				closeQuietly(plugin);
+				return;
+			}
 
-				if (success) {
-					if (!isStale(myGen))
-						setActiveProvider(plugin);
-					return;
-				}
+			if (success) {
+				if (!isStale(myGen))
+					setActiveProvider(plugin);
+				return;
 			}
 
 			// All plugins failed — nothing to show
-			if (!isStale(myGen))
+			if (!isStale(myGen)) {
 				showNoProvider(path);
+			}
+			
 		});
 	}
 

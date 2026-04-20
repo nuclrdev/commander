@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
@@ -71,6 +72,7 @@ import dev.nuclr.platform.events.NuclrEventBus;
 import dev.nuclr.platform.events.NuclrEventListener;
 import dev.nuclr.platform.plugin.NuclrMenuResource;
 import dev.nuclr.platform.plugin.NuclrPlugin;
+import dev.nuclr.platform.plugin.NuclrPluginRole;
 import dev.nuclr.platform.plugin.NuclrResourcePath;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -83,10 +85,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class MainWindow implements NuclrEventListener {
 
-    private final PluginLoader pluginLoader;
-
 	private static final String ConsolePanel = "ConsolePanel";
 	private static final String SplitPanel = "SplitPanel";
+	private static final String FullScreenPanel = "FullScreenPanel";
 
 	public static final String SettingsNamespace = "MainWindow";	
 	
@@ -132,9 +133,12 @@ public class MainWindow implements NuclrEventListener {
 	private JComponent activeScreenComponent;
 	
 	private JPanel cardPanel;
+	
+	// Fullscreen plugin and panel
+	private NuclrPlugin fullScreenPlugin;
+	private JComponent fullScreenPanel;
 
     MainWindow(PluginLoader pluginLoader) {
-        this.pluginLoader = pluginLoader;
     }
 
 	@PostConstruct
@@ -377,6 +381,8 @@ public class MainWindow implements NuclrEventListener {
 			this.activeScreenComponent = this.splitPane.getContainer();
 		} else if (cardName.equals(ConsolePanel)) {
 			this.activeScreenComponent = this.consolePanel.getConsolePanel();
+		} else if (cardName.equals(FullScreenPanel)) {
+			this.activeScreenComponent = this.fullScreenPanel;
 		}
 	}
 
@@ -523,6 +529,52 @@ public class MainWindow implements NuclrEventListener {
 			showChangeDrivePopup(false);
 		} else if (type.equals("fs.path.selected")) {
 			rebuildFunctionBar();
+		} else if (type.equals("fs.view")) {
+			openFullScreenPlugin(event);
+		} else if (type.equals("plugin.fullscreen.close")) {
+			closeFullScreenPlugin();
+			
+		}
+
+	}
+
+	private void closeFullScreenPlugin() {
+		
+		this.fullScreenPlugin.closeResource();
+		this.fullScreenPlugin.unload();
+		
+		this.cardPanel.remove(this.fullScreenPanel);
+		
+		makeCardVisible(SplitPanel);
+		
+		this.splitPane.refocus();
+		
+	}
+
+	private void openFullScreenPlugin(Map<String, Object> event) {
+
+		log.info("Received fs.view event with payload: {}", event);
+
+		var path = (NuclrResourcePath) event.get("path");
+
+		// Find plugin
+		var plugin = this.pluginRegistry.getPluginByResource(path, NuclrPluginRole.FullScreenViewer);
+
+		if (plugin != null) {
+
+			plugin.openResource(path, new AtomicBoolean(false));
+
+			this.functionKeyBar.setMenuResources(plugin.menuItems(path), shiftDown, ctrlDown, altDown);
+			
+			this.fullScreenPlugin = plugin;
+			this.fullScreenPanel = plugin.panel();
+
+			this.cardPanel.add(this.fullScreenPanel, FullScreenPanel);
+			
+			makeCardVisible(FullScreenPanel);
+			
+			this.fullScreenPlugin.onFocusGained();
+			
 		}
 
 	}

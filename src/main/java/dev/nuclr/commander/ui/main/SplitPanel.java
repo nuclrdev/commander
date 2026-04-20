@@ -60,11 +60,11 @@ public class SplitPanel implements NuclrEventListener {
 	private static final int DIVIDER_STEP_PIXELS = 30;
 
 	private JPanel container;
-	
+
 	private JSplitPane mainSplitPane;
-	
+
 	private boolean isQuickViewActive = false;
-	
+
 	private NuclrResourcePath selectedPath;
 
 	private NuclrPlugin preQuickViewPlugin;
@@ -80,17 +80,17 @@ public class SplitPanel implements NuclrEventListener {
 
 	@Autowired
 	private PluginRegistry pluginRegistry;
-	
+
 	@Autowired
 	private FileSystemService fileSystemService;
-	
+
 	private final Deque<NuclrPlugin> leftViewStack = new ArrayDeque<>();
 	private final Deque<NuclrPlugin> rightViewStack = new ArrayDeque<>();
 
 	private static enum Side {
 		Left, Right, Fullscreen
 	}
-	
+
 	public SplitPanel() {
 		this.container = new JPanel();
 	}
@@ -98,25 +98,24 @@ public class SplitPanel implements NuclrEventListener {
 	public void init() {
 
 		log.info("Initializing FilePanel");
-		
+
 		eventBus.subscribe(this);
 
 		mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, placeholder("Loading plugins..."),
 				placeholder("Loading plugins..."));
 
 		for (var c : mainSplitPane.getComponents()) {
-		    if (c instanceof BasicSplitPaneDivider divider) {
-		        divider.addMouseListener(new MouseAdapter() {
-		            @Override
-		            public void mouseReleased(MouseEvent e) {
-		                log.info("User finished dragging: " 
-		                    + mainSplitPane.getDividerLocation());
-		                saveDividerLocation(mainSplitPane.getDividerLocation()); // Save the new location
-		            }
-		        });
-		    }
+			if (c instanceof BasicSplitPaneDivider divider) {
+				divider.addMouseListener(new MouseAdapter() {
+					@Override
+					public void mouseReleased(MouseEvent e) {
+						log.info("User finished dragging: " + mainSplitPane.getDividerLocation());
+						saveDividerLocation(mainSplitPane.getDividerLocation()); // Save the new location
+					}
+				});
+			}
 		}
-		
+
 		this.container.setLayout(new java.awt.BorderLayout());
 		this.container.add(mainSplitPane, java.awt.BorderLayout.CENTER);
 
@@ -125,7 +124,7 @@ public class SplitPanel implements NuclrEventListener {
 		// Keyboard input for quick view toggle
 		var inputMap = this.container.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
 		{
-			
+
 			// Ctrl + Q for quick view toggle
 			inputMap.put(KeyStroke.getKeyStroke("control pressed Q"), "quickView");
 			this.container.getActionMap().put("quickView", new AbstractAction() {
@@ -136,7 +135,7 @@ public class SplitPanel implements NuclrEventListener {
 			});
 
 		}
-		
+
 		SwingUtilities.invokeLater(() -> {
 			restoreMainDividerLocation();
 		});
@@ -179,7 +178,7 @@ public class SplitPanel implements NuclrEventListener {
 			plugin.openResource(resource, new AtomicBoolean(false));
 			setRightComponent(plugin);
 			plugin.onFocusGained();
-			
+
 		}
 
 	}
@@ -200,11 +199,11 @@ public class SplitPanel implements NuclrEventListener {
 
 		int dividerLocation = getCurrentOrSavedDividerLocation();
 		this.mainSplitPane.setLeftComponent(plugin.panel());
-		
+
 		updateSplitPane(dividerLocation);
-		
+
 		leftViewStack.push(plugin);
-		
+
 	}
 
 	public void setRightComponent(NuclrPlugin plugin) {
@@ -217,9 +216,9 @@ public class SplitPanel implements NuclrEventListener {
 
 		int dividerLocation = getCurrentOrSavedDividerLocation();
 		this.mainSplitPane.setRightComponent(plugin.panel());
-		
+
 		updateSplitPane(dividerLocation);
-		
+
 		rightViewStack.push(plugin);
 	}
 
@@ -235,20 +234,41 @@ public class SplitPanel implements NuclrEventListener {
 			SwingUtilities.invokeLater(update);
 		}
 	}
-	
+
 	private NuclrPlugin getCurrentLeftPlugin() {
 		return leftViewStack.peek();
 	}
-	
+
 	private NuclrPlugin getCurrentRightPlugin() {
 		return rightViewStack.peek();
+	}
+
+	public boolean refocus() {
+
+		var leftPlugin = getCurrentLeftPlugin();
+		var rightPlugin = getCurrentRightPlugin();
+
+		if (leftPlugin == null && rightPlugin == null) {
+			log.info("No plugins to switch focus to.");
+			return false;
+		}
+
+		if (leftPlugin.isFocused()) {
+			leftPlugin.onFocusGained();
+			rightPlugin.onFocusLost();
+		} else {
+			leftPlugin.onFocusLost();
+			rightPlugin.onFocusGained();
+		}
+
+		return true;
 	}
 
 	public boolean switchFocus() {
 
 		var leftPlugin = getCurrentLeftPlugin();
 		var rightPlugin = getCurrentRightPlugin();
-		
+
 		if (leftPlugin == null && rightPlugin == null) {
 			log.info("No plugins to switch focus to.");
 			return false;
@@ -266,10 +286,10 @@ public class SplitPanel implements NuclrEventListener {
 	}
 
 	public NuclrPlugin getFocusedPlugin() {
-		
+
 		var leftPlugin = getCurrentLeftPlugin();
 		var rightPlugin = getCurrentRightPlugin();
-		
+
 		if (leftPlugin != null && leftPlugin.isFocused()) {
 			return leftPlugin;
 		}
@@ -302,8 +322,7 @@ public class SplitPanel implements NuclrEventListener {
 	}
 
 	private JComponent resolveAnchorComponent(Side side) {
-		java.awt.Component visibleComponent = side == Side.Left
-				? mainSplitPane.getLeftComponent()
+		java.awt.Component visibleComponent = side == Side.Left ? mainSplitPane.getLeftComponent()
 				: mainSplitPane.getRightComponent();
 		if (visibleComponent instanceof JComponent visible && visible.isShowing()) {
 			return visible;
@@ -331,7 +350,7 @@ public class SplitPanel implements NuclrEventListener {
 
 		var leftPlugin = getCurrentLeftPlugin();
 		var rightPlugin = getCurrentRightPlugin();
-		
+
 		if (isQuickViewActive()) {
 
 			log.info("Toggling Quick View: Deactivating");
@@ -365,7 +384,7 @@ public class SplitPanel implements NuclrEventListener {
 		}
 
 		setQuickViewActive(!isQuickViewActive());
-		
+
 		restoreMainDividerLocation();
 	}
 
@@ -376,7 +395,7 @@ public class SplitPanel implements NuclrEventListener {
 	private void setQuickViewActive(boolean active) {
 		isQuickViewActive = active;
 	}
-	
+
 	private void restoreMainDividerLocation() {
 		restoreMainDividerLocation(getDividerLocation());
 	}
@@ -395,17 +414,19 @@ public class SplitPanel implements NuclrEventListener {
 		}
 		return dividerLocation;
 	}
-	
+
 	private int getDividerLocation() {
-		var divider = settings.getOrDefault(SettingsNamespace + "splitPanel", "dividerLocation", (int) ( this.mainSplitPane.getWidth() / 2));
+		var divider = settings.getOrDefault(SettingsNamespace + "splitPanel", "dividerLocation",
+				(int) (this.mainSplitPane.getWidth() / 2));
 		log.info("Loaded main divider location ratio: " + divider);
-		
-		// If divider location is off the window size, just make it in the middle of the window
+
+		// If divider location is off the window size, just make it in the middle of the
+		// window
 		if (divider <= 0 || divider >= this.mainSplitPane.getWidth()) {
 			divider = this.mainSplitPane.getWidth() / 2;
 			log.info("Saved divider location was out of bounds, defaulting to: " + divider);
 		}
-		
+
 		return divider;
 	}
 
@@ -477,16 +498,15 @@ public class SplitPanel implements NuclrEventListener {
 		return true;
 	}
 
-
 	@Override
 	public void handleMessage(Object source, String type, Map<String, Object> event) {
 
 		if (type.equals("fs.path.selected")) {
-			
+
 			var path = (Path) event.get("path");
-			
+
 			this.selectedPath = new PathQuickViewItem(path);
-			
+
 			log.info("Selected path updated to: " + this.selectedPath);
 
 			if (isQuickViewActive()) {
@@ -494,44 +514,45 @@ public class SplitPanel implements NuclrEventListener {
 			}
 
 		} else if (type.equals("fs.path.opened")) {
-			
+
 			var path = (Path) event.get("path");
-			
+
 			this.selectedPath = new NuclrResourcePath(path);
-			
+
 			log.info("Opened path updated to: " + this.selectedPath);
 
 			fileSystemService.open(selectedPath);
-		
+
 		} else if (type.equals("plugin.unload")) {
-			
-			unloadPluginIfPresent((String)event.get("uuid"));
-			
+
+			unloadPluginIfPresent((String) event.get("uuid"));
+
 		}
 
 	}
 
 	/**
-	 * Find a plugin in both left/right stacks, remove it, and if it was the active one, switch to the next plugin in the stack or placeholder.
+	 * Find a plugin in both left/right stacks, remove it, and if it was the active
+	 * one, switch to the next plugin in the stack or placeholder.
 	 */
 	private void unloadPluginIfPresent(String uuid) {
-		
+
 		log.info("Checking if unloaded plugin [{}] is in left or right view", uuid);
 
 		// check left panel stack
 		{
 			var matchedPlugin = leftViewStack.stream().filter(p -> p.uuid().equals(uuid)).findAny().orElse(null);
-			
-			if (matchedPlugin!=null) {
-				
+
+			if (matchedPlugin != null) {
+
 				matchedPlugin.unload();
-				
+
 				pluginRegistry.unloadSingletonPluginInstance(uuid);
-				
+
 				leftViewStack.remove(matchedPlugin);
-				
+
 				var newPlugin = leftViewStack.peek();
-				
+
 				if (newPlugin != null) {
 					log.info("Switching left panel to previous plugin [{}] after unload", newPlugin.id());
 					setLeftComponent(newPlugin);
@@ -539,24 +560,24 @@ public class SplitPanel implements NuclrEventListener {
 				} else {
 					log.info("No more plugins in left panel stack after unload, showing placeholder");
 				}
-				
+
 			}
 		}
-		
+
 		// check right panel stack
 		{
 			var matchedPlugin = rightViewStack.stream().filter(p -> p.uuid().equals(uuid)).findAny().orElse(null);
-			
-			if (matchedPlugin!=null) {
-				
+
+			if (matchedPlugin != null) {
+
 				matchedPlugin.unload();
-				
+
 				pluginRegistry.unloadSingletonPluginInstance(uuid);
-				
+
 				rightViewStack.remove(matchedPlugin);
-				
+
 				var newPlugin = rightViewStack.peek();
-				
+
 				if (newPlugin != null) {
 					log.info("Switching right panel to previous plugin [{}] after unload", newPlugin.id());
 					setRightComponent(newPlugin);
@@ -564,10 +585,10 @@ public class SplitPanel implements NuclrEventListener {
 				} else {
 					log.info("No more plugins in right panel stack after unload, showing placeholder");
 				}
-				
+
 			}
 		}
-		
+
 	}
 
 	private Set<String> supportedMessages = Set.of("fs.path.selected", "fs.path.opened", "plugin.unload");
