@@ -590,14 +590,24 @@ public class MainWindow implements NuclrEventListener {
 			return;
 		}
 
-		if (isVisible(splitPane) && dispatchPluginFunctionKeyCommand(event)) {
+		if (dispatchActivePluginFunctionKeyCommand(event)) {
 			return;
 		}
 
 		handleWindowFunctionKeyCommand(event.getFunctionKeyNumber());
 	}
 
-	private boolean dispatchPluginFunctionKeyCommand(FunctionKeyCommandEvent event) {
+	private boolean dispatchActivePluginFunctionKeyCommand(FunctionKeyCommandEvent event) {
+		if (isVisible(splitPane)) {
+			return dispatchPluginFunctionKeyCommand(event, splitPane.getSelectedResource());
+		}
+		if (fullScreenPlugin != null && fullScreenPanel != null && fullScreenPanel.isShowing()) {
+			return dispatchPluginFunctionKeyCommand(event, fullScreenPlugin.getCurrentResource());
+		}
+		return false;
+	}
+
+	private boolean dispatchPluginFunctionKeyCommand(FunctionKeyCommandEvent event, NuclrResourcePath resource) {
 		NuclrMenuResource menuResource = event.getMenuResource();
 		if (menuResource == null || menuResource.getEventType() == null || menuResource.getEventType().isBlank()) {
 			return false;
@@ -605,9 +615,8 @@ public class MainWindow implements NuclrEventListener {
 
 		Map<String, Object> payload = new HashMap<>();
 		payload.put("label", event.getLabel());
-		NuclrResourcePath selectedResource = splitPane.getSelectedResource();
-		if (selectedResource != null) {
-			payload.put("resource", selectedResource);
+		if (resource != null) {
+			payload.put("resource", resource);
 		}
 
 		eventBus.emit(this, menuResource.getEventType(), payload);
