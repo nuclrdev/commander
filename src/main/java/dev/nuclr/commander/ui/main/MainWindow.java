@@ -182,6 +182,8 @@ public class MainWindow implements NuclrEventListener {
 			this.settings.getOrDefault(SettingsNamespace, "windowHeight", 768)
 		);
 		
+		mainFrame.setMinimumSize(new java.awt.Dimension(600*2, 400*2));
+		
 		// Restore window position if valid coordinates are available, otherwise center on screen
 		var windowX = this.settings.getOrDefault(SettingsNamespace, "windowX", -1);
 		var windowY = this.settings.getOrDefault(SettingsNamespace, "windowY", -1);

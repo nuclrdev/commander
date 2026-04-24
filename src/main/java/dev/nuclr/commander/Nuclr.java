@@ -31,7 +31,7 @@ public final class Nuclr {
 	}
 
 	private static void writeIntroInfo() {
-
+		
 		// Log jvm options and java properties
 		log.info("JVM Options:");
 		System.getProperties().forEach((key, value) -> {

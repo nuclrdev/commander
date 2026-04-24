@@ -33,7 +33,7 @@ public class MacOSIntegration {
         }
 
         Desktop desktop = Desktop.getDesktop();
-
+        
         desktop.setAboutHandler(new AboutHandler() {
 
             @Override
@@ -45,12 +45,12 @@ public class MacOSIntegration {
                         null,
                         """
                         Nuclr Commander
-                        Version 1.0.0
+                        Version """ + SystemUtils.getAppVersion() + """
 
                         Plugin-driven developer commander.
 
-                        © 2026 Nuclr Development Team
-                        """,
+                        © 2026  Nuclr Development Team
+""",
                         "About Nuclr Commander",
                         JOptionPane.INFORMATION_MESSAGE
                     );
