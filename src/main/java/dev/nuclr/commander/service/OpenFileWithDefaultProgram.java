@@ -1,6 +1,5 @@
 package dev.nuclr.commander.service;
 
-import java.awt.Desktop;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -26,18 +25,6 @@ public final class OpenFileWithDefaultProgram implements ApplicationListener<Lis
 			return;
 		}
 
-		if (Desktop.isDesktopSupported()) {
-			Desktop desktop = Desktop.getDesktop();
-			if (desktop.isSupported(Desktop.Action.OPEN)) {
-				try {
-					desktop.open(file);
-					return;
-				} catch (IOException e) {
-					log.warn("Desktop.open failed, falling back to OS command", e);
-				}
-			}
-		}
-
 		try {
 			openWithOsCommand(file);
 		} catch (Exception e) {
@@ -48,15 +35,19 @@ public final class OpenFileWithDefaultProgram implements ApplicationListener<Lis
 	private void openWithOsCommand(File file) throws IOException {
 		String os = System.getProperty("os.name").toLowerCase();
 		String path = file.getAbsolutePath();
+		File workDir = file.getParentFile();
 
 		ProcessBuilder pb;
 		if (os.contains("win")) {
-			pb = new ProcessBuilder("cmd", "/c", "start", "", path);
+			// Use 'start' with /D to set the working directory for the launched process.
+			// This ensures programs that write files relative to CWD land in their own folder.
+			pb = new ProcessBuilder("cmd", "/c", "start", "/D", workDir.getAbsolutePath(), "", path);
 		} else if (os.contains("mac")) {
 			pb = new ProcessBuilder("open", path);
 		} else {
 			pb = new ProcessBuilder("xdg-open", path);
 		}
+		pb.directory(workDir);
 		pb.redirectErrorStream(true);
 		pb.start();
 	}
