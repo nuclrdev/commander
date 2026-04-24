@@ -16,7 +16,9 @@ class Launcher {
     [STAThread]
     static void Main() {
         string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        string log = Path.Combine(dir, "NuclrCommander.log");
+        string logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuclr", "logs");
+        Directory.CreateDirectory(logDir);
+        string log = Path.Combine(logDir, "NuclrCommander.log");
         try {
             string javaw = Path.Combine(dir, "runtime", "bin", "javaw.exe");
             string[] jars = Directory.GetFiles(Path.Combine(dir, "app"), "*.jar");
