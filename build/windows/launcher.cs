@@ -4,6 +4,14 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 
+[assembly: AssemblyTitle("Nuclr Commander")]
+[assembly: AssemblyProduct("Nuclr Commander")]
+[assembly: AssemblyDescription("Dual-pane file manager for developers")]
+[assembly: AssemblyCompany("nuclr.dev")]
+[assembly: AssemblyCopyright("Copyright \u00a9 2026 nuclr.dev")]
+[assembly: AssemblyVersion("0.0.1.0")]
+[assembly: AssemblyFileVersion("0.0.1.0")]
+
 class Launcher {
     [STAThread]
     static void Main() {
@@ -15,8 +23,6 @@ class Launcher {
             string jvmArgs = string.Join(" ",
                 "-XX:CICompilerCount=4",
                 "-Xms64m",
-                "-Xmx512m",
-                "-XX:MaxMetaspaceSize=192m",
                 "-XX:+UseZGC",
                 "-XX:+ZGenerational",
                 "-Dsun.java2d.d3d=false",
@@ -25,7 +31,6 @@ class Launcher {
                 "-Dswing.aatext=true",
                 "-Dfile.encoding=UTF-8",
                 "-XX:+UseStringDeduplication",
-                "-Xss512k",
                 "--add-opens java.desktop/sun.awt=ALL-UNNAMED",
                 "--add-opens java.desktop/sun.swing=ALL-UNNAMED",
                 "-XX:+ExitOnOutOfMemoryError",

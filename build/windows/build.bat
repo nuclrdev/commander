@@ -52,12 +52,13 @@ xcopy /s /y /q "%PROJECT_ROOT%\plugins\*.zip" "%APP_OUT%\plugins\" > nul
 xcopy /s /y /q "%PROJECT_ROOT%\plugins\*.sig" "%APP_OUT%\plugins\" > nul
 xcopy /s /y /q "%PROJECT_ROOT%\data" "%APP_OUT%\data\" > nul
 
-:: Compile native launcher via PowerShell + C#
+:: Compile native launcher with csc.exe (supports /win32icon and assembly version info)
 echo [5/5] Compiling launcher...
-echo Add-Type -ErrorAction Stop -Path '%SCRIPT_DIR%launcher.cs' -OutputAssembly '%APP_OUT%\%APP_NAME%.exe' -OutputType WindowsApplication > "%TEMP%\build-launcher.ps1"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP%\build-launcher.ps1"
-if errorlevel 1 (echo [ERROR] Launcher compilation failed & del "%TEMP%\build-launcher.ps1" & exit /b 1)
-del "%TEMP%\build-launcher.ps1"
+set CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
+set ICON_ARG=
+if exist "%SCRIPT_DIR%icon.ico" set ICON_ARG=/win32icon:"%SCRIPT_DIR%icon.ico"
+"%CSC%" /nologo /target:winexe %ICON_ARG% /out:"%APP_OUT%\%APP_NAME%.exe" "%SCRIPT_DIR%launcher.cs"
+if errorlevel 1 (echo [ERROR] Launcher compilation failed & exit /b 1)
 echo       Done.
 
 echo.
