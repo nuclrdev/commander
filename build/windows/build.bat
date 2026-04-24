@@ -32,14 +32,18 @@ if exist "%APP_OUT%" rmdir /s /q "%APP_OUT%"
 mkdir "%APP_OUT%\app"
 copy "%PROJECT_ROOT%\target\%JAR_FILE%" "%APP_OUT%\app\" > nul
 
-:: Copy full JDK as runtime (preserves exact Java 21 environment; jlink runtimes
-:: misreport the JVM version to Spring's virtual-thread check on some builds)
-echo [3/5] Copying JDK runtime...
-robocopy "%JAVA_HOME%\bin"   "%APP_OUT%\runtime\bin"   /e /nfl /ndl /np /njh /njs > nul
-robocopy "%JAVA_HOME%\conf"  "%APP_OUT%\runtime\conf"  /e /nfl /ndl /np /njh /njs > nul
-robocopy "%JAVA_HOME%\lib"   "%APP_OUT%\runtime\lib"   /e /nfl /ndl /np /njh /njs > nul
-robocopy "%JAVA_HOME%\legal" "%APP_OUT%\runtime\legal" /e /nfl /ndl /np /njh /njs > nul
-copy "%JAVA_HOME%\release" "%APP_OUT%\runtime\" > nul
+:: Build trimmed JRE with jlink (Multi-Release: true in the fat JAR means Spring
+:: virtual-thread detection now works correctly with a jlink runtime)
+echo [3/5] Building JRE with jlink...
+"%JAVA_HOME%\bin\jlink.exe" ^
+    --module-path "%JAVA_HOME%\jmods" ^
+    --add-modules java.se,jdk.unsupported,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.crypto.mscapi,jdk.zipfs,jdk.localedata,jdk.accessibility,jdk.net ^
+    --no-header-files ^
+    --no-man-pages ^
+    --strip-debug ^
+    --compress=zip-6 ^
+    --output "%APP_OUT%\runtime"
+if errorlevel 1 (echo [ERROR] jlink failed & exit /b 1)
 echo       Done.
 
 :: Copy plugins (PluginLoader scans ./plugins relative to working dir)
