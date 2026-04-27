@@ -278,6 +278,15 @@ public final class PluginRegistry {
 				.orElse(null);
 	}
 
+	public List<NuclrPlugin> getPluginsByResource(NuclrResourcePath resource, NuclrPluginRole role) {
+		return this
+				.pluginTemplates
+				.stream()
+				.filter(plugin -> plugin.supports(resource))
+				.filter(plugin -> plugin.role().equals(role))
+				.toList();
+	}
+
 	public NuclrPlugin getPluginTemplateById(String id) {
 		return this
 				.pluginTemplates

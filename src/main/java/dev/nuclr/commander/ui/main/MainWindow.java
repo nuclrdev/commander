@@ -532,7 +532,9 @@ public class MainWindow implements NuclrEventListener {
 		} else if (type.equals("fs.path.selected")) {
 			rebuildFunctionBar();
 		} else if (type.equals("fs.view")) {
-			openFullScreenPlugin(event);
+			openFullScreenPlugin(event, NuclrPluginRole.FullScreenViewer);
+		} else if (type.equals("fs.edit")) {
+			openFullScreenPlugin(event, NuclrPluginRole.FullScreenEditor);
 		} else if (type.equals("plugin.fullscreen.close")) {
 			closeFullScreenPlugin();
 			
@@ -553,32 +555,45 @@ public class MainWindow implements NuclrEventListener {
 		
 	}
 
-	private void openFullScreenPlugin(Map<String, Object> event) {
+	private void openFullScreenPlugin(Map<String, Object> event, NuclrPluginRole role) {
 
 		log.info("Received fs.view event with payload: {}", event);
 
 		var path = (NuclrResourcePath) event.get("path");
 
-		// Find plugin
-		var plugin = this.pluginRegistry.getPluginByResource(path, NuclrPluginRole.FullScreenViewer);
+		var plugins = this.pluginRegistry.getPluginsByResource(path, role);
 
-		if (plugin != null) {
-
-			plugin.openResource(path, new AtomicBoolean(false));
-
-			this.functionKeyBar.setMenuResources(plugin.menuItems(path), shiftDown, ctrlDown, altDown);
-			
-			this.fullScreenPlugin = plugin;
-			this.fullScreenPanel = plugin.panel();
-
-			this.cardPanel.add(this.fullScreenPanel, FullScreenPanel);
-			
-			makeCardVisible(FullScreenPanel);
-			
-			this.fullScreenPlugin.onFocusGained();
-			
+		if (plugins.isEmpty()) {
+			return;
 		}
 
+		if (plugins.size() == 1) {
+			activateFullScreenPlugin(plugins.get(0), path);
+			return;
+		}
+
+		var popup = new javax.swing.JPopupMenu();
+		
+		for (var plugin : plugins) {
+			var item = new JMenuItem(plugin.name());
+			item.addActionListener(e -> activateFullScreenPlugin(plugin, path));
+			popup.add(item);
+		}
+		var content = mainFrame.getContentPane();
+		
+		popup.show(content, content.getWidth() / 2, content.getHeight() / 2);
+		
+	}
+
+	private void activateFullScreenPlugin(dev.nuclr.platform.plugin.NuclrPlugin plugin,
+			NuclrResourcePath path) {
+		plugin.openResource(path, new AtomicBoolean(false));
+		this.functionKeyBar.setMenuResources(plugin.menuItems(path), shiftDown, ctrlDown, altDown);
+		this.fullScreenPlugin = plugin;
+		this.fullScreenPanel = plugin.panel();
+		this.cardPanel.add(this.fullScreenPanel, FullScreenPanel);
+		makeCardVisible(FullScreenPanel);
+		this.fullScreenPlugin.onFocusGained();
 	}
 
 	@EventListener
