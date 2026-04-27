@@ -546,7 +546,11 @@ public class MainWindow implements NuclrEventListener {
 			openFullScreenPlugin(event, NuclrPluginRole.FullScreenEditor);
 		} else if (type.equals("plugin.fullscreen.close")) {
 			closeFullScreenPlugin();
-			
+		} else if (type.equals("main.window.title")) {
+			var title = (String) event.get("title");
+			if (title != null) {
+				SwingUtilities.invokeLater(() -> mainFrame.setTitle(title));
+			}
 		}
 
 	}
