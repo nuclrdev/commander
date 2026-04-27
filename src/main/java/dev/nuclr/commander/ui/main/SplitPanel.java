@@ -430,6 +430,10 @@ public class SplitPanel implements NuclrEventListener {
 		return divider;
 	}
 
+	public void saveDividerLocation() {
+		saveDividerLocation(mainSplitPane.getDividerLocation());
+	}
+
 	private void saveDividerLocation(int dividerLocation) {
 		settings.set(SettingsNamespace + "splitPanel", "dividerLocation", dividerLocation);
 		log.info("Saved main divider location: " + dividerLocation);

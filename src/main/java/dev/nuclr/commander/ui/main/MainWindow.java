@@ -194,10 +194,6 @@ public class MainWindow implements NuclrEventListener {
 			mainFrame.setLocationRelativeTo(null);
 		}
 
-		if (this.settings.getOrDefault(SettingsNamespace, "extendedState", false)) {
-			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-		}
-
 		var appIcon = new ImageIcon("data/images/icon-512.png").getImage();
 
 		mainFrame.setIconImage(appIcon);
@@ -241,11 +237,22 @@ public class MainWindow implements NuclrEventListener {
 
 		mainFrame.setVisible(true);
 
+		if (this.settings.getOrDefault(SettingsNamespace, "extendedState", false)) {
+			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+		}
+
 	}
 
 	protected void saveWindowState() {
-		// TODO Auto-generated method stub
-		
+		boolean maximized = (mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0;
+		this.settings.set(SettingsNamespace, "extendedState", maximized);
+		if (!maximized) {
+			var bounds = mainFrame.getBounds();
+			this.settings.set(SettingsNamespace, "windowWidth", bounds.width);
+			this.settings.set(SettingsNamespace, "windowHeight", bounds.height);
+			this.settings.set(SettingsNamespace, "windowX", bounds.x);
+			this.settings.set(SettingsNamespace, "windowY", bounds.y);
+		}
 	}
 
 	private void setActiveScreenComponent(JComponent c) {
@@ -464,16 +471,18 @@ public class MainWindow implements NuclrEventListener {
 				
 		if ((mainFrame.getExtendedState() & JFrame.MAXIMIZED_BOTH) != 0) {
 			mainFrame.setExtendedState(JFrame.NORMAL);
-			 SwingUtilities.invokeLater(() -> {
-				 int newDividerLocation = (int) (mainFrame.getWidth() * dividerRatio);
-				 this.splitPane.getMainSplitPane().setDividerLocation(newDividerLocation);
-			 });
+			SwingUtilities.invokeLater(() -> {
+				int newDividerLocation = (int) (mainFrame.getWidth() * dividerRatio);
+				this.splitPane.getMainSplitPane().setDividerLocation(newDividerLocation);
+				this.splitPane.saveDividerLocation();
+			});
 		} else {
 			mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-			 SwingUtilities.invokeLater(() -> {
-				 int newDividerLocation = (int) (mainFrame.getWidth() * dividerRatio);
-				 this.splitPane.getMainSplitPane().setDividerLocation(newDividerLocation);
-			 });
+			SwingUtilities.invokeLater(() -> {
+				int newDividerLocation = (int) (mainFrame.getWidth() * dividerRatio);
+				this.splitPane.getMainSplitPane().setDividerLocation(newDividerLocation);
+				this.splitPane.saveDividerLocation();
+			});
 		}
 	}
 
